@@ -188,7 +188,7 @@ ApplicationWindow {
         id: settingsCommon
         fileName: fileManager.getConfigFile(); //"/etc/furicam.conf" or "/usr/lib/furios/device/furicam.conf"
 
-        property var blacklist: 0
+        property var blacklist: ""
     }
 
     background: Rectangle {

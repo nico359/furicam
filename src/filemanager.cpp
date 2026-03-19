@@ -62,11 +62,17 @@ void FileManager::removeGStreamerCacheDirectory() {
 QString FileManager::getConfigFile() {
     QFileInfo primaryConfig("/usr/lib/furios/device/furicam.conf");
     QFileInfo secodaryConfig("/etc/furicam.conf");
+    QFileInfo fallbackPrimary("/usr/lib/furios/device/furios-camera.conf");
+    QFileInfo fallbackSecondary("/etc/furios-camera.conf");
 
     if (primaryConfig.exists()) {
         return primaryConfig.absoluteFilePath();
     } else if (secodaryConfig.exists()) {
         return secodaryConfig.absoluteFilePath();
+    } else if (fallbackPrimary.exists()) {
+        return fallbackPrimary.absoluteFilePath();
+    } else if (fallbackSecondary.exists()) {
+        return fallbackSecondary.absoluteFilePath();
     } else {
         return "None";
     }

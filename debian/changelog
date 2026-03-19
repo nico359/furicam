@@ -1,0 +1,10 @@
+furicam (1.0.0-1) unstable; urgency=medium
+
+  * Initial release of FuriCam
+  * H.264/MP4 video recording with configurable bitrate
+  * Resolution picker with per-camera memory
+  * JPEG quality adjustment
+  * Grid overlay and level indicator (sensorfw accelerometer)
+  * Camera resume on focus change
+
+ -- Alexander Rutz <alex@familyrutz.com>  Wed, 19 Mar 2026 14:20:00 +0000
