@@ -162,6 +162,7 @@ Item {
     function pauseCamera() {
         if (camera !== null && camera !== undefined) {
             camera.stop();
+            camera.cameraState = Camera.UnloadedState;
         }
     }
 
