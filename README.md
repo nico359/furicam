@@ -15,8 +15,12 @@ Licensed under GPL-2.0.
 - Added option to increase jpeg compression
 - Added 3x3 grid
 - Added level indicator
+- Video output is now of reasonable file size (MJPEG --> H.264)
+- Video output has adjustable bitrate to further adjust quality or storage savings
 
 ## Building
+
+Note about building: Some of the listed dependencies here do not seem to be available anymore on Debian Forky. To build furios-camera/furicam directly on the Furiphone I had to to so in a Debian Trixie Distrobox container. If you want to take the same approach, you might have to install distrobox, podman and optionally a GUI to manage containers like Distroshelf from Flathub for example.
 
 * Install build dependencies
 ```
