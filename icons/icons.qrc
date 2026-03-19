@@ -35,5 +35,8 @@
         <file>network-wireless-signal-ok.svg</file>
         <file>network-wireless-signal-good.svg</file>
         <file>network-wireless-signal-excellent.svg</file>
+        <file>grid.svg</file>
+        <file>level.svg</file>
+        <file>settings.svg</file>
     </qresource>
 </RCC>

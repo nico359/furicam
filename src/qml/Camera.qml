@@ -24,6 +24,12 @@ Item {
     property alias cam: camGst
     property int lockedVideoRotation: 0
 
+    property alias resolutionModel: resModel
+
+    ListModel {
+        id: resModel
+    }
+
     function gcd(a, b) {
         if (b == 0) {
             return a;
@@ -37,11 +43,22 @@ Item {
         var new43 = 0;
         var new169 = 0;
 
+        resModel.clear();
+
         for (var p in camera.imageCapture.supportedResolutions) {
             var res = camera.imageCapture.supportedResolutions[p];
 
             var gcdValue = gcd(res.width, res.height);
             var aspectRatio = (res.width / gcdValue) + ":" + (res.height / gcdValue);
+            var mp = Math.round((res.width * res.height) / 100000) / 10;
+
+            resModel.append({
+                "resWidth": res.width,
+                "resHeight": res.height,
+                "aspectRatio": aspectRatio,
+                "mp": mp,
+                "label": mp + " MP (" + res.width + "×" + res.height + ") " + aspectRatio
+            });
 
             if (res.width * res.height > maxResolution.width * maxResolution.height) {
                 maxResolution = res;
@@ -58,11 +75,34 @@ Item {
             }
         }
 
-        if (camera.aspWide && camera.firstSixteenNineResolution != undefined) {
+        // Apply stored resolution if available
+        var storedW = settings.cameras[camera.deviceId] ? settings.cameras[camera.deviceId].resWidth : 0;
+        var storedH = settings.cameras[camera.deviceId] ? settings.cameras[camera.deviceId].resHeight : 0;
+
+        if (storedW > 0 && storedH > 0) {
+            // Verify the stored resolution is still valid
+            var found = false;
+            for (var i = 0; i < camera.imageCapture.supportedResolutions.length; i++) {
+                var sr = camera.imageCapture.supportedResolutions[i];
+                if (sr.width === storedW && sr.height === storedH) {
+                    camera.imageCapture.resolution = Qt.size(storedW, storedH);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                // Fallback to aspect ratio preference
+                if (camera.aspWide && camera.firstSixteenNineResolution != undefined) {
+                    camera.imageCapture.resolution = camera.firstSixteenNineResolution;
+                } else if (camera.firstFourThreeResolution != undefined) {
+                    camera.imageCapture.resolution = camera.firstFourThreeResolution;
+                }
+            }
+        } else if (camera.aspWide && camera.firstSixteenNineResolution != undefined) {
             camera.imageCapture.resolution = camera.firstSixteenNineResolution;
         } else {
             if (camera.firstFourThreeResolution != undefined) {
-                camera.imageCapture.resolution = camera.firstFourThreeResolution
+                camera.imageCapture.resolution = camera.firstFourThreeResolution;
             }
         }
 
@@ -70,6 +110,16 @@ Item {
             settings.cameras[camera.deviceId].resolution = Math.round(
                 (camera.imageCapture.supportedResolutions[0].width * camera.imageCapture.supportedResolutions[0].height) / 1000000
             );
+        }
+    }
+
+    function setResolution(width, height) {
+        camera.imageCapture.resolution = Qt.size(width, height);
+        if (settings.cameras[camera.deviceId]) {
+            settings.cameras[camera.deviceId].resWidth = width;
+            settings.cameras[camera.deviceId].resHeight = height;
+            var g = gcd(width, height);
+            settings.aspWide = ((width / g) === 16 && (height / g) === 9) ? 1 : 0;
         }
     }
 
@@ -202,6 +252,9 @@ Item {
             }
 
             onImageSaved: {
+                if (settings.jpegQuality < 100) {
+                    fileManager.reencodeJpeg(path, settings.jpegQuality);
+                }
                 if (window.locationAvailable === 1 ) {
                     fileManager.appendGPSMetadata(path);
                 }
@@ -391,6 +444,78 @@ Item {
                     id: visTm
                     interval: 500; running: false; repeat: false
                     onTriggered: window.aeflock === "AEFLockOff" ? window.focusPointVisible = false : null
+                }
+            }
+
+            // 3x3 grid overlay
+            Item {
+                id: gridOverlay
+                anchors.fill: parent
+                visible: settings.gridEnabled === 1
+                enabled: false
+                z: 1
+
+                Rectangle {
+                    x: parent.width / 3
+                    width: 1
+                    height: parent.height
+                    color: "#50ffffff"
+                }
+                Rectangle {
+                    x: parent.width * 2 / 3
+                    width: 1
+                    height: parent.height
+                    color: "#50ffffff"
+                }
+                Rectangle {
+                    y: parent.height / 3
+                    width: parent.width
+                    height: 1
+                    color: "#50ffffff"
+                }
+                Rectangle {
+                    y: parent.height * 2 / 3
+                    width: parent.width
+                    height: 1
+                    color: "#50ffffff"
+                }
+            }
+
+            // Level indicator
+            Item {
+                id: levelIndicator
+                visible: settings.levelEnabled === 1
+                anchors.centerIn: parent
+                width: parent.width * 0.35
+                height: 30 * window.scalingRatio
+                rotation: window.levelAngle
+                enabled: false
+                z: 2
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: 2 * window.scalingRatio
+                    color: Math.abs(window.levelAngle) < 1.0 ? "#4CAF50" : "#80ffffff"
+                    radius: 1
+
+                    Behavior on color {
+                        ColorAnimation { duration: 200 }
+                    }
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 8 * window.scalingRatio
+                    height: 8 * window.scalingRatio
+                    radius: 4 * window.scalingRatio
+                    color: Math.abs(window.levelAngle) < 1.0 ? "#4CAF50" : "#80ffffff"
+                    border.width: 1
+                    border.color: Math.abs(window.levelAngle) < 1.0 ? "#388E3C" : "#40ffffff"
+
+                    Behavior on color {
+                        ColorAnimation { duration: 200 }
+                    }
                 }
             }
         }

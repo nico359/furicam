@@ -125,6 +125,17 @@ ApplicationWindow {
         }
     }
 
+    Accelerometer {
+        id: accel
+        active: settings.levelEnabled === 1
+        dataRate: 30
+    }
+
+    property real levelAngle: {
+        if (!accel.reading) return 0
+        return Math.atan2(accel.reading.x, accel.reading.y) * 180 / Math.PI
+    }
+
 
     ListModel {
         id: allCamerasModel
@@ -138,19 +149,22 @@ ApplicationWindow {
         property int flashMode: Camera.FlashOff
         property int focusMode: Camera.FocusContinuous
         property int focusPointMode: Camera.FocusPointCenter
-        property var cameras: [{"cameraId": 0, "resolution": 0},
-                                {"cameraId": 1, "resolution": 0},
-                                {"cameraId": 2, "resolution": 0},
-                                {"cameraId": 3, "resolution": 0},
-                                {"cameraId": 4, "resolution": 0},
-                                {"cameraId": 5, "resolution": 0},
-                                {"cameraId": 6, "resolution": 0},
-                                {"cameraId": 7, "resolution": 0},
-                                {"cameraId": 8, "resolution": 0},
-                                {"cameraId": 9, "resolution": 0}]
+        property var cameras: [{"cameraId": 0, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 1, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 2, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 3, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 4, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 5, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 6, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 7, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 8, "resolution": 0, "resWidth": 0, "resHeight": 0},
+                                {"cameraId": 9, "resolution": 0, "resWidth": 0, "resHeight": 0}]
         property int soundOn: 1
         property int gpsOn: 0
         property int cameraPosition: Camera.FrontFace
+        property int jpegQuality: 100
+        property int gridEnabled: 0
+        property int levelEnabled: 0
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
@@ -1347,17 +1361,20 @@ ApplicationWindow {
             visible: !mediaView.visible && !window.videoCaptured
 
             RowLayout {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: configBarDrawer.height * 0.8
+                anchors.fill: parent
+                anchors.leftMargin: 10 * window.scalingRatio
+                anchors.rightMargin: 10 * window.scalingRatio
+                spacing: 0
 
                 Button {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     icon.source: settings.soundOn === 1 ? "icons/audioOn.svg" : "icons/audioOff.svg"
-                    icon.height: configBarDrawer.height * 0.6
-                    icon.width: configBarDrawer.height * 0.6
+                    icon.height: configBarDrawer.height * 0.5
+                    icon.width: configBarDrawer.height * 0.5
                     icon.color: settings.soundOn === 1 ? "white" : "grey"
 
                     background: Rectangle {
-                        anchors.fill: parent
                         color: "transparent"
                     }
 
@@ -1367,13 +1384,14 @@ ApplicationWindow {
                 }
 
                 Button {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     icon.source: window.gps_icon_source
-                    icon.height: configBarDrawer.height * 0.6
-                    icon.width: configBarDrawer.height * 0.6
+                    icon.height: configBarDrawer.height * 0.5
+                    icon.width: configBarDrawer.height * 0.5
                     icon.color: window.locationAvailable === 1 ? "white" : "grey"
 
                     background: Rectangle {
-                        anchors.fill: parent
                         color: "transparent"
                     }
 
@@ -1397,26 +1415,18 @@ ApplicationWindow {
                             window.locationAvailable = 0;
                         }
                     }
-
-                    Connections {
-                        target: fileManager
-
-                        function onGpsDataReady() {
-                            window.gps_icon_source = "icons/gpsOn.svg";
-                            window.locationAvailable = 1;
-                        }
-                    }
                 }
 
                 Button {
                     id: timerButton
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     icon.source: "icons/timer.svg"
-                    icon.height: configBarDrawer.height * 0.6
-                    icon.width: configBarDrawer.height * 0.6
+                    icon.height: configBarDrawer.height * 0.5
+                    icon.width: configBarDrawer.height * 0.5
                     icon.color: "white"
 
                     background: Rectangle {
-                        anchors.fill: parent
                         color: "transparent"
                     }
 
@@ -1462,105 +1472,71 @@ ApplicationWindow {
                 }
 
                 Button {
-                    id: aspectRatioButton
-                    icon.source: "icons/aspectRatioMenu.svg"
-                    icon.height: configBarDrawer.height * 0.6
-                    icon.width: configBarDrawer.height * 0.6
-                    icon.color: "white"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icon.source: "icons/grid.svg"
+                    icon.height: configBarDrawer.height * 0.5
+                    icon.width: configBarDrawer.height * 0.5
+                    icon.color: settings.gridEnabled === 1 ? "white" : "grey"
 
                     background: Rectangle {
-                        anchors.fill: parent
                         color: "transparent"
                     }
 
                     onClicked: {
-                        configBar.aspectRatioOpened = configBar.aspectRatioOpened === 1 ? 0 : 1
-                        optionContainer.state = "closed"
-                        configBar.opened = 0
+                        settings.gridEnabled = settings.gridEnabled === 1 ? 0 : 1;
+                    }
+                }
+
+                Button {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icon.source: "icons/level.svg"
+                    icon.height: configBarDrawer.height * 0.5
+                    icon.width: configBarDrawer.height * 0.5
+                    icon.color: settings.levelEnabled === 1 ? "white" : "grey"
+
+                    background: Rectangle {
+                        color: "transparent"
                     }
 
-                    ColumnLayout {
-                        id: aspectRatios
-                        anchors.top: aspectRatioButton.bottom
-                        anchors.horizontalCenter: aspectRatioButton.horizontalCenter
-                        visible: configBar.aspectRatioOpened === 1 ? true : false
-                        spacing: 5 * window.scalingRatio
+                    onClicked: {
+                        settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1;
+                    }
+                }
 
-                        Button {
-                            id: sixteenNineButton
-                            text: "16:9"
-                            Layout.preferredWidth: 60 * window.scalingRatio
-                            font.pixelSize:  35 * window.scalingRatio * 0.5
-                            font.bold: true
-                            font.family: "Lato Hairline"
-                            palette.buttonText: settings.aspWide === 1 ? "white" : "gray"
+                Button {
+                    id: settingsButton
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    icon.source: "icons/settings.svg"
+                    icon.height: configBarDrawer.height * 0.5
+                    icon.width: configBarDrawer.height * 0.5
+                    icon.color: "white"
 
-                            background: Rectangle {
-                                width: 60 * window.scalingRatio
-                                height: 35 * window.scalingRatio
-                                anchors.centerIn: parent
-                                color: "transparent"
-                                border.width: 1 * window.scalingRatio
-                                border.color: "white"
-                                radius: 6 * window.scalingRatio
-                            }
+                    background: Rectangle {
+                        color: "transparent"
+                    }
 
-                            onClicked: {
-                                settings.aspWide = 1;
-                                configBar.aspectRatioOpened = 0;
-                                window.cameraChangeResolution(sixteenNineButton.text)
-                            }
-                        }
-
-                        Button {
-                            id: fourThreeButton
-                            text: "4:3"
-                            Layout.preferredWidth: 60 * window.scalingRatio
-                            font.pixelSize:  35 * window.scalingRatio * 0.5
-                            font.bold: true
-                            font.family: "Lato Hairline"
-                            palette.buttonText: settings.aspWide === 1 ? "gray" : "white"
-
-                            background: Rectangle {
-                                width: 60 * window.scalingRatio
-                                height: 35 * window.scalingRatio
-                                anchors.centerIn: parent
-                                color: "transparent"
-                                border.width: 1 * window.scalingRatio
-                                border.color: "white"
-                                radius: 6 * window.scalingRatio
-                            }
-
-                            onClicked: {
-                                settings.aspWide = 0;
-                                configBar.aspectRatioOpened = 0;
-                                window.cameraChangeResolution(fourThreeButton.text)
-                            }
-                        }
-
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.InOutQuad
-                            }
-                        }
-
-                        onVisibleChanged: {
-                            opacity = visible ? 1 : 0
-                        }
+                    onClicked: {
+                        configBar.aspectRatioOpened = 0
+                        configBar.opened = 0
+                        configBarDrawer.close()
+                        settingsDrawer.open()
                     }
                 }
 
                 Button {
                     id: menu
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                     icon.source: "icons/menu.svg"
-                    icon.height: configBarDrawer.height * 0.6
-                    icon.width: configBarDrawer.height * 0.6
+                    icon.height: configBarDrawer.height * 0.5
+                    icon.width: configBarDrawer.height * 0.5
                     icon.color: "white"
                     enabled: !window.videoCaptured
 
                     background: Rectangle {
-                        anchors.fill: parent
                         color: "transparent"
                     }
 
@@ -1598,6 +1574,145 @@ ApplicationWindow {
 
         onClicked: {
             configBarDrawer.open()
+        }
+    }
+
+    Drawer {
+        id: settingsDrawer
+        edge: Qt.BottomEdge
+        width: window.width
+        height: window.height * 0.6
+        dim: true
+        modal: true
+
+        background: Rectangle {
+            color: "#ff2a2a2a"
+            radius: 16 * window.scalingRatio
+
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: parent.radius
+                color: parent.color
+            }
+        }
+
+        Column {
+            anchors.fill: parent
+            anchors.topMargin: 10 * window.scalingRatio
+            spacing: 8 * window.scalingRatio
+
+            Rectangle {
+                width: 40 * window.scalingRatio
+                height: 4 * window.scalingRatio
+                radius: 2 * window.scalingRatio
+                color: "#666"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Text {
+                text: "Photo Resolution"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            ListView {
+                id: resolutionList
+                width: parent.width
+                height: settingsDrawer.height * 0.5
+                clip: true
+                model: cameraLoader.item ? cameraLoader.item.resolutionModel : null
+                spacing: 2 * window.scalingRatio
+
+                delegate: Rectangle {
+                    width: resolutionList.width
+                    height: 44 * window.scalingRatio
+                    color: {
+                        var cam = settings.cameras[settings.cameraId];
+                        if (cam && cam.resWidth === model.resWidth && cam.resHeight === model.resHeight) {
+                            return "#444";
+                        }
+                        return "transparent";
+                    }
+                    radius: 4 * window.scalingRatio
+
+                    Text {
+                        text: model.label
+                        color: "white"
+                        font.pixelSize: 15 * window.scalingRatio
+                        anchors.verticalCenter: parent.verticalCenter
+                        leftPadding: 16 * window.scalingRatio
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (cameraLoader.item) {
+                                cameraLoader.item.setResolution(model.resWidth, model.resHeight);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width - 32 * window.scalingRatio
+                height: 1
+                color: "#444"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Text {
+                text: settings.jpegQuality >= 100 ? "JPEG Quality: Original" : "JPEG Quality: " + settings.jpegQuality + "%"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+            }
+
+            Slider {
+                id: qualitySlider
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                from: 50
+                to: 100
+                stepSize: 5
+                value: settings.jpegQuality
+
+                onMoved: {
+                    settings.jpegQuality = value;
+                }
+
+                background: Rectangle {
+                    x: qualitySlider.leftPadding
+                    y: qualitySlider.topPadding + qualitySlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200
+                    implicitHeight: 4 * window.scalingRatio
+                    width: qualitySlider.availableWidth
+                    height: implicitHeight
+                    radius: 2 * window.scalingRatio
+                    color: "#555"
+
+                    Rectangle {
+                        width: qualitySlider.visualPosition * parent.width
+                        height: parent.height
+                        color: "#62a0ea"
+                        radius: 2 * window.scalingRatio
+                    }
+                }
+
+                handle: Rectangle {
+                    x: qualitySlider.leftPadding + qualitySlider.visualPosition * (qualitySlider.availableWidth - width)
+                    y: qualitySlider.topPadding + qualitySlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio
+                    implicitHeight: 22 * window.scalingRatio
+                    radius: 11 * window.scalingRatio
+                    color: qualitySlider.pressed ? "#ddd" : "white"
+                }
+            }
         }
     }
 }

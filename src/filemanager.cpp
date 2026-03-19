@@ -20,6 +20,7 @@
 #include <iomanip>
 #include <exiv2/exiv2.hpp>
 #include <cmath>
+#include <QImage>
 
 
 FileManager::FileManager(QObject *parent) : QObject(parent), m_geoClueInstance(nullptr), m_locationAvailable(new int(0)) {
@@ -628,4 +629,45 @@ void FileManager::onLocationUpdated() {
 void FileManager::onClientDeleted() {
     delete m_geoClueInstance;
     m_geoClueInstance = nullptr;
+}
+
+void FileManager::reencodeJpeg(const QString &filePath, int quality) {
+    if (quality >= 100 || quality < 1) return;
+
+    QString path = filePath;
+    if (path.startsWith("file://")) {
+        path = path.mid(7);
+    }
+
+    // Read EXIF metadata before re-encoding
+    Exiv2::ExifData savedExif;
+    try {
+        auto exivImage = Exiv2::ImageFactory::open(path.toStdString());
+        exivImage->readMetadata();
+        savedExif = exivImage->exifData();
+    } catch (const Exiv2::Error &e) {
+        qDebug() << "Warning: Could not read EXIF before re-encode:" << e.what();
+    }
+
+    // Load and re-save with desired quality
+    QImage image(path);
+    if (image.isNull()) {
+        qDebug() << "Error: Could not load image for re-encoding:" << path;
+        return;
+    }
+
+    if (!image.save(path, "JPEG", quality)) {
+        qDebug() << "Error: Could not save re-encoded image:" << path;
+        return;
+    }
+
+    // Restore EXIF metadata
+    try {
+        auto exivImage = Exiv2::ImageFactory::open(path.toStdString());
+        exivImage->readMetadata();
+        exivImage->setExifData(savedExif);
+        exivImage->writeMetadata();
+    } catch (const Exiv2::Error &e) {
+        qDebug() << "Warning: Could not restore EXIF after re-encode:" << e.what();
+    }
 }

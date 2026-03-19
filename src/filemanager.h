@@ -60,6 +60,7 @@ public:
     Q_INVOKABLE QString getTimeFormat();
     void restartGps();
     Q_INVOKABLE void appendGPSMetadata(const QString &fileUrl);
+    Q_INVOKABLE void reencodeJpeg(const QString &filePath, int quality);
     QStringList decimalToDMS(double decimal, bool isLongitude = false);
 
 signals:
