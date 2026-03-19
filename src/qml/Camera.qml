@@ -561,29 +561,29 @@ Item {
         videoOutput: viewfinder
         property var backendId: 0
         property string outputPath: StandardPaths.writableLocation(StandardPaths.MoviesLocation).toString().replace("file://","") +
-                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mkv"
+                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mp4"
+
+        property int vidW: camera.viewfinder.resolution.width * 3 / 4
+        property int vidH: camera.viewfinder.resolution.height * 3 / 4
 
         property var backends: [
             {
                 front: "gst-pipeline: droidcamsrc mode=2 camera-device=1 ! video/x-raw ! videoconvert ! qtvideosink",
-                frontRecord: "gst-pipeline: droidcamsrc camera_device=1 mode=2 ! tee name=t t. ! queue ! video/x-raw, width=" + (camera.viewfinder.resolution.width * 3 / 4) + ", height=" + (camera.viewfinder.resolution.height * 3 / 4) + " ! videoconvert ! videoflip video-direction=2 ! qtvideosink t. ! queue ! video/x-raw, width=" + (camera.viewfinder.resolution.width * 3 / 4) + ", height=" + (camera.viewfinder.resolution.height * 3 / 4) + " ! videoconvert ! videoflip video-direction=auto ! jpegenc ! mkv. autoaudiosrc ! queue ! audioconvert ! droidaenc ! mkv. matroskamux name=mkv ! filesink location=" + outputPath,
+                frontRecord: "gst-pipeline: droidcamsrc camera_device=1 mode=2 ! tee name=t " +
+                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=2 ! qtvideosink " +
+                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=auto " +
+                    "! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
+                    "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
+                    "mp4mux name=mux ! filesink location=" + outputPath,
                 back: "gst-pipeline: droidcamsrc mode=2 camera-device=" + camera.deviceId + " ! video/x-raw ! videoconvert ! qtvideosink",
                 backRecord:
                     "gst-pipeline: droidcamsrc camera-device=" + camera.deviceId + " mode=2 ! tee name=t " +
-                    "t. ! queue ! video/x-raw, width=" +
-                    (camera.viewfinder.resolution.width * 3 / 4) + ", height=" +
-                    (camera.viewfinder.resolution.height * 3 / 4) + " ! videoconvert ! qtvideosink " +
-
-                    "t. ! queue ! video/x-raw, width=" +
-                    (camera.viewfinder.resolution.width * 3 / 4) +
-                    ", height=" +
-                    (camera.viewfinder.resolution.height * 3 / 4) +
-                    " ! videoconvert ! videoflip video-direction=" +
-                    cameraItem.lockedVideoRotation +
-                    " ! jpegenc ! mkv. " +
-
-                    "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mkv. " +
-                    "matroskamux name=mkv ! filesink location=" + outputPath
+                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! qtvideosink " +
+                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH +
+                    " ! videoconvert ! videoflip video-direction=" + cameraItem.lockedVideoRotation +
+                    " ! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
+                    "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
+                    "mp4mux name=mux ! filesink location=" + outputPath
             }
         ]
 
@@ -598,7 +598,7 @@ Item {
         cameraItem.lockedVideoRotation = window.currentVideoRotation
         if (window.videoCaptured == false) {
             camGst.outputPath = StandardPaths.writableLocation(StandardPaths.MoviesLocation).toString().replace("file://","") +
-                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mkv"
+                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mp4"
 
             if (camera.position === Camera.BackFace) {
                 camGst.source = camGst.backends[camGst.backendId].backRecord;
