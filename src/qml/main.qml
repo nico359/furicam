@@ -71,14 +71,21 @@ ApplicationWindow {
 
     onActiveChanged:{
         if (!window.active) {
-            console.log("Stopping camera...")
-            cameraLoader.disconnectSignals();
-            window.stopCamera();
             focusState.state = "Default"
             settings.sync()
         } else if (!window.firstLoad) {
+            cameraLoader.disconnectSignals();
+            cameraLoader.active = false;
+            cameraResumeTimer.start();
+        }
+    }
+
+    Timer {
+        id: cameraResumeTimer
+        interval: 600
+        repeat: false
+        onTriggered: {
             cameraLoader.active = true;
-            cameraLoader.connectSignals();
         }
     }
 

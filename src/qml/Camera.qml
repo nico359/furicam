@@ -159,19 +159,6 @@ Item {
         }
     }
 
-    function pauseCamera() {
-        if (camera !== null && camera !== undefined) {
-            camera.stop();
-            camera.cameraState = Camera.UnloadedState;
-        }
-    }
-
-    function resumeCamera() {
-        if (camera !== null && camera !== undefined) {
-            camera.start();
-        }
-    }
-
     function handleStopCamera() {
         if (camera !== null && camera !== undefined) {
             camera.stop();
