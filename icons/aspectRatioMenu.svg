@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="4.2333331mm"
+   height="4.2488379mm"
+   viewBox="0 0 4.2333331 4.2488379"
+   version="1.1"
+   id="svg8328"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs8325" />
+  <g
+     id="layer1"
+     transform="translate(-60.745632,-152.74291)">
+    <g
+       id="g313236"
+       transform="matrix(0.26458333,0,0,0.26458333,-156.91099,140.76505)"
+       style="fill:#222222">
+      <title
+         id="title313228">padlock2-open</title>
+      <g
+         transform="translate(661.63901,-151.70003)"
+         style="fill:#222222"
+         id="g33612">
+        <title
+           id="title7969">crop</title>
+        <rect
+           ry="0.99781346"
+           rx="0.99781346"
+           transform="translate(241.0002,217)"
+           y="-20"
+           x="-80"
+           height="16"
+           width="16"
+           id="rect33602"
+           style="fill:none" />
+        <path
+           id="rect33604"
+           style="fill:#222222"
+           d="M 159.99805,755.9707 C 159.44526,755.9707 159,756 159,756 v 2 h 2 v -1.03125 c 0,-0.55279 -0.44526,-0.99805 -0.99805,-0.99805 z M 156,759 v 0.98828 c 0,0.55274 0.44527,0.99426 0.99805,0.99805 L 167,761 v 5 h 2 v -5.99805 -0.004 C 169,759.44536 168.55474,759 168.00195,759 h -0.004 C 168.00195,759 156,759 156,759 Z m 3,3 v 5.99805 0.004 c 0,0.55269 0.44526,0.99805 0.99805,0.99805 4.02356,0.007 12.00195,0 12.00195,0 v -0.98828 c 0,-0.55274 -0.99805,-0.99805 -0.99805,-0.99805 L 161,767 v -5 z m 8,8 v 1.03125 c 0,0.55279 0.44526,0.99805 0.99805,0.99805 h 0.004 C 168.55464,772.0293 169,772 169,772 v -2 z"
+           transform="translate(5.0002,-559)"
+           mask="none" />
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+#!/usr/bin/env xdg-open
+# Author Alexey T. / Erik Inkinen / GNU GPL3
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FuriCam
+Exec=/usr/bin/furicam
+TryExec=/usr/bin/furicam
+Icon=furicam
+Terminal=false
+StartupNotify=false
+Comment=Camera
+Categories=AudioVideo;Video;Photography

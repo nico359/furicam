@@ -1,0 +1,39 @@
+<RCC>
+    <qresource prefix="/icons/">
+        <file>shutter.svg</file>
+        <file>timer.svg</file>
+        <file>qrc.svg</file>
+        <file>gpsOn.svg</file>
+        <file>gpsOff.svg</file>
+        <file>menu.svg</file>
+        <file>aspectRatioMenu.svg</file>
+        <file>rotateCamera.svg</file>
+        <file>flashAuto.svg</file>
+        <file>flashOff.svg</file>
+        <file>flashOn.svg</file>
+        <file>cameraState.svg</file>
+        <file>videoState.svg</file>
+        <file>AEFLockOn.svg</file>
+        <file>AEFLockOff.svg</file>
+	<file>playVideo.svg</file>
+	<file>pauseVideo.svg</file>
+        <file>audioOn.svg</file>
+        <file>audioOff.svg</file>
+        <file>cameraVideoSymbolic.svg</file>
+        <file>emblemDefaultSymbolic.svg</file>
+        <file>goDownSymbolic.svg</file>
+        <file>goNextSymbolic.svg</file>
+        <file>goPreviousSymbolic.svg</file>
+        <file>helpAboutSymbolic.svg</file>
+        <file>windowCloseSymbolic.svg</file>
+        <file>emblemPhotosSymbolic.svg</file>
+        <file>editDeleteSymbolic.svg</file>
+        <file>network-wireless-signal-no-route.svg</file>
+        <file>network-wireless-signal-offline.svg</file>
+        <file>network-wireless-signal-none.svg</file>
+        <file>network-wireless-signal-weak.svg</file>
+        <file>network-wireless-signal-ok.svg</file>
+        <file>network-wireless-signal-good.svg</file>
+        <file>network-wireless-signal-excellent.svg</file>
+    </qresource>
+</RCC>

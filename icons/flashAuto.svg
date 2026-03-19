@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="4.2333331mm"
+   height="4.233521mm"
+   viewBox="0 0 4.2333331 4.2335209"
+   version="1.1"
+   id="svg8328"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs8325" />
+  <g
+     id="layer1"
+     transform="translate(-48.072109,-158.96737)">
+    <g
+       id="g313236"
+       transform="matrix(0.26458333,0,0,0.26458333,-156.91099,140.76505)"
+       style="fill:#222222">
+      <title
+         id="title313228">padlock2-open</title>
+      <g
+         id="g2203"
+         transform="translate(674.73928,-251.20339)">
+        <title
+           id="title2205">camera-flash-auto</title>
+        <rect
+           y="320"
+           x="100"
+           height="16"
+           width="16"
+           id="rect2118"
+           style="fill:none" />
+        <path
+           style="fill:#222222"
+           d="M 111.14453,320.00586 109.08203,326 h 1.58789 l 0.30078,-1.02148 h 2.0918 L 113.38477,326 h 1.64843 l -1.97851,-5.99414 z m 0.85547,1.53125 0.64844,2.09375 h -1.27149 z"
+           id="path2130"
+           mask="none" />
+        <path
+           id="path2184"
+           d="m 106.9707,320 c -0.33433,0.0102 -0.64145,0.18682 -0.81836,0.4707 l -5,8 c -0.10579,0.16965 -0.1509,0.35159 -0.15039,0.5293 H 101 v 1 h 1 2 v 5 c 0.002,1.00344 1.31499,1.37969 1.84766,0.5293 l 5,-8 c 0.10579,-0.16965 0.1509,-0.35159 0.15039,-0.5293 H 108 v -1 -1 -4 c 1.8e-4,-0.56391 -0.46563,-1.01646 -1.0293,-1 z"
+           style="fill:#222222"
+           mask="none" />
+      </g>
+    </g>
+  </g>
+</svg>

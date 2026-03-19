@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="4.2333331mm"
+   height="4.2334051mm"
+   viewBox="0 0 4.2333331 4.2334051"
+   version="1.1"
+   id="svg60337"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs60334" />
+  <g
+     id="layer1"
+     transform="translate(-117.01056,-162.00849)">
+    <g
+       id="g43422"
+       transform="matrix(0.26458333,0,0,0.26458333,86.975126,-40.566095)"
+       style="fill:#222222">
+      <title
+         id="title43424">film-camera</title>
+      <rect
+         id="rect8027"
+         width="16"
+         height="16"
+         x="-116.0002"
+         y="767.995"
+         transform="scale(-1,1)"
+         style="fill:none" />
+      <g
+         id="g9301">
+        <g
+           id="g6458"
+           transform="translate(-858.22932,1111.1028)"
+           style="fill:#222222">
+          <title
+             id="title4018">map-marker</title>
+          <rect
+             style="fill:none"
+             id="rect6446"
+             width="16"
+             height="16"
+             x="971.74908"
+             y="-345.46628"
+             rx="0"
+             ry="0" />
+          <path
+             id="circle6450"
+             style="fill:#222222"
+             d="m 742.61328,228.68555 a 6.4991598,6.4991598 0 0 0 -6.49805,6.5 6.4991598,6.4991598 0 0 0 6.49805,6.49804 6.4991598,6.4991598 0 0 0 6.5,-6.49804 6.4991598,6.4991598 0 0 0 -6.5,-6.5 z m 0,4 a 2.4991608,2.4991608 0 0 1 2.5,2.5 2.4991608,2.4991608 0 0 1 -2.5,2.49804 2.4991608,2.4991608 0 0 1 -2.49805,-2.49804 2.4991608,2.4991608 0 0 1 2.49805,-2.5 z"
+             transform="translate(237.13496,-574.1521)"
+             mask="none" />
+          <path
+             id="path6454"
+             style="fill:#222222"
+             d="m 748.71289,237.43164 -5.66211,0.23242 -6.53516,-0.23047 c 0.69016,2.14975 4.097,5.24942 6.09766,7.25 6.1e-4,6.1e-4 10e-4,10e-4 0.002,0.002 v -0.004 c 2.00066,-2.00058 5.40751,-5.10025 6.09766,-7.25 z"
+             transform="translate(237.13496,-574.1521)"
+             mask="none" />
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

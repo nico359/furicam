@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="4.2333331mm"
+   height="4.2333331mm"
+   viewBox="0 0 4.2333331 4.2333331"
+   version="1.1"
+   id="svg8328"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs8325" />
+  <g
+     id="layer1"
+     transform="translate(-54.755674,-151.34838)">
+    <g
+       id="g313236"
+       transform="matrix(0.26458333,0,0,0.26458333,-156.91099,140.76505)"
+       style="fill:#222222">
+      <title
+         id="title313228">padlock2-open</title>
+      <rect
+         id="rect313230"
+         width="16"
+         height="16"
+         x="800"
+         y="40"
+         style="fill:none" />
+      <path
+         id="path313232"
+         style="fill:#222222;fill-opacity:1;fill-rule:nonzero"
+         d="m 848,40 c -2.1987,0 -4,1.801299 -4,4 v 1 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -1 c 0,-1.125296 0.8747,-2 2,-2 1.1253,0 2,0.874704 2,2 v 4 h -4 -2 c -1.108,0 -2,0.892 -2,2 v 3 1 1 c 0,0.554 0.446,1 1,1 h 10 c 0.554,0 1,-0.446 1,-1 v -1 -1 -3 c 0,-1.108 -0.892,-2 -2,-2 v -4 c 0,-2.198701 -1.8013,-4 -4,-4 z"
+         transform="translate(-40)" />
+    </g>
+  </g>
+</svg>

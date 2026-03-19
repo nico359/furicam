@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="4.2333331mm"
+   height="4.2333331mm"
+   viewBox="0 0 4.2333331 4.233333"
+   version="1.1"
+   id="svg8328"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs8325" />
+  <g
+     id="layer1"
+     transform="translate(-47.962549,-159.43127)">
+    <g
+       id="g313236"
+       transform="matrix(0.26458333,0,0,0.26458333,-156.91099,140.76505)"
+       style="fill:#222222">
+      <title
+         id="title313228">padlock2-open</title>
+      <g
+         transform="translate(652.325,-327.45051)"
+         id="g34396"
+         style="fill:#222222">
+        <title
+           id="title34390">padlock2</title>
+        <rect
+           style="fill:none"
+           id="rect34394"
+           width="16"
+           height="16"
+           x="122.0002"
+           y="398"
+           rx="0"
+           ry="0" />
+        <path
+           d="m 130,399 c -2.19922,0 -4,1.80078 -4,4 v 2 c -1.10937,0 -2,0.89062 -2,2 v 5 c 0,0.55469 0.44531,1 1,1 h 10 c 0.55469,0 1,-0.44531 1,-1 v -5 c 0,-1.10938 -0.89062,-2 -2,-2 v -2 c 0,-2.19922 -1.80078,-4 -4,-4 z m 0,2 c 1.125,0 2,0.875 2,2 v 2 h -4 v -2 c 0,-1.125 0.875,-2 2,-2 z m 0,0"
+           fill="#222222"
+           id="path34478"
+           style="fill:#222222;fill-opacity:1" />
+      </g>
+    </g>
+  </g>
+</svg>
