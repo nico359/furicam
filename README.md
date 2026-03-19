@@ -3,7 +3,7 @@
 
 An enhanced camera app for FuriPhone, built with Qt5/QML/C++.
 
-Based on [furios-camera](https://github.com/nicothegamer/furios-camera) by FuriLabs.
+Based on [furios-camera](https://github.com/FuriLabs/furios-camera) by FuriLabs.
 
 I decided not to do an obvious fork and rename it since these changes will most likely never be upstreamed anyway. Not that I dont want that but since Im not a developer all I do is AI generated and I assume they wouldnt want that which is understandable.
 
