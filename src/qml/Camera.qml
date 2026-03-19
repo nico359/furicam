@@ -574,7 +574,7 @@ Item {
                     "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=auto " +
                     "! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
                     "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
-                    "mp4mux name=mux ! filesink location=" + outputPath,
+                    "mp4mux fragment-duration=1000 name=mux ! filesink location=" + outputPath,
                 back: "gst-pipeline: droidcamsrc mode=2 camera-device=" + camera.deviceId + " ! video/x-raw ! videoconvert ! qtvideosink",
                 backRecord:
                     "gst-pipeline: droidcamsrc camera-device=" + camera.deviceId + " mode=2 ! tee name=t " +
@@ -583,7 +583,7 @@ Item {
                     " ! videoconvert ! videoflip video-direction=" + cameraItem.lockedVideoRotation +
                     " ! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
                     "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
-                    "mp4mux name=mux ! filesink location=" + outputPath
+                    "mp4mux fragment-duration=1000 name=mux ! filesink location=" + outputPath
             }
         ]
 
