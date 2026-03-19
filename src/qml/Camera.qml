@@ -159,6 +159,18 @@ Item {
         }
     }
 
+    function pauseCamera() {
+        if (camera !== null && camera !== undefined) {
+            camera.stop();
+        }
+    }
+
+    function resumeCamera() {
+        if (camera !== null && camera !== undefined) {
+            camera.start();
+        }
+    }
+
     function handleStopCamera() {
         if (camera !== null && camera !== undefined) {
             camera.stop();

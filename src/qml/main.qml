@@ -72,12 +72,15 @@ ApplicationWindow {
     onActiveChanged:{
         if (!window.active) {
             console.log("Stopping camera...")
-            window.stopCamera();
-            cameraLoader.disconnectSignals();
+            if (cameraLoader.item) {
+                cameraLoader.item.pauseCamera();
+            }
             focusState.state = "Default"
             settings.sync()
         } else if (!window.firstLoad) {
-            cameraLoader.active = true;
+            if (cameraLoader.item) {
+                cameraLoader.item.resumeCamera();
+            }
         }
     }
 
