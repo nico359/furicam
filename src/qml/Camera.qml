@@ -496,7 +496,7 @@ Item {
                     anchors.centerIn: parent
                     width: parent.width
                     height: 2 * window.scalingRatio
-                    color: Math.abs(window.levelAngle) < 1.0 ? "#4CAF50" : "#80ffffff"
+                    color: window.isLevel ? "#4CAF50" : "#80ffffff"
                     radius: 1
 
                     Behavior on color {
@@ -509,9 +509,9 @@ Item {
                     width: 8 * window.scalingRatio
                     height: 8 * window.scalingRatio
                     radius: 4 * window.scalingRatio
-                    color: Math.abs(window.levelAngle) < 1.0 ? "#4CAF50" : "#80ffffff"
+                    color: window.isLevel ? "#4CAF50" : "#80ffffff"
                     border.width: 1
-                    border.color: Math.abs(window.levelAngle) < 1.0 ? "#388E3C" : "#40ffffff"
+                    border.color: window.isLevel ? "#388E3C" : "#40ffffff"
 
                     Behavior on color {
                         ColorAnimation { duration: 200 }

@@ -72,14 +72,12 @@ ApplicationWindow {
     onActiveChanged:{
         if (!window.active) {
             console.log("Stopping camera...")
-            cameraLoader.disconnectSignals();
             window.stopCamera();
+            cameraLoader.disconnectSignals();
             focusState.state = "Default"
             settings.sync()
         } else if (!window.firstLoad) {
             cameraLoader.active = true;
-            cameraLoader.connectSignals();
-            window.startCamera();
         }
     }
 
@@ -135,6 +133,11 @@ ApplicationWindow {
     property real levelAngle: {
         if (accel.x === 0 && accel.y === 0) return 0
         return Math.atan2(accel.x, accel.y) * 180 / Math.PI
+    }
+
+    property bool isLevel: {
+        var a = Math.abs(levelAngle)
+        return a < 1.5 || Math.abs(a - 90) < 1.5 || Math.abs(a - 180) < 1.5
     }
 
 
