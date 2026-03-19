@@ -1635,8 +1635,7 @@ ApplicationWindow {
                     width: resolutionList.width
                     height: 44 * window.scalingRatio
                     color: {
-                        var cam = settings.cameras[settings.cameraId];
-                        if (cam && cam.resWidth === model.resWidth && cam.resHeight === model.resHeight) {
+                        if (cameraLoader.item && cameraLoader.item.currentResWidth === model.resWidth && cameraLoader.item.currentResHeight === model.resHeight) {
                             return "#444";
                         }
                         return "transparent";

@@ -25,6 +25,8 @@ Item {
     property int lockedVideoRotation: 0
 
     property alias resolutionModel: resModel
+    property int currentResWidth: 0
+    property int currentResHeight: 0
 
     ListModel {
         id: resModel
@@ -86,6 +88,8 @@ Item {
                 var sr = camera.imageCapture.supportedResolutions[i];
                 if (sr.width === storedW && sr.height === storedH) {
                     camera.imageCapture.resolution = Qt.size(storedW, storedH);
+                    currentResWidth = storedW;
+                    currentResHeight = storedH;
                     found = true;
                     break;
                 }
@@ -106,6 +110,12 @@ Item {
             }
         }
 
+        // Track the applied resolution
+        if (camera.imageCapture.resolution.width > 0) {
+            currentResWidth = camera.imageCapture.resolution.width;
+            currentResHeight = camera.imageCapture.resolution.height;
+        }
+
         if (settings.cameras[camera.deviceId] && settings.cameras[camera.deviceId].resolution !== undefined && camera.imageCapture.supportedResolutions[0] != undefined) {
             settings.cameras[camera.deviceId].resolution = Math.round(
                 (camera.imageCapture.supportedResolutions[0].width * camera.imageCapture.supportedResolutions[0].height) / 1000000
@@ -115,6 +125,8 @@ Item {
 
     function setResolution(width, height) {
         camera.imageCapture.resolution = Qt.size(width, height);
+        currentResWidth = width;
+        currentResHeight = height;
         if (settings.cameras[camera.deviceId]) {
             settings.cameras[camera.deviceId].resWidth = width;
             settings.cameras[camera.deviceId].resHeight = height;
@@ -283,7 +295,9 @@ Item {
 
         onCameraStatusChanged: {
             if (camera.cameraStatus == Camera.LoadedStatus) {
-                cameraItem.fnAspectRatio()
+                if (resModel.count === 0) {
+                    cameraItem.fnAspectRatio()
+                }
             } else if (camera.cameraStatus == Camera.ActiveStatus) {
                 focusState.state = "Default"
                 camera.focus.focusMode = Camera.FocusContinuous
@@ -292,6 +306,7 @@ Item {
         }
 
         onDeviceIdChanged: {
+            resModel.clear();
             settings.setValue("cameraId", deviceId);
         }
 
