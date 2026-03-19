@@ -3,7 +3,7 @@
 
 An enhanced camera app for FuriPhone, built with Qt5/QML/C++.
 
-Based on [furios-camera](https://github.com/nicothegamer/furios-camera) by FuriLabs.
+Based on [furios-camera](https://github.com/FuriLabs/furios-camera) by FuriLabs.
 
 I decided not to do an obvious fork and rename it since these changes will most likely never be upstreamed anyway. Not that I dont want that but since Im not a developer all I do is AI generated and I assume they wouldnt want that which is understandable.
 
@@ -15,8 +15,12 @@ Licensed under GPL-2.0.
 - Added option to increase jpeg compression
 - Added 3x3 grid
 - Added level indicator
+- Video output is now of reasonable file size (MJPEG --> H.264)
+- Video output has adjustable bitrate to further adjust quality or storage savings
 
 ## Building
+
+Note about building: Some of the listed dependencies here do not seem to be available anymore on Debian Forky. To build furios-camera/furicam directly on the Furiphone I had to to so in a Debian Trixie Distrobox container. If you want to take the same approach, you might have to install distrobox, podman and optionally a GUI to manage containers like Distroshelf from Flathub for example.
 
 * Install build dependencies
 ```
