@@ -13,8 +13,10 @@
 #include <QFont>
 #include <QSystemTrayIcon>
 #include <QMenu>
+#include <QQmlEngine>
 #include "singleinstance.h"
 #include "appcontroller.h"
+#include "accelreader.h"
 
 int main(int argc, char *argv[])
 {
@@ -30,6 +32,8 @@ int main(int argc, char *argv[])
         qDebug() << "Application already running";
         return 0;
     }
+
+    qmlRegisterType<AccelReader>("FuriCam", 1, 0, "AccelReader");
 
     QIcon::setThemeName("default");
     QIcon::setThemeSearchPaths(QStringList("/usr/share/icons"));

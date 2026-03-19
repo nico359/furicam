@@ -15,6 +15,10 @@
 #endif
 
 #include <gio/gio.h>
+
+// Restore Qt 'signals' keyword after GIO headers
+#define signals Q_SIGNALS
+
 #include <QObject>
 #include <QApplication>
 #include <QQmlApplicationEngine>

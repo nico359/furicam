@@ -18,6 +18,7 @@ import Qt.labs.settings 1.0
 import Qt.labs.platform 1.1
 import QtSensors 5.15
 import ZXing 1.0
+import FuriCam 1.0
 
 ApplicationWindow {
     id: window
@@ -78,6 +79,7 @@ ApplicationWindow {
         } else if (!window.firstLoad) {
             cameraLoader.active = true;
             cameraLoader.connectSignals();
+            window.startCamera();
         }
     }
 
@@ -125,15 +127,14 @@ ApplicationWindow {
         }
     }
 
-    Accelerometer {
+    AccelReader {
         id: accel
         active: settings.levelEnabled === 1
-        dataRate: 30
     }
 
     property real levelAngle: {
-        if (!accel.reading) return 0
-        return Math.atan2(accel.reading.x, accel.reading.y) * 180 / Math.PI
+        if (accel.x === 0 && accel.y === 0) return 0
+        return Math.atan2(accel.x, accel.y) * 180 / Math.PI
     }
 
 

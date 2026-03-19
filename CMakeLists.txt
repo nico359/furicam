@@ -31,7 +31,8 @@ set(APP_SOURCES
 		${CMAKE_SOURCE_DIR}/src/singleinstance.cpp
 		${CMAKE_SOURCE_DIR}/src/windoweventfilter.cpp
 		${CMAKE_SOURCE_DIR}/src/appcontroller.cpp
-		${CMAKE_SOURCE_DIR}/src/settingsmanager.cpp)
+		${CMAKE_SOURCE_DIR}/src/settingsmanager.cpp
+		${CMAKE_SOURCE_DIR}/src/accelreader.cpp)
 
 set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/filemanager.h
@@ -44,7 +45,8 @@ set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/singleinstance.h
 		${CMAKE_SOURCE_DIR}/src/windoweventfilter.h
 		${CMAKE_SOURCE_DIR}/src/appcontroller.h
-		${CMAKE_SOURCE_DIR}/src/settingsmanager.h)
+		${CMAKE_SOURCE_DIR}/src/settingsmanager.h
+		${CMAKE_SOURCE_DIR}/src/accelreader.h)
 
 qt5_add_resources(APP_RESOURCES
 	${CMAKE_SOURCE_DIR}/sounds/sounds.qrc
