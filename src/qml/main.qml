@@ -466,6 +466,96 @@ ApplicationWindow {
         repeat: true
     }
 
+    // Zoom slider with magnification label
+    Item {
+        id: zoomSliderContainer
+        anchors.right: parent.right
+        anchors.rightMargin: 16 * window.scalingRatio
+        anchors.bottom: mainBar.top
+        anchors.bottomMargin: 20 * window.scalingRatio
+        width: 50 * window.scalingRatio
+        height: parent.height * 0.35
+        visible: !mediaView.visible && !window.videoCaptured
+                 && cameraLoader.item !== null
+                 && cameraLoader.item.maxZoom > 1.0
+        opacity: zoomSlider.pressed ? 1.0 : 0.7
+
+        Behavior on opacity {
+            NumberAnimation { duration: 200 }
+        }
+
+        // Magnification label
+        Rectangle {
+            id: zoomLabel
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: zoomSlider.top
+            anchors.bottomMargin: 6 * window.scalingRatio
+            width: 48 * window.scalingRatio
+            height: 24 * window.scalingRatio
+            radius: 12 * window.scalingRatio
+            color: "#99000000"
+
+            Text {
+                anchors.centerIn: parent
+                text: {
+                    var z = cameraLoader.item ? cameraLoader.item.currentZoom : 1.0;
+                    return z.toFixed(1) + "×";
+                }
+                color: "white"
+                font.pixelSize: 13 * window.scalingRatio
+                font.bold: true
+            }
+        }
+
+        Slider {
+            id: zoomSlider
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: zoomLabel.bottom
+            anchors.topMargin: 6 * window.scalingRatio
+            anchors.bottom: parent.bottom
+            orientation: Qt.Vertical
+            from: 1.0
+            to: cameraLoader.item ? cameraLoader.item.maxZoom : 1.0
+            value: cameraLoader.item ? cameraLoader.item.currentZoom : 1.0
+            stepSize: 0.1
+            live: true
+
+            // Only push slider changes when the user is dragging
+            onMoved: {
+                if (cameraLoader.item) {
+                    cameraLoader.item.handleSetZoom(value)
+                }
+            }
+
+            background: Rectangle {
+                x: zoomSlider.leftPadding + zoomSlider.availableWidth / 2 - width / 2
+                y: zoomSlider.topPadding
+                width: 4 * window.scalingRatio
+                height: zoomSlider.availableHeight
+                radius: 2 * window.scalingRatio
+                color: "#66ffffff"
+
+                Rectangle {
+                    width: parent.width
+                    height: zoomSlider.visualPosition * parent.height
+                    radius: parent.radius
+                    color: "white"
+                }
+            }
+
+            handle: Rectangle {
+                x: zoomSlider.leftPadding + zoomSlider.availableWidth / 2 - width / 2
+                y: zoomSlider.topPadding + zoomSlider.visualPosition * (zoomSlider.availableHeight - height)
+                width: 20 * window.scalingRatio
+                height: 20 * window.scalingRatio
+                radius: width / 2
+                color: zoomSlider.pressed ? "#e0e0e0" : "white"
+                border.color: "#40000000"
+                border.width: 1
+            }
+        }
+    }
+
     Item {
         id: mainBar
         anchors.bottom: parent.bottom

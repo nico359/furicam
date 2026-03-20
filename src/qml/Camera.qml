@@ -28,6 +28,9 @@ Item {
     property int currentResWidth: 0
     property int currentResHeight: 0
 
+    property real currentZoom: camera.digitalZoom
+    property real maxZoom: camera.maximumDigitalZoom
+
     ListModel {
         id: resModel
     }
@@ -187,6 +190,10 @@ Item {
     function handleSetDeviceID(deviceIdToSet) {
         camera.deviceId = deviceIdToSet
         settings.deviceId = deviceIdToSet
+    }
+
+    function handleSetZoom(zoomLevel) {
+        camera.setDigitalZoom(Math.max(1.0, Math.min(zoomLevel, camera.maximumDigitalZoom)))
     }
 
     function initializeCameraList() {
