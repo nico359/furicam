@@ -1,3 +1,11 @@
+furicam (1.1.0-1) unstable; urgency=medium
+
+  * Add zoom slider with magnification indicator
+  * Fix zoom display to show estimated magnification (1.0×-4.0×)
+  * Reset zoom on camera switch
+
+ -- Alexander Rutz <alex@familyrutz.com>  Thu, 20 Mar 2026 13:30:00 +0000
+
 furicam (1.0.0-1) unstable; urgency=medium
 
   * Initial release of FuriCam
