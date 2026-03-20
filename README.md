@@ -15,7 +15,7 @@ Licensed under GPL-2.0.
 - Added option to increase jpeg compression
 - Added 3x3 grid
 - Added level indicator
-- Added zoom slider (not yet in release, also not sure if max magnification is actually 4x)
+- Added zoom slider
 - Video output is now of reasonable file size (MJPEG --> H.264)
 - Video output has adjustable bitrate to further adjust quality or storage savings
 
