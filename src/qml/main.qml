@@ -477,7 +477,7 @@ ApplicationWindow {
         height: parent.height * 0.35
         visible: !mediaView.visible && !window.videoCaptured
                  && cameraLoader.item !== null
-                 && cameraLoader.item.maxZoom > 1.0
+                 && cameraLoader.item.maxZoom > 0
         opacity: zoomSlider.pressed ? 1.0 : 0.7
 
         Behavior on opacity {
@@ -498,8 +498,10 @@ ApplicationWindow {
             Text {
                 anchors.centerIn: parent
                 text: {
-                    var z = cameraLoader.item ? cameraLoader.item.currentZoom : 1.0;
-                    return z.toFixed(1) + "×";
+                    var z = cameraLoader.item ? cameraLoader.item.currentZoom : 0;
+                    var max = cameraLoader.item ? cameraLoader.item.maxZoom : 1;
+                    var magnification = max > 0 ? (1.0 + (z / max) * 3.0) : 1.0;
+                    return magnification.toFixed(1) + "×";
                 }
                 color: "white"
                 font.pixelSize: 13 * window.scalingRatio
@@ -514,10 +516,10 @@ ApplicationWindow {
             anchors.topMargin: 6 * window.scalingRatio
             anchors.bottom: parent.bottom
             orientation: Qt.Vertical
-            from: 1.0
-            to: cameraLoader.item ? cameraLoader.item.maxZoom : 1.0
-            value: cameraLoader.item ? cameraLoader.item.currentZoom : 1.0
-            stepSize: 0.1
+            from: 0
+            to: cameraLoader.item ? cameraLoader.item.maxZoom : 0
+            value: cameraLoader.item ? cameraLoader.item.currentZoom : 0
+            stepSize: 1
             live: true
 
             // Only push slider changes when the user is dragging

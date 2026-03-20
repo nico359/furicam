@@ -28,10 +28,9 @@ Item {
     property int currentResWidth: 0
     property int currentResHeight: 0
 
-    property real currentZoom: Math.max(1.0, camera.digitalZoom)
-    property real maxZoom: camera.cameraStatus >= Camera.ActiveStatus
-                           ? Math.max(1.0, Math.min(camera.maximumDigitalZoom, 10.0))
-                           : 1.0
+    property real currentZoom: camera.digitalZoom
+    property real maxZoom: camera.cameraStatus == Camera.ActiveStatus
+                           ? camera.maximumDigitalZoom : 0
 
     ListModel {
         id: resModel
@@ -195,7 +194,7 @@ Item {
     }
 
     function handleSetZoom(zoomLevel) {
-        camera.setDigitalZoom(Math.max(1.0, Math.min(zoomLevel, camera.maximumDigitalZoom)))
+        camera.setDigitalZoom(Math.max(0, Math.min(zoomLevel, camera.maximumDigitalZoom)))
     }
 
     function initializeCameraList() {
