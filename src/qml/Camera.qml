@@ -28,8 +28,10 @@ Item {
     property int currentResWidth: 0
     property int currentResHeight: 0
 
-    property real currentZoom: camera.digitalZoom
-    property real maxZoom: camera.maximumDigitalZoom
+    property real currentZoom: Math.max(1.0, camera.digitalZoom)
+    property real maxZoom: camera.cameraStatus >= Camera.ActiveStatus
+                           ? Math.max(1.0, Math.min(camera.maximumDigitalZoom, 10.0))
+                           : 1.0
 
     ListModel {
         id: resModel
@@ -315,6 +317,7 @@ Item {
         onDeviceIdChanged: {
             resModel.clear();
             settings.setValue("cameraId", deviceId);
+            camera.setDigitalZoom(1.0)
         }
 
         onAspWideChanged: {
