@@ -15,6 +15,7 @@ Licensed under GPL-2.0.
 - Added option to increase jpeg compression
 - Added 3x3 grid
 - Added level indicator
+- Added zoom slider (not yet in release, also not sure if max magnification is actually 4x)
 - Video output is now of reasonable file size (MJPEG --> H.264)
 - Video output has adjustable bitrate to further adjust quality or storage savings
 
@@ -22,7 +23,10 @@ Licensed under GPL-2.0.
 
 - Glitching when refocusing the window or switching cameras
 - Claude and I had some communication issues about how the resuming of the camera is handled so maybe there are some unnecessary changes
-- Idk
+- Zoom slider magnification ratios might not be accurate
+- Color temperature still seems a little bit off depending on the scenario
+- Maybe denoising or post processing in general
+- HDR?
 
 ## Building
 
