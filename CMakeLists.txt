@@ -32,7 +32,8 @@ set(APP_SOURCES
 		${CMAKE_SOURCE_DIR}/src/windoweventfilter.cpp
 		${CMAKE_SOURCE_DIR}/src/appcontroller.cpp
 		${CMAKE_SOURCE_DIR}/src/settingsmanager.cpp
-		${CMAKE_SOURCE_DIR}/src/accelreader.cpp)
+		${CMAKE_SOURCE_DIR}/src/accelreader.cpp
+		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.cpp)
 
 set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/filemanager.h
@@ -46,7 +47,8 @@ set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/windoweventfilter.h
 		${CMAKE_SOURCE_DIR}/src/appcontroller.h
 		${CMAKE_SOURCE_DIR}/src/settingsmanager.h
-		${CMAKE_SOURCE_DIR}/src/accelreader.h)
+		${CMAKE_SOURCE_DIR}/src/accelreader.h
+		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.h)
 
 qt5_add_resources(APP_RESOURCES
 	${CMAKE_SOURCE_DIR}/sounds/sounds.qrc
@@ -63,7 +65,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 target_compile_options(${PROJECT_NAME} PUBLIC ${GST_CFLAGS})
-target_link_libraries(${PROJECT_NAME} PUBLIC Qt5::Core Qt5::Widgets Qt5::Quick Qt5::Qml Qt5::Multimedia Qt5::DBus ZXing exiv2 ${GST_LIBS} ${GLIB_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PUBLIC Qt5::Core Qt5::Widgets Qt5::Quick Qt5::Qml Qt5::Multimedia Qt5::DBus ZXing exiv2 dl ${GST_LIBS} ${GLIB_LIBRARIES})
 
 install(TARGETS ${PROJECT_NAME} DESTINATION /usr/bin)
 install(FILES ${CMAKE_SOURCE_DIR}/furicam.desktop DESTINATION /usr/share/applications)

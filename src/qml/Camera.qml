@@ -14,6 +14,7 @@ import QtQuick.Layouts 1.15
 import Qt.labs.settings 1.0
 import Qt.labs.platform 1.1
 import ZXing 1.0
+import FuriCam 1.0
 
 
 Item {
@@ -31,6 +32,21 @@ Item {
     property real currentZoom: camera.digitalZoom
     property real maxZoom: camera.cameraStatus == Camera.ActiveStatus
                            ? camera.maximumDigitalZoom : 0
+
+    property int colorTemperature: 0
+
+    function setColorTemperature(temp) {
+        // Unused — kept for compatibility
+        colorTemperature = temp
+    }
+
+    function setWhiteBalanceMode(mode) {
+        whiteBalance.setMode(mode)
+    }
+
+    WhiteBalanceController {
+        id: whiteBalance
+    }
 
     ListModel {
         id: resModel

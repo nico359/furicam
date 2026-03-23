@@ -170,6 +170,7 @@ ApplicationWindow {
         property int gridEnabled: 0
         property int levelEnabled: 0
         property int videoBitrate: 8000
+        property int whiteBalanceMode: 0
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
@@ -297,6 +298,7 @@ ApplicationWindow {
                 window.setDeviceID.connect(cameraLoader.item.handleSetDeviceID);
 
                 cameraLoader.item.initializeCameraList(); // Initialize CameraList model
+                cameraLoader.item.setWhiteBalanceMode(settings.whiteBalanceMode);
                 signalsConnected = true;
             }
         }
@@ -464,6 +466,97 @@ ApplicationWindow {
 
         running: false
         repeat: true
+    }
+
+    // White balance mode selector
+    Item {
+        id: wbSliderContainer
+        anchors.left: parent.left
+        anchors.leftMargin: 16 * window.scalingRatio
+        anchors.bottom: mainBar.top
+        anchors.bottomMargin: 20 * window.scalingRatio
+        width: 50 * window.scalingRatio
+        height: parent.height * 0.35
+        visible: !mediaView.visible && !window.videoCaptured
+                 && cameraLoader.item !== null
+        opacity: wbSlider.pressed ? 1.0 : 0.7
+
+        Behavior on opacity {
+            NumberAnimation { duration: 200 }
+        }
+
+        // Mode label
+        Rectangle {
+            id: wbLabel
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: wbSlider.top
+            anchors.bottomMargin: 6 * window.scalingRatio
+            width: 52 * window.scalingRatio
+            height: 24 * window.scalingRatio
+            radius: 12 * window.scalingRatio
+            color: "#99000000"
+
+            Text {
+                anchors.centerIn: parent
+                text: {
+                    var names = ["AWB", "☀️", "☁️", "💡", "🔥"];
+                    return names[Math.round(wbSlider.value)] || "AWB";
+                }
+                color: "white"
+                font.pixelSize: 13 * window.scalingRatio
+                font.bold: true
+            }
+        }
+
+        Slider {
+            id: wbSlider
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: wbLabel.bottom
+            anchors.topMargin: 6 * window.scalingRatio
+            anchors.bottom: parent.bottom
+            orientation: Qt.Vertical
+            from: 0
+            to: 4
+            value: settings.whiteBalanceMode
+            stepSize: 1
+            live: true
+            snapMode: Slider.SnapAlways
+
+            onMoved: {
+                if (cameraLoader.item) {
+                    var mode = Math.round(value);
+                    cameraLoader.item.setWhiteBalanceMode(mode);
+                    settings.whiteBalanceMode = mode;
+                }
+            }
+
+            background: Rectangle {
+                x: wbSlider.leftPadding + wbSlider.availableWidth / 2 - width / 2
+                y: wbSlider.topPadding
+                width: 4 * window.scalingRatio
+                height: wbSlider.availableHeight
+                radius: 2 * window.scalingRatio
+                color: "#66ffffff"
+
+                Rectangle {
+                    width: parent.width
+                    height: wbSlider.visualPosition * parent.height
+                    radius: parent.radius
+                    color: "white"
+                }
+            }
+
+            handle: Rectangle {
+                x: wbSlider.leftPadding + wbSlider.availableWidth / 2 - width / 2
+                y: wbSlider.topPadding + wbSlider.visualPosition * (wbSlider.availableHeight - height)
+                width: 20 * window.scalingRatio
+                height: 20 * window.scalingRatio
+                radius: width / 2
+                color: wbSlider.pressed ? "#e0e0e0" : "white"
+                border.color: "#40000000"
+                border.width: 1
+            }
+        }
     }
 
     // Zoom slider with magnification label

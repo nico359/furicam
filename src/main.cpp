@@ -17,6 +17,7 @@
 #include "singleinstance.h"
 #include "appcontroller.h"
 #include "accelreader.h"
+#include "whitebalancecontroller.h"
 
 int main(int argc, char *argv[])
 {
@@ -34,6 +35,7 @@ int main(int argc, char *argv[])
     }
 
     qmlRegisterType<AccelReader>("FuriCam", 1, 0, "AccelReader");
+    qmlRegisterType<WhiteBalanceController>("FuriCam", 1, 0, "WhiteBalanceController");
 
     QIcon::setThemeName("default");
     QIcon::setThemeSearchPaths(QStringList("/usr/share/icons"));
