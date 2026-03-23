@@ -23,10 +23,11 @@ Licensed under GPL-2.0.
 
 - Glitching when refocusing the window or switching cameras
 - Claude and I had some communication issues about how the resuming of the camera is handled so maybe there are some unnecessary changes
-- Zoom slider magnification ratios might not be accurate
 - Color temperature still seems a little bit off depending on the scenario
 - Maybe denoising or post processing in general
 - HDR?
+- The way the video is currently encoded is suboptimal because it uses software encoding (has once again something to do with how the app receives data from Android Abstraction Layer)
+- Aspect ratio behaves weirdly sometimes when switching between photo and video
 
 ## Building
 
