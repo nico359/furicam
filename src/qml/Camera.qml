@@ -44,6 +44,14 @@ Item {
         whiteBalance.setMode(mode)
     }
 
+    function setDenoisingLevel(level) {
+        camera.imageProcessing.denoisingLevel = level
+    }
+
+    function setSharpeningLevel(level) {
+        camera.imageProcessing.sharpeningLevel = level
+    }
+
     WhiteBalanceController {
         id: whiteBalance
     }
@@ -267,8 +275,8 @@ Item {
         }
 
         imageProcessing {
-            denoisingLevel: 1.0
-            sharpeningLevel: 1.0
+            denoisingLevel: settings.denoisingLevel
+            sharpeningLevel: settings.sharpeningLevel
             whiteBalanceMode: CameraImageProcessing.WhiteBalanceAuto
         }
 

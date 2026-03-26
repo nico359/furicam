@@ -171,10 +171,14 @@ ApplicationWindow {
         property int levelEnabled: 0
         property int videoBitrate: 8000
         property int whiteBalanceMode: 0
+        property real denoisingLevel: 1.0
+        property real sharpeningLevel: 1.0
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
         onAspWideChanged: setCameraAspWide(settings.aspWide)
+        onDenoisingLevelChanged: cameraLoader.item.setDenoisingLevel(settings.denoisingLevel)
+        onSharpeningLevelChanged: cameraLoader.item.setSharpeningLevel(settings.sharpeningLevel)
     }
 
     Settings {
@@ -1956,6 +1960,118 @@ ApplicationWindow {
                     implicitHeight: 22 * window.scalingRatio
                     radius: 11 * window.scalingRatio
                     color: bitrateSlider.pressed ? "#ddd" : "white"
+                }
+            }
+
+            Rectangle {
+                width: parent.width - 32 * window.scalingRatio
+                height: 1
+                color: "#444"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Text {
+                text: "Denoising: " + (settings.denoisingLevel * 100).toFixed(0) + "%"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+            }
+
+            Slider {
+                id: denoisingSlider
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                from: 0
+                to: 1
+                stepSize: 0.1
+                value: settings.denoisingLevel
+
+                onMoved: {
+                    settings.denoisingLevel = value;
+                }
+
+                background: Rectangle {
+                    x: denoisingSlider.leftPadding
+                    y: denoisingSlider.topPadding + denoisingSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200
+                    implicitHeight: 4 * window.scalingRatio
+                    width: denoisingSlider.availableWidth
+                    height: implicitHeight
+                    radius: 2 * window.scalingRatio
+                    color: "#555"
+
+                    Rectangle {
+                        width: denoisingSlider.visualPosition * parent.width
+                        height: parent.height
+                        color: "#62a0ea"
+                        radius: 2 * window.scalingRatio
+                    }
+                }
+
+                handle: Rectangle {
+                    x: denoisingSlider.leftPadding + denoisingSlider.visualPosition * (denoisingSlider.availableWidth - width)
+                    y: denoisingSlider.topPadding + denoisingSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio
+                    implicitHeight: 22 * window.scalingRatio
+                    radius: 11 * window.scalingRatio
+                    color: denoisingSlider.pressed ? "#ddd" : "white"
+                }
+            }
+
+            Rectangle {
+                width: parent.width - 32 * window.scalingRatio
+                height: 1
+                color: "#444"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Text {
+                text: "Sharpening: " + (settings.sharpeningLevel * 100).toFixed(0) + "%"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+            }
+
+            Slider {
+                id: sharpeningSlider
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                from: 0
+                to: 1
+                stepSize: 0.1
+                value: settings.sharpeningLevel
+
+                onMoved: {
+                    settings.sharpeningLevel = value;
+                }
+
+                background: Rectangle {
+                    x: sharpeningSlider.leftPadding
+                    y: sharpeningSlider.topPadding + sharpeningSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200
+                    implicitHeight: 4 * window.scalingRatio
+                    width: sharpeningSlider.availableWidth
+                    height: implicitHeight
+                    radius: 2 * window.scalingRatio
+                    color: "#555"
+
+                    Rectangle {
+                        width: sharpeningSlider.visualPosition * parent.width
+                        height: parent.height
+                        color: "#62a0ea"
+                        radius: 2 * window.scalingRatio
+                    }
+                }
+
+                handle: Rectangle {
+                    x: sharpeningSlider.leftPadding + sharpeningSlider.visualPosition * (sharpeningSlider.availableWidth - width)
+                    y: sharpeningSlider.topPadding + sharpeningSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio
+                    implicitHeight: 22 * window.scalingRatio
+                    radius: 11 * window.scalingRatio
+                    color: sharpeningSlider.pressed ? "#ddd" : "white"
                 }
             }
         }
