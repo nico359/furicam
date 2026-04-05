@@ -482,7 +482,8 @@ ApplicationWindow {
         anchors.bottomMargin: 20 * window.scalingRatio
         width: 50 * window.scalingRatio
         height: parent.height * 0.35
-        visible: !mediaView.visible && !window.videoCaptured
+        visible: settings.whiteBalanceMode !== 0
+                 && !mediaView.visible && !window.videoCaptured
                  && cameraLoader.item !== null
         opacity: wbSlider.pressed ? 1.0 : 0.7
 
@@ -1528,7 +1529,7 @@ ApplicationWindow {
 
     Drawer {
         id: configBarDrawer
-        height: 55 * window.scalingRatio
+        height: 110 * window.scalingRatio
         width: window.width
         dim: false
         edge: Qt.TopEdge
@@ -1544,205 +1545,212 @@ ApplicationWindow {
 
         Item {
             id: configBar
-            width: parent.width
-            height: configBarDrawer.height
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: 20 * window.scalingRatio
+            anchors.fill: parent
+            anchors.topMargin: 8 * window.scalingRatio
 
             property var opened: 0;
             property var aspectRatioOpened: 0;
             property var currIndex: timerTumbler.currentIndex
             visible: !mediaView.visible && !window.videoCaptured
 
-            RowLayout {
+            ColumnLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 10 * window.scalingRatio
                 anchors.rightMargin: 10 * window.scalingRatio
                 spacing: 0
 
-                Button {
+                // ── Row 1: AWB, Sound, GPS, Grid, Level ──────────────────
+                RowLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    icon.source: settings.soundOn === 1 ? "icons/audioOn.svg" : "icons/audioOff.svg"
-                    icon.height: configBarDrawer.height * 0.5
-                    icon.width: configBarDrawer.height * 0.5
-                    icon.color: settings.soundOn === 1 ? "white" : "grey"
+                    spacing: 0
 
-                    background: Rectangle {
-                        color: "transparent"
-                    }
+                    // AWB toggle
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
 
-                    onClicked: {
-                        settings.soundOn = settings.soundOn === 1 ? 0 : 1;
-                    }
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    icon.source: window.gps_icon_source
-                    icon.height: configBarDrawer.height * 0.5
-                    icon.width: configBarDrawer.height * 0.5
-                    icon.color: window.locationAvailable === 1 ? "white" : "grey"
-
-                    background: Rectangle {
-                        color: "transparent"
-                    }
-
-                    Connections {
-                        target: fileManager
-
-                        function onGpsDataReady() {
-                            window.gps_icon_source = "icons/gpsOn.svg";
-                            window.locationAvailable = 1;
-                        }
-                    }
-
-                    onClicked: {
-                        settings.gpsOn = settings.gpsOn === 1 ? 0 : 1;
-
-                        if (settings.gpsOn === 1) {
-                            fileManager.turnOnGps();
-                        } else {
-                            fileManager.turnOffGps();
-                            window.gps_icon_source = "icons/gpsOff.svg";
-                            window.locationAvailable = 0;
-                        }
-                    }
-                }
-
-                Button {
-                    id: timerButton
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    icon.source: "icons/timer.svg"
-                    icon.height: configBarDrawer.height * 0.5
-                    icon.width: configBarDrawer.height * 0.5
-                    icon.color: "white"
-
-                    background: Rectangle {
-                        color: "transparent"
-                    }
-
-                    onClicked: {
-                        configBar.opened = configBar.opened === 1 ? 0 : 1
-                        configBar.aspectRatioOpened = 0
-                        optionContainer.state = "closed"
-                        window.blurView = 1
-                    }
-
-                    Tumbler {
-                        id: timerTumbler
-                        height: 200 * window.scalingRatio
-                        width: 50 * window.scalingRatio
-                        anchors.horizontalCenter: timerButton.horizontalCenter
-                        Layout.preferredWidth: parent.width
-                        anchors.top: timerButton.bottom
-                        model: 60
-                        visible: configBar.opened === 1 ? true : false
-                        enabled: configBar.opened === 1 ? true : false
-
-                        delegate: Text {
-                            text: modelData == 0 ? "Off" : modelData
-                            color: "white"
+                        contentItem: Text {
+                            text: {
+                                var names = ["AWB", "☀", "☁", "💡", "🔥"]
+                                return names[settings.whiteBalanceMode] || "AWB"
+                            }
+                            color: settings.whiteBalanceMode === 0 ? "white" : "#f0c040"
+                            font.pixelSize: 13 * window.scalingRatio
                             font.bold: true
-                            font.pixelSize: 30 * window.scalingRatio
-                            font.family: "Lato Hairline"
                             horizontalAlignment: Text.AlignHCenter
-                            opacity: 0.4 + Math.max(0, 1 - Math.abs(Tumbler.displacement)) * 0.6
+                            verticalAlignment: Text.AlignVCenter
                         }
 
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.InOutQuad
+                        background: Rectangle { color: "transparent" }
+
+                        onClicked: {
+                            if (cameraLoader.item) {
+                                var newMode = settings.whiteBalanceMode === 0 ? 1 : 0
+                                cameraLoader.item.setWhiteBalanceMode(newMode)
+                                settings.whiteBalanceMode = newMode
+                            }
+                        }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: settings.soundOn === 1 ? "icons/audioOn.svg" : "icons/audioOff.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: settings.soundOn === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.soundOn = settings.soundOn === 1 ? 0 : 1 }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: window.gps_icon_source
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: window.locationAvailable === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+
+                        Connections {
+                            target: fileManager
+                            function onGpsDataReady() {
+                                window.gps_icon_source = "icons/gpsOn.svg"
+                                window.locationAvailable = 1
                             }
                         }
 
-                        onVisibleChanged: {
-                            opacity = visible ? 1 : 0
+                        onClicked: {
+                            settings.gpsOn = settings.gpsOn === 1 ? 0 : 1
+                            if (settings.gpsOn === 1) {
+                                fileManager.turnOnGps()
+                            } else {
+                                fileManager.turnOffGps()
+                                window.gps_icon_source = "icons/gpsOff.svg"
+                                window.locationAvailable = 0
+                            }
+                        }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/grid.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: settings.gridEnabled === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.gridEnabled = settings.gridEnabled === 1 ? 0 : 1 }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/level.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: settings.levelEnabled === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1 }
+                    }
+                }
+
+                // ── Row 2: Timer, Settings, Menu ─────────────────────────
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 0
+
+                    Button {
+                        id: timerButton
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/timer.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: "white"
+                        background: Rectangle { color: "transparent" }
+
+                        onClicked: {
+                            configBar.opened = configBar.opened === 1 ? 0 : 1
+                            configBar.aspectRatioOpened = 0
+                            optionContainer.state = "closed"
+                            window.blurView = 1
+                        }
+
+                        Tumbler {
+                            id: timerTumbler
+                            height: 200 * window.scalingRatio
+                            width: 50 * window.scalingRatio
+                            anchors.horizontalCenter: timerButton.horizontalCenter
+                            Layout.preferredWidth: parent.width
+                            anchors.top: timerButton.bottom
+                            model: 60
+                            visible: configBar.opened === 1 ? true : false
+                            enabled: configBar.opened === 1 ? true : false
+
+                            delegate: Text {
+                                text: modelData == 0 ? "Off" : modelData
+                                color: "white"
+                                font.bold: true
+                                font.pixelSize: 30 * window.scalingRatio
+                                font.family: "Lato Hairline"
+                                horizontalAlignment: Text.AlignHCenter
+                                opacity: 0.4 + Math.max(0, 1 - Math.abs(Tumbler.displacement)) * 0.6
+                            }
+
+                            Behavior on opacity {
+                                NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+                            }
+
+                            onVisibleChanged: { opacity = visible ? 1 : 0 }
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true; Layout.fillHeight: true }
+                    Item { Layout.fillWidth: true; Layout.fillHeight: true }
+
+                    Button {
+                        id: settingsButton
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/settings.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: "white"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: {
+                            configBar.aspectRatioOpened = 0
+                            configBar.opened = 0
+                            configBarDrawer.close()
+                            settingsDrawer.open()
+                        }
+                    }
+
+                    Button {
+                        id: menu
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/menu.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: "white"
+                        enabled: !window.videoCaptured
+                        background: Rectangle { color: "transparent" }
+                        onClicked: {
+                            backCamSelect.visible = true
+                            optionContainer.state = "opened"
+                            configBarDrawer.close()
+                            window.blurView = 1
                         }
                     }
                 }
-
-                Button {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    icon.source: "icons/grid.svg"
-                    icon.height: configBarDrawer.height * 0.5
-                    icon.width: configBarDrawer.height * 0.5
-                    icon.color: settings.gridEnabled === 1 ? "white" : "grey"
-
-                    background: Rectangle {
-                        color: "transparent"
-                    }
-
-                    onClicked: {
-                        settings.gridEnabled = settings.gridEnabled === 1 ? 0 : 1;
-                    }
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    icon.source: "icons/level.svg"
-                    icon.height: configBarDrawer.height * 0.5
-                    icon.width: configBarDrawer.height * 0.5
-                    icon.color: settings.levelEnabled === 1 ? "white" : "grey"
-
-                    background: Rectangle {
-                        color: "transparent"
-                    }
-
-                    onClicked: {
-                        settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1;
-                    }
-                }
-
-                Button {
-                    id: settingsButton
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    icon.source: "icons/settings.svg"
-                    icon.height: configBarDrawer.height * 0.5
-                    icon.width: configBarDrawer.height * 0.5
-                    icon.color: "white"
-
-                    background: Rectangle {
-                        color: "transparent"
-                    }
-
-                    onClicked: {
-                        configBar.aspectRatioOpened = 0
-                        configBar.opened = 0
-                        configBarDrawer.close()
-                        settingsDrawer.open()
-                    }
-                }
-
-                Button {
-                    id: menu
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    icon.source: "icons/menu.svg"
-                    icon.height: configBarDrawer.height * 0.5
-                    icon.width: configBarDrawer.height * 0.5
-                    icon.color: "white"
-                    enabled: !window.videoCaptured
-
-                    background: Rectangle {
-                        color: "transparent"
-                    }
-
-                    onClicked: {
-                        backCamSelect.visible = true
-                        optionContainer.state = "opened"
-                        configBarDrawer.close()
-                        window.blurView = 1
-                    }
-                }
             }
+        }
+
+        onOpened: {
+            window.blurView = 1;
         }
 
         onClosed: {
@@ -1755,8 +1763,8 @@ ApplicationWindow {
     Button {
         id: configBarBtn
         icon.source: configBarDrawer.position == 0.0 ?  "icons/goDownSymbolic.svg" : ""
-        icon.height: configBarDrawer.height * 0.5
-        icon.width: configBarDrawer.height * 0.7
+        icon.height: 28 * window.scalingRatio
+        icon.width: 38 * window.scalingRatio
         icon.color: "white"
 
         anchors.horizontalCenter: parent.horizontalCenter
