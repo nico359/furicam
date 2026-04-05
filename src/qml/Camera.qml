@@ -601,7 +601,7 @@ Item {
         videoOutput: viewfinder
         property var backendId: 0
         property string outputPath: StandardPaths.writableLocation(StandardPaths.MoviesLocation).toString().replace("file://","") +
-                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mp4"
+                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mkv"
 
         property int vidW: camera.viewfinder.resolution.width * 3 / 4
         property int vidH: camera.viewfinder.resolution.height * 3 / 4
@@ -616,7 +616,7 @@ Item {
                     "videoflip video-direction=auto " +
                     "! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
                     "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
-                    "mp4mux fragment-duration=1000 name=mux ! filesink location=" + outputPath,
+                    "matroskamux name=mux ! filesink location=" + outputPath,
                 back: "gst-pipeline: droidcamsrc mode=2 camera-device=" + camera.deviceId + " ! video/x-raw ! videoconvert ! qtvideosink",
                 backRecord:
                     "gst-pipeline: droidcamsrc camera-device=" + camera.deviceId + " mode=2 ! tee name=t " +
@@ -627,7 +627,7 @@ Item {
                     "videoflip video-direction=" + cameraItem.lockedVideoRotation +
                     " ! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
                     "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
-                    "mp4mux fragment-duration=1000 name=mux ! filesink location=" + outputPath
+                    "matroskamux name=mux ! filesink location=" + outputPath
             }
         ]
 
@@ -642,7 +642,7 @@ Item {
         cameraItem.lockedVideoRotation = window.currentVideoRotation
         if (window.videoCaptured == false) {
             camGst.outputPath = StandardPaths.writableLocation(StandardPaths.MoviesLocation).toString().replace("file://","") +
-                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mp4"
+                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mkv"
 
             if (camera.position === Camera.BackFace) {
                 camGst.source = camGst.backends[camGst.backendId].backRecord;
