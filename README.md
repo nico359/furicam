@@ -18,20 +18,35 @@ Licensed under GPL-2.0.
 - Added zoom slider
 - Video output is now of reasonable file size (MJPEG --> H.264)
 - Video output has adjustable bitrate to further adjust quality or storage savings
+- Added different video resolutions to choose (although 4k doesnt seem possible due to software encoding)
+- Added post processing options (RGB channels and saturation) - with slightly increased green as default because on the FLX1s all pictures seem to have a red tint
+- Switching between photo and video mode also switches aspect ratio now
 
 # To be improved
 
 - Glitching when refocusing the window or switching cameras
-- Claude and I had some communication issues about how the resuming of the camera is handled so maybe there are some unnecessary changes
-- Color temperature still seems a little bit off depending on the scenario
-- Maybe denoising or post processing in general
+- Rotation bug when filming vertical video mostly
+- Maybe denoising or post processing in general (denoising was done already by qwen but that ended up doing nothing)
+- Manual exposure
+- Manual focus
 - HDR?
 - The way the video is currently encoded is suboptimal because it uses software encoding (has once again something to do with how the app receives data from Android Abstraction Layer)
-- Aspect ratio behaves weirdly sometimes when switching between photo and video
 
 ## Building
 
-Note about building: Some of the listed dependencies here do not seem to be available anymore on Debian Forky. To build furios-camera/furicam directly on the Furiphone I had to to so in a Debian Trixie Distrobox container. If you want to take the same approach, you might have to install distrobox, podman and optionally a GUI to manage containers like Distroshelf from Flathub for example.
+Important note about building:
+Some of the listed dependencies here do not seem to be available anymore on Debian Forky. To build furios-camera/furicam directly on the Furiphone I had to to so in a Debian Trixie Distrobox container. If you want to take the same approach, you might have to install distrobox, podman and optionally a GUI to manage containers like Distroshelf from Flathub for example.
+
+
+* (Optional) Install Distrobox
+```
+sudo apt install podman distrobox
+```
+
+* (Optional) Install GUI to manage and install a Debian Trixie Distrobox
+```
+sudo flatpak install com.ranfdev.DistroShelf
+```
 
 * Install build dependencies
 ```
