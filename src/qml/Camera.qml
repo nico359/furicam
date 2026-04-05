@@ -44,13 +44,6 @@ Item {
         whiteBalance.setMode(mode)
     }
 
-    function setDenoisingLevel(level) {
-        camera.imageProcessing.denoisingLevel = level
-    }
-
-    function setSharpeningLevel(level) {
-        camera.imageProcessing.sharpeningLevel = level
-    }
 
     WhiteBalanceController {
         id: whiteBalance
@@ -275,8 +268,6 @@ Item {
         }
 
         imageProcessing {
-            denoisingLevel: settings.denoisingLevel
-            sharpeningLevel: settings.sharpeningLevel
             whiteBalanceMode: CameraImageProcessing.WhiteBalanceAuto
         }
 
@@ -296,6 +287,13 @@ Item {
             }
 
             onImageSaved: {
+                if (settings.colorCorrectionEnabled) {
+                    fileManager.applyColorCorrection(path,
+                        settings.colorCorrectionRed,
+                        settings.colorCorrectionGreen,
+                        settings.colorCorrectionBlue,
+                        settings.colorCorrectionSaturation);
+                }
                 if (settings.jpegQuality < 100) {
                     fileManager.reencodeJpeg(path, settings.jpegQuality);
                 }
@@ -364,6 +362,15 @@ Item {
         source: camera
         autoOrientation: true
         filters: cslate.state === "PhotoCapture" ? [qrCodeComponent.qrcode] : []
+
+        layer.enabled: settings.colorCorrectionEnabled
+        layer.effect: ShaderEffect {
+            property real redScale:   settings.colorCorrectionRed
+            property real greenScale: settings.colorCorrectionGreen
+            property real blueScale:  settings.colorCorrectionBlue
+            property real saturation: settings.colorCorrectionSaturation
+            fragmentShader: "qrc:/colorCorrection.frag"
+        }
 
         PinchArea {
             id: pinchArea
@@ -604,7 +611,9 @@ Item {
                 front: "gst-pipeline: droidcamsrc mode=2 camera-device=1 ! video/x-raw ! videoconvert ! qtvideosink",
                 frontRecord: "gst-pipeline: droidcamsrc camera_device=1 mode=2 ! tee name=t " +
                     "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=2 ! qtvideosink " +
-                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=auto " +
+                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! " +
+                    (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
+                    "videoflip video-direction=auto " +
                     "! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
                     "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
                     "mp4mux fragment-duration=1000 name=mux ! filesink location=" + outputPath,
@@ -613,7 +622,9 @@ Item {
                     "gst-pipeline: droidcamsrc camera-device=" + camera.deviceId + " mode=2 ! tee name=t " +
                     "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! qtvideosink " +
                     "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH +
-                    " ! videoconvert ! videoflip video-direction=" + cameraItem.lockedVideoRotation +
+                    " ! videoconvert ! " +
+                    (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
+                    "videoflip video-direction=" + cameraItem.lockedVideoRotation +
                     " ! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
                     "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
                     "mp4mux fragment-duration=1000 name=mux ! filesink location=" + outputPath

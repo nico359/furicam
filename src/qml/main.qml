@@ -171,14 +171,15 @@ ApplicationWindow {
         property int levelEnabled: 0
         property int videoBitrate: 8000
         property int whiteBalanceMode: 0
-        property real denoisingLevel: 1.0
-        property real sharpeningLevel: 1.0
+        property bool colorCorrectionEnabled: true
+        property real colorCorrectionRed:   0.90
+        property real colorCorrectionGreen: 1.05
+        property real colorCorrectionBlue:  1.00
+        property real colorCorrectionSaturation: 1.20
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
         onAspWideChanged: setCameraAspWide(settings.aspWide)
-        onDenoisingLevelChanged: cameraLoader.item.setDenoisingLevel(settings.denoisingLevel)
-        onSharpeningLevelChanged: cameraLoader.item.setSharpeningLevel(settings.sharpeningLevel)
     }
 
     Settings {
@@ -1791,10 +1792,17 @@ ApplicationWindow {
             }
         }
 
-        Column {
+        Flickable {
             anchors.fill: parent
-            anchors.topMargin: 10 * window.scalingRatio
-            spacing: 8 * window.scalingRatio
+            contentHeight: settingsColumnContent.implicitHeight + 10 * window.scalingRatio
+            clip: true
+
+            Column {
+                id: settingsColumnContent
+                width: parent.width
+                anchors.top: parent.top
+                anchors.topMargin: 10 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
 
             Rectangle {
                 width: 40 * window.scalingRatio
@@ -1970,110 +1978,199 @@ ApplicationWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
             }
 
-            Text {
-                text: "Denoising: " + (settings.denoisingLevel * 100).toFixed(0) + "%"
-                color: "white"
-                font.pixelSize: 18 * window.scalingRatio
-                font.bold: true
+            // ── Color Correction ──────────────────────────────────────────
+            Row {
                 leftPadding: 16 * window.scalingRatio
-            }
+                spacing: 12 * window.scalingRatio
 
-            Slider {
-                id: denoisingSlider
-                width: parent.width - 32 * window.scalingRatio
-                anchors.horizontalCenter: parent.horizontalCenter
-                from: 0
-                to: 1
-                stepSize: 0.1
-                value: settings.denoisingLevel
-
-                onMoved: {
-                    settings.denoisingLevel = value;
+                Text {
+                    text: "Color Correction"
+                    color: "white"
+                    font.pixelSize: 18 * window.scalingRatio
+                    font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
                 }
 
-                background: Rectangle {
-                    x: denoisingSlider.leftPadding
-                    y: denoisingSlider.topPadding + denoisingSlider.availableHeight / 2 - height / 2
-                    implicitWidth: 200
-                    implicitHeight: 4 * window.scalingRatio
-                    width: denoisingSlider.availableWidth
-                    height: implicitHeight
-                    radius: 2 * window.scalingRatio
-                    color: "#555"
-
-                    Rectangle {
-                        width: denoisingSlider.visualPosition * parent.width
-                        height: parent.height
-                        color: "#62a0ea"
-                        radius: 2 * window.scalingRatio
-                    }
+                Switch {
+                    id: colorCorrectionSwitch
+                    checked: settings.colorCorrectionEnabled
+                    onToggled: settings.colorCorrectionEnabled = checked
+                    anchors.verticalCenter: parent.verticalCenter
                 }
-
-                handle: Rectangle {
-                    x: denoisingSlider.leftPadding + denoisingSlider.visualPosition * (denoisingSlider.availableWidth - width)
-                    y: denoisingSlider.topPadding + denoisingSlider.availableHeight / 2 - height / 2
-                    implicitWidth: 22 * window.scalingRatio
-                    implicitHeight: 22 * window.scalingRatio
-                    radius: 11 * window.scalingRatio
-                    color: denoisingSlider.pressed ? "#ddd" : "white"
-                }
-            }
-
-            Rectangle {
-                width: parent.width - 32 * window.scalingRatio
-                height: 1
-                color: "#444"
-                anchors.horizontalCenter: parent.horizontalCenter
             }
 
             Text {
-                text: "Sharpening: " + (settings.sharpeningLevel * 100).toFixed(0) + "%"
-                color: "white"
-                font.pixelSize: 18 * window.scalingRatio
+                text: "Red: " + (settings.colorCorrectionRed * 100).toFixed(0) + "%"
+                color: "#ff7070"
+                font.pixelSize: 16 * window.scalingRatio
                 font.bold: true
                 leftPadding: 16 * window.scalingRatio
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
             }
 
             Slider {
-                id: sharpeningSlider
+                id: redScaleSlider
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
-                from: 0
-                to: 1
-                stepSize: 0.1
-                value: settings.sharpeningLevel
+                from: 0.5
+                to: 1.5
+                stepSize: 0.01
+                value: settings.colorCorrectionRed
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
 
-                onMoved: {
-                    settings.sharpeningLevel = value;
-                }
+                onMoved: settings.colorCorrectionRed = value
 
                 background: Rectangle {
-                    x: sharpeningSlider.leftPadding
-                    y: sharpeningSlider.topPadding + sharpeningSlider.availableHeight / 2 - height / 2
-                    implicitWidth: 200
-                    implicitHeight: 4 * window.scalingRatio
-                    width: sharpeningSlider.availableWidth
-                    height: implicitHeight
-                    radius: 2 * window.scalingRatio
-                    color: "#555"
-
+                    x: redScaleSlider.leftPadding
+                    y: redScaleSlider.topPadding + redScaleSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200; implicitHeight: 4 * window.scalingRatio
+                    width: redScaleSlider.availableWidth; height: implicitHeight
+                    radius: 2 * window.scalingRatio; color: "#555"
                     Rectangle {
-                        width: sharpeningSlider.visualPosition * parent.width
-                        height: parent.height
-                        color: "#62a0ea"
-                        radius: 2 * window.scalingRatio
+                        width: redScaleSlider.visualPosition * parent.width
+                        height: parent.height; color: "#e05555"; radius: 2 * window.scalingRatio
                     }
                 }
-
                 handle: Rectangle {
-                    x: sharpeningSlider.leftPadding + sharpeningSlider.visualPosition * (sharpeningSlider.availableWidth - width)
-                    y: sharpeningSlider.topPadding + sharpeningSlider.availableHeight / 2 - height / 2
-                    implicitWidth: 22 * window.scalingRatio
-                    implicitHeight: 22 * window.scalingRatio
+                    x: redScaleSlider.leftPadding + redScaleSlider.visualPosition * (redScaleSlider.availableWidth - width)
+                    y: redScaleSlider.topPadding + redScaleSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio; implicitHeight: 22 * window.scalingRatio
                     radius: 11 * window.scalingRatio
-                    color: sharpeningSlider.pressed ? "#ddd" : "white"
+                    color: redScaleSlider.pressed ? "#ddd" : "white"
                 }
             }
-        }
-    }
+
+            Text {
+                text: "Green: " + (settings.colorCorrectionGreen * 100).toFixed(0) + "%"
+                color: "#70e070"
+                font.pixelSize: 16 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
+            }
+
+            Slider {
+                id: greenScaleSlider
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                from: 0.5
+                to: 1.5
+                stepSize: 0.01
+                value: settings.colorCorrectionGreen
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
+
+                onMoved: settings.colorCorrectionGreen = value
+
+                background: Rectangle {
+                    x: greenScaleSlider.leftPadding
+                    y: greenScaleSlider.topPadding + greenScaleSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200; implicitHeight: 4 * window.scalingRatio
+                    width: greenScaleSlider.availableWidth; height: implicitHeight
+                    radius: 2 * window.scalingRatio; color: "#555"
+                    Rectangle {
+                        width: greenScaleSlider.visualPosition * parent.width
+                        height: parent.height; color: "#55c055"; radius: 2 * window.scalingRatio
+                    }
+                }
+                handle: Rectangle {
+                    x: greenScaleSlider.leftPadding + greenScaleSlider.visualPosition * (greenScaleSlider.availableWidth - width)
+                    y: greenScaleSlider.topPadding + greenScaleSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio; implicitHeight: 22 * window.scalingRatio
+                    radius: 11 * window.scalingRatio
+                    color: greenScaleSlider.pressed ? "#ddd" : "white"
+                }
+            }
+
+            Text {
+                text: "Blue: " + (settings.colorCorrectionBlue * 100).toFixed(0) + "%"
+                color: "#70aaf0"
+                font.pixelSize: 16 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
+            }
+
+            Slider {
+                id: blueScaleSlider
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                from: 0.5
+                to: 1.5
+                stepSize: 0.01
+                value: settings.colorCorrectionBlue
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
+
+                onMoved: settings.colorCorrectionBlue = value
+
+                background: Rectangle {
+                    x: blueScaleSlider.leftPadding
+                    y: blueScaleSlider.topPadding + blueScaleSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200; implicitHeight: 4 * window.scalingRatio
+                    width: blueScaleSlider.availableWidth; height: implicitHeight
+                    radius: 2 * window.scalingRatio; color: "#555"
+                    Rectangle {
+                        width: blueScaleSlider.visualPosition * parent.width
+                        height: parent.height; color: "#5580d0"; radius: 2 * window.scalingRatio
+                    }
+                }
+                handle: Rectangle {
+                    x: blueScaleSlider.leftPadding + blueScaleSlider.visualPosition * (blueScaleSlider.availableWidth - width)
+                    y: blueScaleSlider.topPadding + blueScaleSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio; implicitHeight: 22 * window.scalingRatio
+                    radius: 11 * window.scalingRatio
+                    color: blueScaleSlider.pressed ? "#ddd" : "white"
+                }
+            }
+
+            Text {
+                text: "Saturation: " + (settings.colorCorrectionSaturation * 100).toFixed(0) + "%"
+                color: "white"
+                font.pixelSize: 16 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
+            }
+
+            Slider {
+                id: saturationSlider
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                from: 0.0
+                to: 2.0
+                stepSize: 0.05
+                value: settings.colorCorrectionSaturation
+                enabled: settings.colorCorrectionEnabled
+                opacity: enabled ? 1.0 : 0.4
+
+                onMoved: settings.colorCorrectionSaturation = value
+
+                background: Rectangle {
+                    x: saturationSlider.leftPadding
+                    y: saturationSlider.topPadding + saturationSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200; implicitHeight: 4 * window.scalingRatio
+                    width: saturationSlider.availableWidth; height: implicitHeight
+                    radius: 2 * window.scalingRatio; color: "#555"
+                    Rectangle {
+                        width: saturationSlider.visualPosition * parent.width
+                        height: parent.height; color: "#62a0ea"; radius: 2 * window.scalingRatio
+                    }
+                }
+                handle: Rectangle {
+                    x: saturationSlider.leftPadding + saturationSlider.visualPosition * (saturationSlider.availableWidth - width)
+                    y: saturationSlider.topPadding + saturationSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio; implicitHeight: 22 * window.scalingRatio
+                    radius: 11 * window.scalingRatio
+                    color: saturationSlider.pressed ? "#ddd" : "white"
+                }
+            }
+            }   // Column (settingsColumnContent)
+        }       // Flickable
+    }           // Drawer
 }

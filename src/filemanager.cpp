@@ -677,3 +677,60 @@ void FileManager::reencodeJpeg(const QString &filePath, int quality) {
         qDebug() << "Warning: Could not restore EXIF after re-encode:" << e.what();
     }
 }
+
+void FileManager::applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation)
+{
+    if (qFuzzyCompare(redScale, 1.0) && qFuzzyCompare(greenScale, 1.0) && qFuzzyCompare(blueScale, 1.0) && qFuzzyCompare(saturation, 1.0))
+        return;
+
+    QString path = filePath;
+    if (path.startsWith("file://"))
+        path = path.mid(7);
+
+    Exiv2::ExifData savedExif;
+    try {
+        auto exivImage = Exiv2::ImageFactory::open(path.toStdString());
+        exivImage->readMetadata();
+        savedExif = exivImage->exifData();
+    } catch (const Exiv2::Error &e) {
+        qDebug() << "Warning: Could not read EXIF before color correction:" << e.what();
+    }
+
+    QImage image(path);
+    if (image.isNull()) {
+        qDebug() << "Error: Could not load image for color correction:" << path;
+        return;
+    }
+
+    image = image.convertToFormat(QImage::Format_ARGB32);
+
+    for (int y = 0; y < image.height(); ++y) {
+        QRgb *line = reinterpret_cast<QRgb *>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            QRgb px = line[x];
+            double r = qBound(0.0, qRed(px)   * redScale,   255.0);
+            double g = qBound(0.0, qGreen(px) * greenScale, 255.0);
+            double b = qBound(0.0, qBlue(px)  * blueScale,  255.0);
+            // Saturation: mix toward luminance
+            double lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = qBound(0.0, lum + (r - lum) * saturation, 255.0);
+            g = qBound(0.0, lum + (g - lum) * saturation, 255.0);
+            b = qBound(0.0, lum + (b - lum) * saturation, 255.0);
+            line[x] = qRgba(qRound(r), qRound(g), qRound(b), qAlpha(px));
+        }
+    }
+
+    if (!image.save(path, "JPEG", 100)) {
+        qDebug() << "Error: Could not save color-corrected image:" << path;
+        return;
+    }
+
+    try {
+        auto exivImage = Exiv2::ImageFactory::open(path.toStdString());
+        exivImage->readMetadata();
+        exivImage->setExifData(savedExif);
+        exivImage->writeMetadata();
+    } catch (const Exiv2::Error &e) {
+        qDebug() << "Warning: Could not restore EXIF after color correction:" << e.what();
+    }
+}

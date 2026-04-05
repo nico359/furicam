@@ -61,6 +61,7 @@ public:
     void restartGps();
     Q_INVOKABLE void appendGPSMetadata(const QString &fileUrl);
     Q_INVOKABLE void reencodeJpeg(const QString &filePath, int quality);
+    Q_INVOKABLE void applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation);
     QStringList decimalToDMS(double decimal, bool isLongitude = false);
 
 signals:
