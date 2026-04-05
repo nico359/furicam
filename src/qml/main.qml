@@ -170,6 +170,8 @@ ApplicationWindow {
         property int gridEnabled: 0
         property int levelEnabled: 0
         property int videoBitrate: 8000
+        property int videoResWidth: 1920
+        property int videoResHeight: 1080
         property int whiteBalanceMode: 0
         property bool colorCorrectionEnabled: true
         property real colorCorrectionRed:   0.90
@@ -191,6 +193,14 @@ ApplicationWindow {
 
     background: Rectangle {
         color: "black"
+    }
+
+    ListModel {
+        id: videoResolutionModel
+        ListElement { label: "4K (3840×2160)";  resWidth: 3840; resHeight: 2160 }
+        ListElement { label: "1080p (1920×1080)"; resWidth: 1920; resHeight: 1080 }
+        ListElement { label: "720p (1280×720)";  resWidth: 1280; resHeight: 720  }
+        ListElement { label: "480p (854×480)";   resWidth: 854;  resHeight: 480  }
     }
 
     Item {
@@ -1862,6 +1872,54 @@ ApplicationWindow {
                             if (cameraLoader.item) {
                                 cameraLoader.item.setResolution(model.resWidth, model.resHeight);
                             }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width - 32 * window.scalingRatio
+                height: 1
+                color: "#444"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Text {
+                text: "Video Resolution"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            ListView {
+                id: videoResolutionList
+                width: parent.width
+                height: videoResolutionModel.count * 46 * window.scalingRatio
+                clip: true
+                model: videoResolutionModel
+                spacing: 2 * window.scalingRatio
+
+                delegate: Rectangle {
+                    width: videoResolutionList.width
+                    height: 44 * window.scalingRatio
+                    color: (settings.videoResWidth === model.resWidth && settings.videoResHeight === model.resHeight) ? "#444" : "transparent"
+                    radius: 4 * window.scalingRatio
+
+                    Text {
+                        text: model.label
+                        color: "white"
+                        font.pixelSize: 15 * window.scalingRatio
+                        anchors.verticalCenter: parent.verticalCenter
+                        leftPadding: 16 * window.scalingRatio
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            settings.videoResWidth  = model.resWidth;
+                            settings.videoResHeight = model.resHeight;
                         }
                     }
                 }

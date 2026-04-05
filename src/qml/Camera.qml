@@ -603,15 +603,15 @@ Item {
         property string outputPath: StandardPaths.writableLocation(StandardPaths.MoviesLocation).toString().replace("file://","") +
                                             "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mkv"
 
-        property int vidW: camera.viewfinder.resolution.width * 3 / 4
-        property int vidH: camera.viewfinder.resolution.height * 3 / 4
+        property int vidW: settings.videoResWidth
+        property int vidH: settings.videoResHeight
 
         property var backends: [
             {
                 front: "gst-pipeline: droidcamsrc mode=2 camera-device=1 ! video/x-raw ! videoconvert ! qtvideosink",
                 frontRecord: "gst-pipeline: droidcamsrc camera_device=1 mode=2 ! tee name=t " +
-                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=2 ! qtvideosink " +
-                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! " +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=2 ! qtvideosink " +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! " +
                     (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
                     "videoflip video-direction=auto " +
                     "! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
@@ -620,8 +620,8 @@ Item {
                 back: "gst-pipeline: droidcamsrc mode=2 camera-device=" + camera.deviceId + " ! video/x-raw ! videoconvert ! qtvideosink",
                 backRecord:
                     "gst-pipeline: droidcamsrc camera-device=" + camera.deviceId + " mode=2 ! tee name=t " +
-                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! qtvideosink " +
-                    "t. ! queue ! video/x-raw, width=" + vidW + ", height=" + vidH +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! qtvideosink " +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH +
                     " ! videoconvert ! " +
                     (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
                     "videoflip video-direction=" + cameraItem.lockedVideoRotation +
