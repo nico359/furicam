@@ -174,8 +174,8 @@ ApplicationWindow {
         property int videoResHeight: 1080
         property int whiteBalanceMode: 0
         property bool colorCorrectionEnabled: true
-        property real colorCorrectionRed:   0.90
-        property real colorCorrectionGreen: 1.05
+        property real colorCorrectionRed:   0.98
+        property real colorCorrectionGreen: 1.02
         property real colorCorrectionBlue:  1.00
         property real colorCorrectionSaturation: 1.20
         property bool hdrEnabled: false
