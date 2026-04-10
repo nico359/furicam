@@ -35,7 +35,8 @@ set(APP_SOURCES
 		${CMAKE_SOURCE_DIR}/src/settingsmanager.cpp
 		${CMAKE_SOURCE_DIR}/src/accelreader.cpp
 		${CMAKE_SOURCE_DIR}/src/hdrprocessor.cpp
-		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.cpp)
+		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.cpp
+		${CMAKE_SOURCE_DIR}/src/meteringcontroller.cpp)
 
 set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/filemanager.h
@@ -51,7 +52,8 @@ set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/settingsmanager.h
 		${CMAKE_SOURCE_DIR}/src/accelreader.h
 		${CMAKE_SOURCE_DIR}/src/hdrprocessor.h
-		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.h)
+		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.h
+		${CMAKE_SOURCE_DIR}/src/meteringcontroller.h)
 
 qt5_add_resources(APP_RESOURCES
 	${CMAKE_SOURCE_DIR}/sounds/sounds.qrc

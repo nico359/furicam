@@ -54,6 +54,10 @@ Item {
         id: whiteBalance
     }
 
+    MeteringController {
+        id: meteringController
+    }
+
     // ── HDR burst state ──────────────────────────────────────────────────────
     HdrProcessor {
         id: hdrProcessor
@@ -62,9 +66,15 @@ Item {
     property bool   hdrBurstActive:  false
     property var    hdrFramePaths:   []
     property int    hdrFrameIndex:   0
-    property real   hdrOriginalEV:   0.0
-    // EV offsets for the 3-frame bracket: under → base → over
-    readonly property var    hdrEvSchedule: [-2.0, 0.0, 2.0]
+    // Metering regions for the 3-frame bracket in normalised [0,1] coordinates:
+    //   frame 0 → top of frame (bright/sky) → AE underexposes  → dark frame
+    //   frame 1 → centre                    → AE base exposure → normal frame
+    //   frame 2 → bottom of frame (shadow)  → AE overexposes   → bright frame
+    readonly property var hdrMeteringPoints: [
+        { x: 0.5, y: 0.1 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.5, y: 0.9 }
+    ]
     // Relative path for fileManager.createDirectory (which prepends the home dir).
     readonly property string hdrBurstRelDir: "/Pictures/furicam/.burst"
     // Absolute path for captureToLocation and processHdrBurst.
@@ -73,7 +83,7 @@ Item {
 
     Timer {
         id: hdrCaptureTimer
-        interval: 350  // ms to let the sensor settle after an EV change
+        interval: 200  // ms between burst frames — fast for good alignment
         repeat: false
         onTriggered: camera.imageCapture.captureToLocation(hdrBurstAbsDir + "/burst_" + hdrFrameIndex + ".jpg")
     }
@@ -196,15 +206,9 @@ Item {
             hdrFramePaths   = []
             hdrFrameIndex   = 0
             fileManager.createDirectory(hdrBurstRelDir)
-            // EV control: best-effort — HAL may not support it on all devices.
-            // Failures here must not lock up hdrBurstActive, so we use try-catch.
-            try {
-                hdrOriginalEV = camera.exposure.exposureCompensation
-                camera.exposure.exposureCompensation = hdrEvSchedule[0]
-            } catch (e) {
-                // Frames will be captured at the same exposure; Mertens fusion
-                // degrades gracefully to temporal noise reduction.
-            }
+            hdrProcessor.cleanBurstDir(hdrBurstAbsDir)
+            // Metering shift is best-effort — may not work on all devices.
+            meteringController.setMeteringPoint(hdrMeteringPoints[0].x, hdrMeteringPoints[0].y)
             hdrCaptureTimer.start()
         } else {
             camera.imageCapture.capture()
@@ -340,19 +344,15 @@ Item {
                     hdrFramePaths = paths
                     hdrFrameIndex++
 
-                    if (hdrFrameIndex < hdrEvSchedule.length) {
-                        // Set next exposure and wait for sensor to settle.
-                        try {
-                            camera.exposure.exposureCompensation = hdrEvSchedule[hdrFrameIndex]
-                        } catch (e) {}
+                    if (hdrFrameIndex < hdrMeteringPoints.length) {
+                        // Shift metering to the next region and wait for AE to settle.
+                        meteringController.setMeteringPoint(hdrMeteringPoints[hdrFrameIndex].x, hdrMeteringPoints[hdrFrameIndex].y)
                         hdrCaptureTimer.start()
                     } else {
                         // All frames captured.
                         // Reset state FIRST so a failure below doesn't leave it stuck.
                         hdrBurstActive = false
-                        try {
-                            camera.exposure.exposureCompensation = hdrOriginalEV
-                        } catch (e) {}
+                        meteringController.resetMetering()
 
                         var picturesDir = StandardPaths.writableLocation(StandardPaths.PicturesLocation).toString().replace("file://", "") + "/furicam"
                         var resultPath = hdrProcessor.processHdrBurst(hdrFramePaths, picturesDir)

@@ -19,6 +19,7 @@
 #include "accelreader.h"
 #include "whitebalancecontroller.h"
 #include "hdrprocessor.h"
+#include "meteringcontroller.h"
 
 int main(int argc, char *argv[])
 {
@@ -38,6 +39,7 @@ int main(int argc, char *argv[])
     qmlRegisterType<AccelReader>("FuriCam", 1, 0, "AccelReader");
     qmlRegisterType<WhiteBalanceController>("FuriCam", 1, 0, "WhiteBalanceController");
     qmlRegisterType<HdrProcessor>("FuriCam", 1, 0, "HdrProcessor");
+    qmlRegisterType<MeteringController>("FuriCam", 1, 0, "MeteringController");
 
     QIcon::setThemeName("default");
     QIcon::setThemeSearchPaths(QStringList("/usr/share/icons"));

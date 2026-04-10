@@ -1679,17 +1679,6 @@ ApplicationWindow {
                         background: Rectangle { color: "transparent" }
                         onClicked: { settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1 }
                     }
-
-                    Button {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        icon.source: "icons/hdrOn.svg"
-                        icon.height: configBarDrawer.height * 0.25
-                        icon.width: configBarDrawer.height * 0.25
-                        icon.color: settings.hdrEnabled ? "white" : "grey"
-                        background: Rectangle { color: "transparent" }
-                        onClicked: { settings.hdrEnabled = !settings.hdrEnabled }
-                    }
                 }
 
                 // ── Row 2: Timer, Settings, Menu ─────────────────────────
@@ -1745,7 +1734,24 @@ ApplicationWindow {
                     }
 
                     Item { Layout.fillWidth: true; Layout.fillHeight: true }
-                    Item { Layout.fillWidth: true; Layout.fillHeight: true }
+
+                    // HDR toggle — styled like the AWB button
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        contentItem: Text {
+                            text: "HDR"
+                            color: settings.hdrEnabled ? "#f0c040" : "white"
+                            font.pixelSize: 13 * window.scalingRatio
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.hdrEnabled = !settings.hdrEnabled }
+                    }
 
                     Button {
                         id: settingsButton
