@@ -18,6 +18,9 @@ Build-Depends: debhelper-compat (= 13),
                libzxing-dev,
                libexiv2-dev,
                libglib2.0-dev,
+               libopencv-core-dev,
+               libopencv-imgproc-dev,
+               libopencv-photo-dev,
 Standards-Version: 4.7.0
 
 Package: furicam
