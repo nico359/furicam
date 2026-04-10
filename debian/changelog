@@ -1,10 +1,20 @@
+furicam (1.2.0-1) unstable; urgency=medium
+
+  * Add HDR burst photography using OpenCV Mertens fusion
+  * Add MeteringController for metering-based exposure hints
+  * Add color correction with adjustable RGB channels
+  * Add OpenCV build dependencies to debian/control
+  * Move HDR toggle to config row 2, styled like AWB button
+
+ -- nico359 <124350776+nico359@users.noreply.github.com>  Fri, 10 Apr 2026 12:00:00 +0000
+
 furicam (1.1.0-1) unstable; urgency=medium
 
   * Add zoom slider with magnification indicator
   * Fix zoom display to show estimated magnification (1.0×-4.0×)
   * Reset zoom on camera switch
 
- -- Alexander Rutz <alex@familyrutz.com>  Thu, 20 Mar 2026 13:30:00 +0000
+ -- nico359 <124350776+nico359@users.noreply.github.com>  Thu, 20 Mar 2026 13:30:00 +0000
 
 furicam (1.0.0-1) unstable; urgency=medium
 
@@ -15,4 +25,4 @@ furicam (1.0.0-1) unstable; urgency=medium
   * Grid overlay and level indicator (sensorfw accelerometer)
   * Camera resume on focus change
 
- -- Alexander Rutz <alex@familyrutz.com>  Wed, 19 Mar 2026 14:20:00 +0000
+ -- nico359 <124350776+nico359@users.noreply.github.com>  Wed, 19 Mar 2026 14:20:00 +0000

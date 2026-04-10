@@ -1,9 +1,6 @@
 Source: furicam
 Section: libs
-Maintainer: Erik Inkinen <erik.inkinen@gmail.com>
-            Bardia Moshiri <fakeshell@bardia.tech>
-            Alexander Rutz <alex@familyrutz.com>
-            Joaquin Philco <joaquinphilco@gmail.com>
+Maintainer: nico359 <124350776+nico359@users.noreply.github.com>
 Priority: optional
 Build-Depends: debhelper-compat (= 13),
                cmake,
