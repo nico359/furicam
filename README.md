@@ -16,20 +16,19 @@ Licensed under GPL-2.0.
 - Added 3x3 grid
 - Added level indicator
 - Added zoom slider
-- Video output is now of reasonable file size (MJPEG --> H.264)
+- Video output is now of reasonable file size (MJPEG --> H.264 but software encoding...)
 - Video output has adjustable bitrate to further adjust quality or storage savings
 - Added different video resolutions to choose (although 4k doesnt seem possible due to software encoding)
 - Added post processing options (RGB channels and saturation) - with slightly increased green as default because on the FLX1s all pictures seem to have a red tint
 - Switching between photo and video mode also switches aspect ratio now
+- HDR Photography (uses Mertens fusion with OpenCV) - suboptimal because the camera doesnt expose manual exposure correction and therefore this is just software correction and the gained detail is very minimal
 
 # To be improved
 
 - Glitching when refocusing the window or switching cameras
 - Rotation bug when filming vertical video mostly
-- Maybe denoising or post processing in general (denoising was done already by qwen but that ended up doing nothing)
-- Manual exposure
-- Manual focus
-- HDR?
+- Manual exposure (not possible due to the camera not even exposing these settings)
+- Manual focus (also doesnt seem possible for the same reason)
 - The way the video is currently encoded is suboptimal because it uses software encoding (has once again something to do with how the app receives data from Android Abstraction Layer)
 
 ## Building
