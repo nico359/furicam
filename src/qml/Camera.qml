@@ -35,6 +35,11 @@ Item {
 
     property int colorTemperature: 0
 
+    // Emitted whenever a final image (regular or HDR) has been fully saved
+    // and is ready to appear in the gallery.  Connected in main.qml's
+    // connectSignals() so the gallery can refresh where mediaView is in scope.
+    signal photoSaved()
+
     function setColorTemperature(temp) {
         // Unused — kept for compatibility
         colorTemperature = temp
@@ -47,6 +52,30 @@ Item {
 
     WhiteBalanceController {
         id: whiteBalance
+    }
+
+    // ── HDR burst state ──────────────────────────────────────────────────────
+    HdrProcessor {
+        id: hdrProcessor
+    }
+
+    property bool   hdrBurstActive:  false
+    property var    hdrFramePaths:   []
+    property int    hdrFrameIndex:   0
+    property real   hdrOriginalEV:   0.0
+    // EV offsets for the 3-frame bracket: under → base → over
+    readonly property var    hdrEvSchedule: [-2.0, 0.0, 2.0]
+    // Relative path for fileManager.createDirectory (which prepends the home dir).
+    readonly property string hdrBurstRelDir: "/Pictures/furicam/.burst"
+    // Absolute path for captureToLocation and processHdrBurst.
+    // StandardPaths returns a file:/// URL on this platform; strip the scheme.
+    readonly property string hdrBurstAbsDir: StandardPaths.writableLocation(StandardPaths.PicturesLocation).toString().replace("file://", "") + "/furicam/.burst"
+
+    Timer {
+        id: hdrCaptureTimer
+        interval: 350  // ms to let the sensor settle after an EV change
+        repeat: false
+        onTriggered: camera.imageCapture.captureToLocation(hdrBurstAbsDir + "/burst_" + hdrFrameIndex + ".jpg")
     }
 
     ListModel {
@@ -162,7 +191,24 @@ Item {
 
     function handleCameraTakeShot() {
         pinchArea.enabled = true
-        camera.imageCapture.capture()
+        if (settings.hdrEnabled && !hdrBurstActive) {
+            hdrBurstActive  = true
+            hdrFramePaths   = []
+            hdrFrameIndex   = 0
+            fileManager.createDirectory(hdrBurstRelDir)
+            // EV control: best-effort — HAL may not support it on all devices.
+            // Failures here must not lock up hdrBurstActive, so we use try-catch.
+            try {
+                hdrOriginalEV = camera.exposure.exposureCompensation
+                camera.exposure.exposureCompensation = hdrEvSchedule[0]
+            } catch (e) {
+                // Frames will be captured at the same exposure; Mertens fusion
+                // degrades gracefully to temporal noise reduction.
+            }
+            hdrCaptureTimer.start()
+        } else {
+            camera.imageCapture.capture()
+        }
     }
 
     function handleCameraTakeVideo() {
@@ -287,18 +333,61 @@ Item {
             }
 
             onImageSaved: {
-                if (settings.colorCorrectionEnabled) {
-                    fileManager.applyColorCorrection(path,
-                        settings.colorCorrectionRed,
-                        settings.colorCorrectionGreen,
-                        settings.colorCorrectionBlue,
-                        settings.colorCorrectionSaturation);
-                }
-                if (settings.jpegQuality < 100) {
-                    fileManager.reencodeJpeg(path, settings.jpegQuality);
-                }
-                if (window.locationAvailable === 1 ) {
-                    fileManager.appendGPSMetadata(path);
+                if (hdrBurstActive) {
+                    // Collect the raw burst frame — skip normal post-processing.
+                    var paths = hdrFramePaths
+                    paths.push(path)
+                    hdrFramePaths = paths
+                    hdrFrameIndex++
+
+                    if (hdrFrameIndex < hdrEvSchedule.length) {
+                        // Set next exposure and wait for sensor to settle.
+                        try {
+                            camera.exposure.exposureCompensation = hdrEvSchedule[hdrFrameIndex]
+                        } catch (e) {}
+                        hdrCaptureTimer.start()
+                    } else {
+                        // All frames captured.
+                        // Reset state FIRST so a failure below doesn't leave it stuck.
+                        hdrBurstActive = false
+                        try {
+                            camera.exposure.exposureCompensation = hdrOriginalEV
+                        } catch (e) {}
+
+                        var picturesDir = StandardPaths.writableLocation(StandardPaths.PicturesLocation).toString().replace("file://", "") + "/furicam"
+                        var resultPath = hdrProcessor.processHdrBurst(hdrFramePaths, picturesDir)
+                        if (resultPath !== "") {
+                            if (settings.colorCorrectionEnabled) {
+                                fileManager.applyColorCorrection(resultPath,
+                                    settings.colorCorrectionRed,
+                                    settings.colorCorrectionGreen,
+                                    settings.colorCorrectionBlue,
+                                    settings.colorCorrectionSaturation);
+                            }
+                            if (settings.jpegQuality < 100) {
+                                fileManager.reencodeJpeg(resultPath, settings.jpegQuality);
+                            }
+                            if (window.locationAvailable === 1) {
+                                fileManager.appendGPSMetadata(resultPath);
+                            }
+                        }
+                        photoSaved()
+                    }
+                } else {
+                    if (settings.colorCorrectionEnabled) {
+                        fileManager.applyColorCorrection(path,
+                            settings.colorCorrectionRed,
+                            settings.colorCorrectionGreen,
+                            settings.colorCorrectionBlue,
+                            settings.colorCorrectionSaturation);
+                    }
+                    if (settings.jpegQuality < 100) {
+                        fileManager.reencodeJpeg(path, settings.jpegQuality);
+                    }
+                    if (window.locationAvailable === 1 ) {
+                        fileManager.appendGPSMetadata(path);
+                    }
+                    photoSaved()
                 }
             }
         }

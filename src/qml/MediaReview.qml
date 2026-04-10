@@ -23,6 +23,8 @@ Rectangle {
     property var folder: cslate.state == "VideoCapture" ?
                          StandardPaths.writableLocation(StandardPaths.MoviesLocation) + "/furicam" :
                          StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam"
+    // Internal toggle used by refresh() to force FolderListModel rescan.
+    property bool _refreshClearing: false
     property var deletePopUp: "closed"
     property bool hideMediaInfo: false
     property bool showShapes: true
@@ -50,6 +52,20 @@ Rectangle {
         popupState = "opened"
     }
 
+    // Forces FolderListModel to rescan the folder by briefly setting the folder
+    // to "" (one event-loop turn) then restoring it, bypassing Qt's change-batching.
+    Timer {
+        id: _refreshRestoreTimer
+        interval: 50
+        repeat: false
+        onTriggered: { viewRect._refreshClearing = false }
+    }
+
+    function refresh() {
+        viewRect._refreshClearing = true
+        _refreshRestoreTimer.start()
+    }
+
     onVisibleChanged: {
         if (!visible) qrCodeComponent.lastValidResult =  null
     }
@@ -64,7 +80,9 @@ Rectangle {
 
     FolderListModel {
         id: imgModel
-        folder: viewRect.folder
+        // _refreshClearing momentarily empties the folder, forcing a full rescan
+        // when it returns to false (needed because inotify is unavailable on device).
+        folder: viewRect._refreshClearing ? "" : viewRect.folder
         showDirs: false
         nameFilters: cslate.state == "VideoCapture" ? ["*.mkv"] : ["*.jpg"]
 

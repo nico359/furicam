@@ -38,5 +38,6 @@
         <file>grid.svg</file>
         <file>level.svg</file>
         <file>settings.svg</file>
+        <file>hdrOn.svg</file>
     </qresource>
 </RCC>

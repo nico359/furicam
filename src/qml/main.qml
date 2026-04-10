@@ -178,6 +178,7 @@ ApplicationWindow {
         property real colorCorrectionGreen: 1.05
         property real colorCorrectionBlue:  1.00
         property real colorCorrectionSaturation: 1.20
+        property bool hdrEnabled: false
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
@@ -312,6 +313,7 @@ ApplicationWindow {
                 window.setCameraAspWide.connect(cameraLoader.item.handleSetCameraAspWide);
                 window.setDeviceID.connect(cameraLoader.item.handleSetDeviceID);
 
+                cameraLoader.item.photoSaved.connect(galleryRefreshTimer.restart);
                 cameraLoader.item.initializeCameraList(); // Initialize CameraList model
                 cameraLoader.item.setWhiteBalanceMode(settings.whiteBalanceMode);
                 signalsConnected = true;
@@ -331,6 +333,7 @@ ApplicationWindow {
                 window.setCameraAspWide.disconnect(cameraLoader.item.handleSetCameraAspWide);
                 window.setDeviceID.disconnect(cameraLoader.item.handleSetDeviceID);
 
+                cameraLoader.item.photoSaved.disconnect(galleryRefreshTimer.restart);
                 signalsConnected = false;
             }
         }
@@ -339,6 +342,18 @@ ApplicationWindow {
     SoundEffect {
         id: sound
         source: "sounds/camera-shutter.wav"
+    }
+
+    // Refreshes the gallery after a photo is saved by calling mediaView.refresh(),
+    // which forces FolderListModel to rescan (needed because inotify is unavailable).
+    // Triggered via cameraLoader.item.photoSaved signal after each save.
+    Timer {
+        id: galleryRefreshTimer
+        interval: 200
+        repeat: false
+        onTriggered: {
+            mediaView.refresh()
+        }
     }
 
     Timer {
@@ -1663,6 +1678,17 @@ ApplicationWindow {
                         icon.color: settings.levelEnabled === 1 ? "white" : "grey"
                         background: Rectangle { color: "transparent" }
                         onClicked: { settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1 }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/hdrOn.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: settings.hdrEnabled ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.hdrEnabled = !settings.hdrEnabled }
                     }
                 }
 

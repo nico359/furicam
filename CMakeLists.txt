@@ -10,6 +10,7 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt5 REQUIRED COMPONENTS Core DBus Widgets Quick Qml Multimedia)
 find_package(exiv2 REQUIRED)
 
+find_package(OpenCV REQUIRED COMPONENTS core imgproc photo)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB REQUIRED glib-2.0 gio-2.0)
 
@@ -33,6 +34,7 @@ set(APP_SOURCES
 		${CMAKE_SOURCE_DIR}/src/appcontroller.cpp
 		${CMAKE_SOURCE_DIR}/src/settingsmanager.cpp
 		${CMAKE_SOURCE_DIR}/src/accelreader.cpp
+		${CMAKE_SOURCE_DIR}/src/hdrprocessor.cpp
 		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.cpp)
 
 set(APP_HEADERS
@@ -48,6 +50,7 @@ set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/appcontroller.h
 		${CMAKE_SOURCE_DIR}/src/settingsmanager.h
 		${CMAKE_SOURCE_DIR}/src/accelreader.h
+		${CMAKE_SOURCE_DIR}/src/hdrprocessor.h
 		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.h)
 
 qt5_add_resources(APP_RESOURCES
@@ -65,7 +68,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 target_compile_options(${PROJECT_NAME} PUBLIC ${GST_CFLAGS})
-target_link_libraries(${PROJECT_NAME} PUBLIC Qt5::Core Qt5::Widgets Qt5::Quick Qt5::Qml Qt5::Multimedia Qt5::DBus ZXing exiv2 dl ${GST_LIBS} ${GLIB_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PUBLIC Qt5::Core Qt5::Widgets Qt5::Quick Qt5::Qml Qt5::Multimedia Qt5::DBus ZXing exiv2 dl ${GST_LIBS} ${GLIB_LIBRARIES} ${OpenCV_LIBS})
 
 install(TARGETS ${PROJECT_NAME} DESTINATION /usr/bin)
 install(FILES ${CMAKE_SOURCE_DIR}/furicam.desktop DESTINATION /usr/share/applications)
