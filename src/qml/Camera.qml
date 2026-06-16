@@ -744,7 +744,12 @@ Item {
             camGst.play();
             window.videoCaptured = true;
         } else {
+            var recordedPath = camGst.outputPath;
             camGst.stop();
+            // matroskamux in the recording pipeline never receives EOS, so the
+            // on-disk MKV is missing its Duration / SeekHead / Cues. Re-mux it
+            // through mkvmerge to make it actually playable.
+            fileManager.finalizeMkv(recordedPath);
             window.videoCaptured = false;
             camera.cameraState = Camera.UnloadedState;
             camera.start();

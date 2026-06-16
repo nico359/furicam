@@ -449,6 +449,52 @@ QString FileManager::runMkvInfo(const QString &fileUrl) {
     return output;
 }
 
+// Re-mux the file through mkvmerge so the EBML header gets a proper
+// Duration / SeekHead / Cues. matroskamux in the recording pipeline never
+// receives EOS on stop, so the on-disk file is left unfinalized and most
+// players reject it. mkvmerge rebuilds the container in place.
+void FileManager::finalizeMkv(const QString &fileUrl) {
+    QString path = fileUrl;
+    int colonIndex = path.indexOf(':');
+    if (colonIndex != -1) {
+        path.remove(0, colonIndex + 1);
+    }
+
+    if (!QFile::exists(path)) {
+        qDebug() << "finalizeMkv: source missing:" << path;
+        return;
+    }
+
+    QString tmpPath = path + ".finalize.tmp";
+    QFile::remove(tmpPath);
+
+    QProcess process;
+    process.setProgram("mkvmerge");
+    process.setArguments(QStringList() << "-q" << "-o" << tmpPath << path);
+    process.start();
+    if (!process.waitForFinished(60000)) {
+        qDebug() << "finalizeMkv: mkvmerge timed out for" << path;
+        process.kill();
+        QFile::remove(tmpPath);
+        return;
+    }
+
+    int code = process.exitCode();
+    // mkvmerge: 0 = success, 1 = success with warnings, 2 = error.
+    if (code > 1 || !QFile::exists(tmpPath)) {
+        qDebug() << "finalizeMkv: mkvmerge failed for" << path
+                 << "exit=" << code
+                 << "stderr=" << process.readAllStandardError();
+        QFile::remove(tmpPath);
+        return;
+    }
+
+    QFile::remove(path);
+    if (!QFile::rename(tmpPath, path)) {
+        qDebug() << "finalizeMkv: rename failed" << tmpPath << "->" << path;
+    }
+}
+
 QString FileManager::getVideoDate(const QString &fileUrl) {
     QString output = runMkvInfo(fileUrl);
     QStringList outputLines = output.split('\n');
