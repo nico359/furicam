@@ -721,9 +721,69 @@ Item {
         ]
 
         onError: {
+            console.log("FuriCam recording error:", camGst.error, camGst.errorString)
+            // The original handler bumped backendId on every error but never
+            // restarted the pipeline, never reset the recording state, and
+            // never told the user — recording would silently die mid-clip
+            // while the UI kept ticking the timer. Surface it and recover.
+            if (window.videoCaptured) {
+                fileManager.finalizeMkv(camGst.outputPath)
+                window.videoCaptured = false
+                camera.cameraState = Camera.UnloadedState
+                camera.start()
+            }
+            cameraItem.errorBannerText = camGst.errorString && camGst.errorString.length > 0
+                ? ("Recording stopped: " + camGst.errorString)
+                : "Recording stopped unexpectedly."
+            cameraItem.errorBannerVisible = true
+            errorBannerTimer.restart()
+            // Keep the backend-fallback hint in case more backends are added.
             if (backendId + 1 in backends) {
                 backendId++;
             }
+        }
+    }
+
+    // Lightweight banner shown when the recording pipeline errors out, so
+    // the user actually finds out instead of staring at a UI that keeps
+    // pretending to record.
+    property bool errorBannerVisible: false
+    property string errorBannerText: ""
+    Timer {
+        id: errorBannerTimer
+        interval: 5000
+        repeat: false
+        onTriggered: cameraItem.errorBannerVisible = false
+    }
+    Rectangle {
+        id: errorBanner
+        z: 10000
+        anchors.top: parent.top
+        anchors.topMargin: 16
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width - 24, errorBannerLabel.implicitWidth + 32)
+        height: errorBannerLabel.implicitHeight + 20
+        radius: 8
+        color: "#dd8a1c1c"
+        border.color: "#ffffff"
+        border.width: 1
+        visible: cameraItem.errorBannerVisible || opacity > 0
+        opacity: cameraItem.errorBannerVisible ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+        Text {
+            id: errorBannerLabel
+            anchors.fill: parent
+            anchors.margins: 10
+            text: cameraItem.errorBannerText
+            color: "white"
+            font.pixelSize: 14
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: cameraItem.errorBannerVisible = false
         }
     }
 
