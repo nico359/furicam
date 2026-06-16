@@ -721,22 +721,26 @@ Item {
         ]
 
         onError: {
-            console.log("FuriCam recording error:", camGst.error, camGst.errorString)
-            // The original handler bumped backendId on every error but never
-            // restarted the pipeline, never reset the recording state, and
-            // never told the user — recording would silently die mid-clip
-            // while the UI kept ticking the timer. Surface it and recover.
+            console.log("FuriCam pipeline error:", camGst.error, camGst.errorString)
+            // Only treat the error as a real recording failure if we still
+            // thought we were recording. MediaPlayer.error fires routinely
+            // during teardown of a gst-pipeline: URI ("No valid frames
+            // decoded before end of stream", "Stream contains no data") —
+            // those are noise, not a failure. Without this gate every
+            // successful stop pops the banner.
             if (window.videoCaptured) {
-                fileManager.finalizeMkv(camGst.outputPath)
+                // Flip the flag first so finalizeMkv's blocking wait can't
+                // re-enter this handler if more errors fire during it.
                 window.videoCaptured = false
+                fileManager.finalizeMkv(camGst.outputPath)
                 camera.cameraState = Camera.UnloadedState
                 camera.start()
+                cameraItem.errorBannerText = camGst.errorString && camGst.errorString.length > 0
+                    ? ("Recording stopped: " + camGst.errorString)
+                    : "Recording stopped unexpectedly."
+                cameraItem.errorBannerVisible = true
+                errorBannerTimer.restart()
             }
-            cameraItem.errorBannerText = camGst.errorString && camGst.errorString.length > 0
-                ? ("Recording stopped: " + camGst.errorString)
-                : "Recording stopped unexpectedly."
-            cameraItem.errorBannerVisible = true
-            errorBannerTimer.restart()
             // Keep the backend-fallback hint in case more backends are added.
             if (backendId + 1 in backends) {
                 backendId++;
@@ -804,13 +808,19 @@ Item {
             camGst.play();
             window.videoCaptured = true;
         } else {
+            // Mark "no longer recording" FIRST. camGst.stop() and the
+            // finalizeMkv QProcess wait both spin the QML event loop, which
+            // lets MediaPlayer.onError fire mid-teardown. Without flipping
+            // this flag up front the error handler would see
+            // videoCaptured=true and treat benign shutdown errors as a real
+            // recording failure.
+            window.videoCaptured = false;
             var recordedPath = camGst.outputPath;
             camGst.stop();
-            // matroskamux in the recording pipeline never receives EOS, so the
-            // on-disk MKV is missing its Duration / SeekHead / Cues. Re-mux it
-            // through mkvmerge to make it actually playable.
+            // matroskamux in the recording pipeline never receives EOS, so
+            // the on-disk MKV is missing its Duration / SeekHead / Cues.
+            // Re-mux it through mkvmerge to make it actually playable.
             fileManager.finalizeMkv(recordedPath);
-            window.videoCaptured = false;
             camera.cameraState = Camera.UnloadedState;
             camera.start();
         }
