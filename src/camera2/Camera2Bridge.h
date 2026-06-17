@@ -178,6 +178,12 @@ public:
     Q_INVOKABLE void  setZoom(float ratio);
     Q_INVOKABLE float maxZoom() const;
 
+    // Available JPEG (photo) capture sizes for the open camera, largest first,
+    // each as {"width": w, "height": h}.  setResolution() picks one and restarts
+    // the camera to recreate the still output at that size.
+    Q_INVOKABLE QVariantList availableResolutions();
+    Q_INVOKABLE void setResolution(int width, int height);
+
 signals:
     void readyChanged();
     void recordingChanged();

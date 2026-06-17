@@ -24,9 +24,12 @@
 #include "Camera2NDK.h"
 
 #include <QDateTime>
+#include <algorithm>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QVariant>
 #include <QOpenGLFramebufferObject>
 #include <QStandardPaths>
 #include <QTimer>
@@ -481,6 +484,38 @@ void Camera2Bridge::setZoom(float ratio)
 float Camera2Bridge::maxZoom() const
 {
     return session_ ? session_->maxZoomRatio() : 4.0f;
+}
+
+QVariantList Camera2Bridge::availableResolutions()
+{
+    QVariantList list;
+    if (!session_)
+        return list;
+    auto sizes = session_->jpegSizes();
+    std::sort(sizes.begin(), sizes.end(),
+              [](const CameraSession::StreamConfig& a, const CameraSession::StreamConfig& b) {
+                  return (long)a.width * a.height > (long)b.width * b.height;
+              });
+    for (const auto& s : sizes) {
+        QVariantMap m;
+        m["width"]  = s.width;
+        m["height"] = s.height;
+        list.append(m);
+    }
+    return list;
+}
+
+void Camera2Bridge::setResolution(int width, int height)
+{
+    if (!session_)
+        return;
+    session_->setJpegSize(width, height);
+    // Recreate the still output at the new size by restarting the camera
+    // (not while recording — that would interrupt the clip).
+    if (ready_.load() && !recording_.load()) {
+        stopCamera();
+        startCamera();
+    }
 }
 
 } // namespace furicam2

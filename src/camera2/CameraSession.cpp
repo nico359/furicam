@@ -347,8 +347,11 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
     // Optional full-resolution JPEG output for still capture (M4).  It must be
     // part of the session from the start; a one-shot request targets it later.
     if (withStill) {
-        int jw = 0, jh = 0;
-        if (maxJpegSize(&jw, &jh) && jw > 0 && jh > 0
+        // Use the requested JPEG capture size if set, else the sensor's max.
+        int jw = reqJpegW_, jh = reqJpegH_;
+        if (jw <= 0 || jh <= 0)
+            maxJpegSize(&jw, &jh);
+        if (jw > 0 && jh > 0
             && AImageReader_new(jw, jh, AIMAGE_FORMAT_JPEG, /*maxImages*/ 2, &jpegReader_) == AMEDIA_OK
             && jpegReader_) {
             jpegW_ = jw;
@@ -738,6 +741,20 @@ bool CameraSession::maxJpegSize(int* w, int* h) const
         }
     }
     return false;
+}
+
+std::vector<CameraSession::StreamConfig> CameraSession::jpegSizes() const
+{
+    std::vector<StreamConfig> out;
+    for (const auto& c : cameras_) {
+        if (c.id != openId_)
+            continue;
+        for (const auto& s : c.outputs)
+            if (s.format == AIMAGE_FORMAT_JPEG && !s.isInput)
+                out.push_back(s);
+        break;
+    }
+    return out;
 }
 
 bool CameraSession::capturePhoto(const std::string& path)

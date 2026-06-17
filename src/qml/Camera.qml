@@ -58,22 +58,26 @@ Item {
 
     function gcd(a, b) { return b == 0 ? a : gcd(b, a % b) }
 
-    // The Camera2 path captures stills at the sensor's full JPEG resolution, so
-    // there is no per-size selection yet — present the active resolution.
-    // TODO: expose the engine's stream-configuration list and capture-size set.
+    // Populate the photo-resolution picker from the engine's JPEG output sizes.
     function fnAspectRatio() {
         resModel.clear()
-        var w = currentResWidth  > 0 ? currentResWidth  : 4080
-        var h = currentResHeight > 0 ? currentResHeight : 3072
-        var g = gcd(w, h)
-        var mp = Math.round((w * h) / 100000) / 10
-        resModel.append({
-            "resWidth": w, "resHeight": h,
-            "aspectRatio": (w / g) + ":" + (h / g),
-            "mp": mp, "label": mp + " MP (" + w + "×" + h + ")"
-        })
-        currentResWidth = w
-        currentResHeight = h
+        var res = cam2.availableResolutions()
+        for (var i = 0; i < res.length; i++) {
+            var w = res[i].width
+            var h = res[i].height
+            var g = gcd(w, h)
+            var mp = Math.round((w * h) / 100000) / 10
+            resModel.append({
+                "resWidth": w, "resHeight": h,
+                "aspectRatio": (w / g) + ":" + (h / g),
+                "mp": mp, "label": mp + " MP (" + w + "×" + h + ")"
+            })
+        }
+        // Default to the largest (first) size until the user picks one.
+        if (res.length > 0 && currentResWidth === 0) {
+            currentResWidth = res[0].width
+            currentResHeight = res[0].height
+        }
     }
 
     function setResolution(width, height) {
@@ -83,7 +87,7 @@ Item {
             settings.cameras[settings.cameraId].resWidth = width
             settings.cameras[settings.cameraId].resHeight = height
         }
-        // TODO: drive the engine's capture size once it is selectable.
+        cam2.setResolution(width, height)   // restarts the camera at the new still size
     }
 
     function handleSetFlashState(flashState) {

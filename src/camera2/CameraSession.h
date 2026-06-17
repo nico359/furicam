@@ -116,6 +116,13 @@ public:
         photoCallback_ = std::move(cb);
     }
 
+    // Available JPEG capture sizes for the open camera (output configs).
+    std::vector<StreamConfig> jpegSizes() const;
+    // Request a specific JPEG capture size; (0,0) = the sensor's max.  Applied on
+    // the next startPreview (the caller restarts the camera to take effect).
+    void setJpegSize(int width, int height) { reqJpegW_ = width; reqJpegH_ = height; }
+    void jpegSize(int* width, int* height) const { *width = jpegW_; *height = jpegH_; }
+
     // ── Video recording (Milestone 5) ────────────────────────────────────────
     // Record hardware H.264 to an MP4 at `path`.  Reconfigures the camera into a
     // dedicated recording session whose output is the H.264 encoder's input
@@ -265,8 +272,10 @@ private:
     ANativeWindow*             jpegWindow_   = nullptr;
     ACaptureSessionOutput*     jpegOutput_   = nullptr;
     AImageReader_ImageListener jpegListener_{};
-    int                        jpegW_        = 0;
+    int                        jpegW_        = 0;   // actual JPEG reader size
     int                        jpegH_        = 0;
+    int                        reqJpegW_     = 0;   // requested capture size (0 = max)
+    int                        reqJpegH_     = 0;
     int                        openSensorOrientation_ = 0;
     std::mutex                 photoMutex_;
     std::string                pendingPhotoPath_;
