@@ -184,6 +184,11 @@ public:
     Q_INVOKABLE QVariantList availableResolutions();
     Q_INVOKABLE void setResolution(int width, int height);
 
+    // Video recording size (e.g. 3840x2160, 1920x1080).  Applied to the encoder;
+    // if already in video mode (and not recording) the session is rebuilt at the
+    // new size.  Bind to the app's video-resolution setting.
+    Q_INVOKABLE void setVideoResolution(int width, int height);
+
 signals:
     void readyChanged();
     void recordingChanged();
@@ -224,6 +229,8 @@ private:
     std::atomic<bool>    hasFrontCamera_     {false};
     std::atomic<int>     lensFacingPref_     {1};       // 1=back, 0=front
     bool                 videoModeDesired_   = false;   // GUI's photo/video toggle
+    int                  videoW_             = 1920;     // recording size
+    int                  videoH_             = 1080;
     std::atomic<int>     frameCount_         {0};
     std::atomic<int32_t> lastIso_            {0};
     std::atomic<int64_t> lastExposureNs_     {0};

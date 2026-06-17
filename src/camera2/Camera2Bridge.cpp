@@ -350,14 +350,31 @@ void Camera2Bridge::stopRecording()
 
 void Camera2Bridge::enterVideoMode()
 {
-    if (session_)
-        session_->enterVideoMode();
+    if (!session_)
+        return;
+    // Scale bitrate roughly with resolution so 4K isn't starved.
+    const int bitrate = (videoW_ >= 3000) ? 40000000 : 20000000;
+    session_->enterVideoMode(videoW_, videoH_, 30, bitrate);
 }
 
 void Camera2Bridge::exitVideoMode()
 {
     if (session_)
         session_->exitVideoMode();
+}
+
+void Camera2Bridge::setVideoResolution(int width, int height)
+{
+    if (width <= 0 || height <= 0 || (width == videoW_ && height == videoH_))
+        return;
+    videoW_ = width;
+    videoH_ = height;
+    // Rebuild the encoder at the new size if we're already in video mode (but
+    // never mid-record).
+    if (session_ && session_->isVideoMode() && !recording_.load()) {
+        session_->exitVideoMode();
+        enterVideoMode();
+    }
 }
 
 void Camera2Bridge::setVideoMode(bool on)

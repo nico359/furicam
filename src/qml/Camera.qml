@@ -200,10 +200,13 @@ Item {
         photoSaved()
     }
 
-    // React to camera-position changes (gestures set settings.cameraPosition).
+    // React to camera-position changes (gestures set settings.cameraPosition)
+    // and video-resolution changes (the settings picker).
     Connections {
         target: settings
         function onCameraPositionChanged() { cameraItem.applyCameraPosition() }
+        function onVideoResWidthChanged()  { cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight) }
+        function onVideoResHeightChanged() { cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight) }
     }
 
 
@@ -222,6 +225,8 @@ Item {
             if (ready) {
                 focusState.state = "Default"
                 cameraItem.fnAspectRatio()
+                // Apply the saved video resolution before video mode is entered.
+                cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)
             }
         }
         onCameraError: {
