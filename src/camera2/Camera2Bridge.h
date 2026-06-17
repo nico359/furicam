@@ -215,6 +215,10 @@ signals:
     void recordingSaved(const QString& path);
     void photoSaved(const QString& path);
 
+    // A QR/barcode was decoded from the live preview.  points is the 4 corners
+    // (topLeft, topRight, bottomRight, bottomLeft) as {x,y} normalized to [0,1].
+    void qrDetected(const QString& text, const QVariantList& points);
+
 private:
     // Helpers used by the implementation; not part of the QML surface.
     void initCamera();
@@ -223,6 +227,7 @@ private:
     void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
     void rebuildVideoIfActive();      // re-enter video mode at a new size if active
+    void qrDecode(const uint8_t* y, int width, int height, int rowStride);  // on a camera thread
     QString defaultVideoPath() const;
     QString defaultPhotoPath() const;
 
@@ -246,6 +251,7 @@ private:
     std::atomic<int>     frameCount_         {0};
     std::atomic<int32_t> lastIso_            {0};
     std::atomic<int64_t> lastExposureNs_     {0};
+    std::atomic<int64_t> lastQrMs_           {0};   // throttle QR decode rate
     std::atomic<float>   previewAspectRatio_ {9.0f / 16.0f};
     std::atomic<int>     sensorOrientation_  {90};
     std::atomic<int>     deviceRotation_     {0};

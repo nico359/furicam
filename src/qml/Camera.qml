@@ -228,6 +228,44 @@ Item {
         function onStateChanged() { cameraItem.applyVideoMode() }
     }
 
+    // ── Live QR scanning ─────────────────────────────────────────────────────
+    // The engine decodes QR codes from the analysis stream (photo mode) and the
+    // bridge emits qrDetected(text, points).  Show a tappable result banner;
+    // tapping it parses the code and offers the matching action (open/connect/copy).
+    property string qrText: ""
+    property bool   qrVisible: false
+
+    Connections {
+        target: cam2
+        function onQrDetected(text, points) {
+            cameraItem.qrText = text
+            cameraItem.qrVisible = true
+            qrClearTimer.restart()
+        }
+    }
+    Timer {
+        id: qrClearTimer
+        interval: 1500
+        onTriggered: cameraItem.qrVisible = false
+    }
+
+    function handleQrTap() {
+        if (!qrText.length)
+            return
+        var qrType = QRCodeHandler.parseQrString(qrText)
+        if (qrType === "URL") {
+            window.openPopup("Open URL?", qrText,
+                [{text: "Cancel"}, {text: "Copy"}, {text: "Open", isPrimary: true}], qrText)
+        } else if (qrType === "WIFI") {
+            var wifiID = QRCodeHandler.getWifiId()
+            window.openPopup("Connect to Network?", wifiID,
+                [{text: "Cancel"}, {text: "Connect", isPrimary: true}], wifiID)
+        } else {
+            window.openPopup("QR Code Detected", "Content: " + qrText,
+                [{text: "OK", isPrimary: true}, {text: "Copy"}], qrText)
+        }
+    }
+
 
     // ── The live preview: the Camera2 engine item ───────────────────────────
     Camera2Bridge {
@@ -472,6 +510,40 @@ Item {
         property real zoom: 0
         NumberAnimation on zoom { duration: 200; easing.type: Easing.InOutQuad }
         onScaleChanged: cameraItem.handleSetZoom(scale * zoomFactor)
+    }
+
+    // Tappable QR result banner (shown while a code is in view, photo mode).
+    Rectangle {
+        id: qrBanner
+        z: 9000
+        visible: cameraItem.qrVisible && !mediaView.visible
+                 && (typeof cslate === "undefined" || cslate.state === "PhotoCapture")
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 150 * window.scalingRatio
+        width: Math.min(parent.width - 40 * window.scalingRatio,
+                        qrLabel.implicitWidth + 64 * window.scalingRatio)
+        height: 46 * window.scalingRatio
+        radius: 23 * window.scalingRatio
+        color: "#dd1d6fcf"
+        Row {
+            anchors.centerIn: parent
+            spacing: 10 * window.scalingRatio
+            Text {
+                text: "⌗"
+                color: "white"; font.pixelSize: 20 * window.scalingRatio
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+                id: qrLabel
+                text: cameraItem.qrText
+                color: "white"; font.pixelSize: 14 * window.scalingRatio
+                elide: Text.ElideRight; maximumLineCount: 1
+                width: Math.min(implicitWidth, cameraItem.width - 130 * window.scalingRatio)
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+        MouseArea { anchors.fill: parent; onClicked: cameraItem.handleQrTap() }
     }
 
     FastBlur {

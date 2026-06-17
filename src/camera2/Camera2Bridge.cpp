@@ -25,6 +25,11 @@
 
 #include <QDateTime>
 #include <algorithm>
+#include <chrono>
+
+#include <ReadBarcode.h>
+#include <BarcodeFormat.h>
+#include <ImageView.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -175,6 +180,10 @@ void Camera2Bridge::startCamera()
     }
 
     previewReader_ = session_->previewReader();
+    // Decode QR/barcodes from the analysis (YUV luma) stream — photo mode only.
+    session_->setAnalysisCallback([this](const uint8_t* y, int w, int h, int stride) {
+        qrDecode(y, w, h, stride);
+    });
     if (hasFrontCamera_.exchange(haveFront) != haveFront)
         emit hasFrontCameraChanged();
     previewAspectRatio_.store(720.0f / 1280.0f);
@@ -562,6 +571,40 @@ void Camera2Bridge::setResolution(int width, int height)
         stopCamera();
         startCamera();
     }
+}
+
+void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
+{
+    if (!y || w <= 0 || h <= 0)
+        return;
+    // Decoding runs on a camera thread; throttle to ~6/sec.
+    using namespace std::chrono;
+    const int64_t now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+    if (now - lastQrMs_.load() < 160)
+        return;
+    lastQrMs_.store(now);
+
+    ZXing::ImageView image(y, w, h, ZXing::ImageFormat::Lum, stride);
+    ZXing::ReaderOptions opts;
+    opts.setFormats(ZXing::BarcodeFormat::QRCode);
+    opts.setTryHarder(true);
+    const ZXing::Barcode bc = ZXing::ReadBarcode(image, opts);
+    if (!bc.isValid())
+        return;
+
+    const QString text = QString::fromStdString(bc.text());
+    QVariantList pts;
+    const ZXing::Position& pos = bc.position();
+    for (const auto& c : { pos.topLeft(), pos.topRight(), pos.bottomRight(), pos.bottomLeft() }) {
+        QVariantMap m;
+        m["x"] = (double)c.x / w;
+        m["y"] = (double)c.y / h;
+        pts.append(m);
+    }
+    // Marshal the result to the GUI thread.
+    QMetaObject::invokeMethod(this, [this, text, pts] {
+        emit qrDetected(text, pts);
+    }, Qt::QueuedConnection);
 }
 
 } // namespace furicam2
