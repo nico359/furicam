@@ -363,17 +363,42 @@ void Camera2Bridge::exitVideoMode()
         session_->exitVideoMode();
 }
 
-void Camera2Bridge::setVideoResolution(int width, int height)
+void Camera2Bridge::rebuildVideoIfActive()
 {
-    if (width <= 0 || height <= 0 || (width == videoW_ && height == videoH_))
-        return;
-    videoW_ = width;
-    videoH_ = height;
-    // Rebuild the encoder at the new size if we're already in video mode (but
-    // never mid-record).
+    // If already in video mode (and not recording), rebuild the encoder at the
+    // current size; otherwise the new size just takes effect on the next enter.
     if (session_ && session_->isVideoMode() && !recording_.load()) {
         session_->exitVideoMode();
         enterVideoMode();
+    }
+}
+
+void Camera2Bridge::setVideoWidth(int width)
+{
+    if (width <= 0 || width == videoW_)
+        return;
+    videoW_ = width;
+    emit videoSizeChanged();
+    rebuildVideoIfActive();
+}
+
+void Camera2Bridge::setVideoHeight(int height)
+{
+    if (height <= 0 || height == videoH_)
+        return;
+    videoH_ = height;
+    emit videoSizeChanged();
+    rebuildVideoIfActive();
+}
+
+void Camera2Bridge::setVideoResolution(int width, int height)
+{
+    const bool changed = (width > 0 && width != videoW_) || (height > 0 && height != videoH_);
+    if (width  > 0) videoW_ = width;
+    if (height > 0) videoH_ = height;
+    if (changed) {
+        emit videoSizeChanged();
+        rebuildVideoIfActive();
     }
 }
 

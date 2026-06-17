@@ -54,6 +54,12 @@ class Camera2Bridge
     // the GUI a one-line binding; the Camera2 lifecycle policy lives here.
     Q_PROPERTY(bool    videoMode           READ videoMode WRITE setVideoMode NOTIFY videoModeChanged)
 
+    // Recording size — bind to the app's video-resolution setting so the encoder
+    // size is always current before video mode is entered (a reactive binding,
+    // not a one-shot signal handler).
+    Q_PROPERTY(int     videoWidth          READ videoWidth  WRITE setVideoWidth  NOTIFY videoSizeChanged)
+    Q_PROPERTY(int     videoHeight         READ videoHeight WRITE setVideoHeight NOTIFY videoSizeChanged)
+
     // Current exposure for the on-screen badge ("ISO 200, 1/60").  ISO here is
     // international standards organization sensor sensitivity; shutterNs is
     // exposure time in nanoseconds.
@@ -188,6 +194,10 @@ public:
     // if already in video mode (and not recording) the session is rebuilt at the
     // new size.  Bind to the app's video-resolution setting.
     Q_INVOKABLE void setVideoResolution(int width, int height);
+    int  videoWidth()  const { return videoW_; }
+    int  videoHeight() const { return videoH_; }
+    void setVideoWidth(int width);
+    void setVideoHeight(int height);
 
 signals:
     void readyChanged();
@@ -198,6 +208,7 @@ signals:
     void previewAspectRatioChanged();
     void lastPhotoPathChanged();
     void videoModeChanged();
+    void videoSizeChanged();
 
     // One-shot signals for outcomes.
     void cameraError(const QString& message);
@@ -211,6 +222,7 @@ private:
     void updateDisplayRotation();
     void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
+    void rebuildVideoIfActive();      // re-enter video mode at a new size if active
     QString defaultVideoPath() const;
     QString defaultPhotoPath() const;
 

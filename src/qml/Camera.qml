@@ -200,13 +200,11 @@ Item {
         photoSaved()
     }
 
-    // React to camera-position changes (gestures set settings.cameraPosition)
-    // and video-resolution changes (the settings picker).
+    // React to camera-position changes (gestures set settings.cameraPosition).
+    // (Video resolution is handled by the cam2.videoWidth/videoHeight bindings.)
     Connections {
         target: settings
         function onCameraPositionChanged() { cameraItem.applyCameraPosition() }
-        function onVideoResWidthChanged()  { cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight) }
-        function onVideoResHeightChanged() { cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight) }
     }
 
 
@@ -216,8 +214,12 @@ Item {
         anchors.fill: parent
 
         // Simultaneous preview+record is driven entirely by the translation
-        // layer (Camera2Bridge) — FuriCam just reports which tab is active.
-        videoMode: (typeof cslate !== "undefined") && cslate.state === "VideoCapture"
+        // layer (Camera2Bridge) — FuriCam just reports which tab is active and
+        // the chosen recording size (reactive bindings keep the encoder size
+        // current before video mode is entered).
+        videoMode:   (typeof cslate !== "undefined") && cslate.state === "VideoCapture"
+        videoWidth:  settings.videoResWidth
+        videoHeight: settings.videoResHeight
 
         Component.onCompleted: cam2.startCamera()
 
@@ -225,8 +227,6 @@ Item {
             if (ready) {
                 focusState.state = "Default"
                 cameraItem.fnAspectRatio()
-                // Apply the saved video resolution before video mode is entered.
-                cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)
             }
         }
         onCameraError: {
