@@ -130,19 +130,31 @@ void Camera2Bridge::startCamera()
     }
 
     bool haveFront = false;
-    bool chosenSet = false;
-    std::string chosen = cams.front().id;
-    int chosenOrientation = cams.front().sensorOrientation;
-    const int want = lensFacingPref_.load();
-    for (const auto& c : cams) {
+    for (const auto& c : cams)
         if (c.facing == ACAMERA_LENS_FACING_FRONT)
             haveFront = true;
-        // First camera with the wanted facing wins (camera 0 = main back, not
-        // the secondary macro camera that also reports back-facing).
-        if (c.facing == want && !chosenSet) {
-            chosen = c.id;
-            chosenOrientation = c.sensorOrientation;
-            chosenSet = true;
+
+    std::string chosen;
+    int chosenOrientation;
+    const int idx = selectedCameraIndex_.load();
+    if (idx >= 0 && idx < (int)cams.size()) {
+        // Explicit camera pick (e.g. the secondary back/macro camera).
+        chosen = cams[idx].id;
+        chosenOrientation = cams[idx].sensorOrientation;
+        lensFacingPref_.store(cams[idx].facing);   // keep facing in sync for mirroring
+    } else {
+        // First camera with the wanted facing (camera 0 = main back, not the
+        // secondary macro camera that also reports back-facing).
+        chosen = cams.front().id;
+        chosenOrientation = cams.front().sensorOrientation;
+        const int want = lensFacingPref_.load();
+        bool chosenSet = false;
+        for (const auto& c : cams) {
+            if (c.facing == want && !chosenSet) {
+                chosen = c.id;
+                chosenOrientation = c.sensorOrientation;
+                chosenSet = true;
+            }
         }
     }
     sensorOrientation_.store(chosenOrientation);
@@ -217,11 +229,44 @@ void Camera2Bridge::stopCameraSession()
 
 void Camera2Bridge::switchCamera()
 {
+    // Gesture flip reverts to facing-based pick (the main camera of each side).
+    selectedCameraIndex_.store(-1);
     lensFacingPref_.store(lensFacingPref_.load() == ACAMERA_LENS_FACING_BACK
                               ? ACAMERA_LENS_FACING_FRONT
                               : ACAMERA_LENS_FACING_BACK);
     stopCameraSession();
     startCamera();
+}
+
+QVariantList Camera2Bridge::availableCameras()
+{
+    QVariantList list;
+    if (!session_)
+        return list;
+    if (session_->cameras().empty())
+        session_->enumerate();
+    int i = 0;
+    for (const auto& c : session_->cameras()) {
+        long best = 0;
+        for (const auto& s : c.outputs)
+            if (s.format == AIMAGE_FORMAT_JPEG)
+                best = std::max(best, (long)s.width * s.height);
+        QVariantMap m;
+        m["index"]      = i++;
+        m["facing"]     = (c.facing == ACAMERA_LENS_FACING_FRONT) ? 0 : 1;   // 0=front, 1=back
+        m["megapixels"] = (int)((best + 500000) / 1000000);
+        list.append(m);
+    }
+    return list;
+}
+
+void Camera2Bridge::selectCamera(int index)
+{
+    selectedCameraIndex_.store(index);
+    if (ready_.load()) {
+        stopCameraSession();
+        startCamera();
+    }
 }
 
 void Camera2Bridge::setDeviceRotation(int degrees)

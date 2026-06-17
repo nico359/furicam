@@ -112,6 +112,11 @@ public:
     // Switch between back and front camera.  Tears down and reopens.
     Q_INVOKABLE void switchCamera();
 
+    // All cameras: [{index, facing(0=front,1=back), megapixels}].  selectCamera()
+    // opens a specific one by index (e.g. the secondary back/macro camera).
+    Q_INVOKABLE QVariantList availableCameras();
+    Q_INVOKABLE void selectCamera(int index);
+
     // Begin recording to outputPath (a writable filesystem path with .mp4
     // extension).  If outputPath is empty, uses defaultOutputPath().  Emits
     // recordingChanged(true) once the AMediaCodec encoder is producing
@@ -245,6 +250,7 @@ private:
     std::atomic<bool>    recording_          {false};
     std::atomic<bool>    hasFrontCamera_     {false};
     std::atomic<int>     lensFacingPref_     {1};       // 1=back, 0=front
+    std::atomic<int>     selectedCameraIndex_{-1};      // explicit camera pick (-1 = by facing)
     bool                 videoModeDesired_   = false;   // GUI's photo/video toggle
     int                  videoW_             = 1920;     // recording size
     int                  videoH_             = 1080;

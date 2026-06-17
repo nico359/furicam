@@ -142,9 +142,13 @@ Item {
 
     function handleSetDeviceID(deviceIdToSet) {
         settings.deviceId = deviceIdToSet
-        // cameraId 0 = back, 1 = front in our minimal list (initializeCameraList).
-        settings.cameraPosition = (deviceIdToSet === 1) ? Camera.FrontFace : Camera.BackFace
-        applyCameraPosition()
+        var cams = cam2.availableCameras()
+        var facing = (cams[deviceIdToSet] !== undefined) ? cams[deviceIdToSet].facing : 1  // 0=front,1=back
+        // Keep the gesture/mirror state in sync first so the cameraPosition change
+        // below doesn't trigger applyCameraPosition() into a redundant switch.
+        frontActive = (facing === 0)
+        settings.cameraPosition = (facing === 0) ? Camera.FrontFace : Camera.BackFace
+        cam2.selectCamera(deviceIdToSet)
     }
 
     function handleSetZoom(zoomLevel) {
@@ -154,17 +158,23 @@ Item {
         cam2.setZoom(ratio)
     }
 
-    // Minimal camera list (back + front) so main.qml's selector is populated.
-    // TODO: expose the engine's full camera list (incl. the secondary back/macro).
+    // Populate the camera selector from the engine's full list (incl. the
+    // secondary back/macro camera), keyed by camera index.
     function initializeCameraList() {
         allCamerasModel.clear()
         window.backCameras = 0
         window.frontCameras = 0
-        allCamerasModel.append({ "cameraId": 0, "index": 0, "position": Camera.BackFace })
-        window.backCameras += 1
-        if (cam2.hasFrontCamera) {
-            allCamerasModel.insert(0, { "cameraId": 1, "index": 1, "position": Camera.FrontFace })
-            window.frontCameras += 1
+        var cams = cam2.availableCameras()
+        for (var i = 0; i < cams.length; i++) {
+            var c = cams[i]   // {index, facing(0=front,1=back), megapixels}
+            allCamerasModel.append({
+                "cameraId": c.index, "index": c.index,
+                "position": (c.facing === 1) ? Camera.BackFace : Camera.FrontFace
+            })
+            if (settings.cameras[c.index])
+                settings.cameras[c.index].resolution = c.megapixels
+            if (c.facing === 1) window.backCameras += 1
+            else window.frontCameras += 1
         }
     }
 
