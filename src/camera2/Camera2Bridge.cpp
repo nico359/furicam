@@ -606,7 +606,7 @@ void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
         const double ny = (double)c.y / h - 0.5;
         QVariantMap m;
         m["x"] = (cc * nx - ss * ny) + 0.5;
-        m["y"] = 1.0 - ((ss * nx + cc * ny) + 0.5);   // + FBO vertical mirror
+        m["y"] = (ss * nx + cc * ny) + 0.5;
         pts.append(m);
     }
     // Marshal the result to the GUI thread.
