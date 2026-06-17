@@ -196,6 +196,7 @@ int main(int argc, char** argv)
         std::printf("after exitVideoMode: preview still live (+%d frames in ~1s)\n",
                     session.frameCount() - beforeExit);
         session.stopPreview();
+        std::fflush(stdout);   // _Exit() does not flush stdio buffers
         std::_Exit(0);   // skip the (intentionally blocking) binder pool thread teardown
     }
 
