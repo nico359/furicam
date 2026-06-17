@@ -176,8 +176,24 @@ Item {
         }
     }
 
+    // Enter/leave video mode, setting the recording size atomically BEFORE video
+    // mode so the encoder is built at the right resolution from the start.
+    function applyVideoMode() {
+        if (typeof cslate === "undefined" || !cam2.ready)
+            return
+        if (cslate.state === "VideoCapture") {
+            cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)
+            cam2.videoMode = true
+        } else {
+            cam2.videoMode = false
+        }
+    }
+
     function handleVideoRecording() {
         if (!window.videoCaptured) {
+            // Lock in the current size right before recording (also covers a
+            // resolution change made while already in video mode).
+            cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)
             cam2.startRecording("")   // attaches the pre-warmed mic, finalizes an MP4
             window.videoCaptured = true
         } else {
@@ -201,10 +217,15 @@ Item {
     }
 
     // React to camera-position changes (gestures set settings.cameraPosition).
-    // (Video resolution is handled by the cam2.videoWidth/videoHeight bindings.)
     Connections {
         target: settings
         function onCameraPositionChanged() { cameraItem.applyCameraPosition() }
+    }
+
+    // Enter/leave video mode as the photo/video tab changes.
+    Connections {
+        target: cslate
+        function onStateChanged() { cameraItem.applyVideoMode() }
     }
 
 
@@ -213,20 +234,17 @@ Item {
         id: cam2
         anchors.fill: parent
 
-        // Simultaneous preview+record is driven entirely by the translation
-        // layer (Camera2Bridge) — FuriCam just reports which tab is active and
-        // the chosen recording size (reactive bindings keep the encoder size
-        // current before video mode is entered).
-        videoMode:   (typeof cslate !== "undefined") && cslate.state === "VideoCapture"
-        videoWidth:  settings.videoResWidth
-        videoHeight: settings.videoResHeight
-
+        // Video mode + recording size are applied atomically at discrete moments
+        // (entering video mode, starting a recording) via applyVideoMode() /
+        // handleVideoRecording() — reactive split bindings churned and could
+        // produce a mismatched (e.g. 1920x2160) size.
         Component.onCompleted: cam2.startCamera()
 
         onReadyChanged: {
             if (ready) {
                 focusState.state = "Default"
                 cameraItem.fnAspectRatio()
+                cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
             }
         }
         onCameraError: {

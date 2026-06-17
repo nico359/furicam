@@ -320,6 +320,10 @@ void Camera2Bridge::startRecording(const QString& outputPath)
         return;
     recordingPath_ = outputPath.isEmpty() ? defaultVideoPath() : outputPath;
     QDir().mkpath(QFileInfo(recordingPath_).absolutePath());
+    // Make sure the combined preview+record session is up at the current size so
+    // we don't silently fall back to the legacy 1080p path.
+    if (videoModeDesired_ && session_->isStreaming() && !session_->isVideoMode())
+        enterVideoMode();
     // In video mode the preview keeps streaming during record (same reader), so
     // leave previewReader_ valid.  The legacy path records to a dedicated session
     // that displaces the preview, so its reader becomes stale.
@@ -418,7 +422,7 @@ void Camera2Bridge::applyVideoMode()
     if (!session_ || !session_->isStreaming() || recording_.load())
         return;
     if (videoModeDesired_ && !session_->isVideoMode())
-        session_->enterVideoMode();
+        enterVideoMode();   // bridge's — applies videoW_/videoH_ (NOT session_->enterVideoMode(), which defaults to 1080p)
     else if (!videoModeDesired_ && session_->isVideoMode())
         session_->exitVideoMode();
 }
