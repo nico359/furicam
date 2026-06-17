@@ -368,6 +368,24 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         }
     }
 
+    // Analysis YUV output (CPU-readable luma) for live QR/barcode scanning.
+    // Present only while previewing (photo mode); excluded in video mode.
+    if (withStill) {
+        const int aw = 1280, ah = 720;
+        if (AImageReader_new(aw, ah, AIMAGE_FORMAT_YUV_420_888, /*maxImages*/ 2, &analysisReader_) == AMEDIA_OK
+            && analysisReader_) {
+            analysisListener_.context          = this;
+            analysisListener_.onImageAvailable = &CameraSession::onAnalysisImageAvailable;
+            AImageReader_setImageListener(analysisReader_, &analysisListener_);
+            if (AImageReader_getWindow(analysisReader_, &analysisWindow_) == AMEDIA_OK && analysisWindow_) {
+                ANativeWindow_acquire(analysisWindow_);
+                if (ACaptureSessionOutput_create(analysisWindow_, &analysisOutput_) == ACAMERA_OK)
+                    ACaptureSessionOutputContainer_add(outputContainer_, analysisOutput_);
+            }
+            log(fmt("QR analysis stream: YUV %dx%d", aw, ah));
+        }
+    }
+
     sessionCb_          = ACameraCaptureSession_stateCallbacks{};
     sessionCb_.context  = this;
     sessionCb_.onActive = &CameraSession::onSessionActive;
@@ -390,6 +408,10 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         stopPreview();
         return false;
     }
+    // Also feed the analysis (QR) stream from the repeating preview request.
+    if (analysisWindow_
+        && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
+        ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
 
     // Pin the auto-exposure frame-rate range so the HAL targets a steady fps
     // (TEMPLATE_PREVIEW otherwise lets AE drop the rate in low light).
@@ -468,6 +490,23 @@ void CameraSession::freeStreamResources()
         AImageReader_delete(jpegReader_);
         jpegReader_ = nullptr;
     }
+    if (analysisTarget_) {
+        ACameraOutputTarget_free(analysisTarget_);
+        analysisTarget_ = nullptr;
+    }
+    if (analysisOutput_) {
+        ACaptureSessionOutput_free(analysisOutput_);
+        analysisOutput_ = nullptr;
+    }
+    if (analysisWindow_) {
+        ANativeWindow_release(analysisWindow_);
+        analysisWindow_ = nullptr;
+    }
+    if (analysisReader_) {
+        AImageReader_setImageListener(analysisReader_, nullptr);
+        AImageReader_delete(analysisReader_);
+        analysisReader_ = nullptr;
+    }
     // Recording sets its own active request *after* startRecording()'s
     // stopPreview() call, so clearing here can never drop a live record request.
     activeSession_ = nullptr;
@@ -495,8 +534,10 @@ void CameraSession::freeSessionKeepReaders()
     if (outputTarget_)        { ACameraOutputTarget_free(outputTarget_);          outputTarget_ = nullptr; }
     if (recordPreviewTarget_) { ACameraOutputTarget_free(recordPreviewTarget_);   recordPreviewTarget_ = nullptr; }
     if (recordTarget_)        { ACameraOutputTarget_free(recordTarget_);          recordTarget_ = nullptr; }
+    if (analysisTarget_)      { ACameraOutputTarget_free(analysisTarget_);        analysisTarget_ = nullptr; }
     if (sessionOutput_)       { ACaptureSessionOutput_free(sessionOutput_);       sessionOutput_ = nullptr; }
     if (jpegOutput_)          { ACaptureSessionOutput_free(jpegOutput_);          jpegOutput_ = nullptr; }
+    if (analysisOutput_)      { ACaptureSessionOutput_free(analysisOutput_);      analysisOutput_ = nullptr; }
     if (recordOutput_)        { ACaptureSessionOutput_free(recordOutput_);        recordOutput_ = nullptr; }
     if (outputContainer_)     { ACaptureSessionOutputContainer_free(outputContainer_); outputContainer_ = nullptr; }
     activeSession_ = nullptr;
@@ -528,6 +569,11 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         cs = ACaptureSessionOutput_create(jpegWindow_, &jpegOutput_);
         if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, jpegOutput_);
     }
+    // QR analysis stream only in preview mode (not while recording video).
+    if (cs == ACAMERA_OK && !withEncoder && analysisWindow_) {
+        cs = ACaptureSessionOutput_create(analysisWindow_, &analysisOutput_);
+        if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, analysisOutput_);
+    }
     if (cs == ACAMERA_OK && withEncoder) {
         cs = ACaptureSessionOutput_create(ew, &recordOutput_);
         if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, recordOutput_);
@@ -548,7 +594,7 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         return false;
     }
 
-    // Preview-only request (targets just the preview reader).
+    // Preview-only request (targets the preview reader + the QR analysis stream).
     cs = ACameraDevice_createCaptureRequest(device_, TEMPLATE_PREVIEW, &previewRequest_);
     if (cs == ACAMERA_OK) cs = ACameraOutputTarget_create(readerWindow_, &outputTarget_);
     if (cs == ACAMERA_OK) cs = ACaptureRequest_addTarget(previewRequest_, outputTarget_);
@@ -556,6 +602,9 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         lastError_ = fmt("preview request setup failed (status %d)", (int)cs);
         return false;
     }
+    if (!withEncoder && analysisWindow_
+        && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
+        ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
     if (targetFps > 0) {
         int32_t r[2] = { targetFps, targetFps };
         ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
@@ -667,6 +716,30 @@ int CameraSession::pollFrames()
     }
     lastAcquireStatus_.store((int)st, std::memory_order_relaxed);
     return n;
+}
+
+void CameraSession::onAnalysisImageAvailable(void* ctx, AImageReader* reader)
+{
+    auto* self = static_cast<CameraSession*>(ctx);
+    if (!self || !reader)
+        return;
+    // Drain every frame (keep buffers flowing); hand the luma plane to the
+    // callback (e.g. the bridge's QR decoder) when one is set.
+    AImage* img = nullptr;
+    while (AImageReader_acquireNextImage(reader, &img) == AMEDIA_OK && img) {
+        if (self->analysisCallback_) {
+            int32_t  w = 0, h = 0, stride = 0;
+            uint8_t* y = nullptr;
+            int      len = 0;
+            AImage_getWidth(img, &w);
+            AImage_getHeight(img, &h);
+            if (AImage_getPlaneData(img, 0, &y, &len) == AMEDIA_OK && y
+                && AImage_getPlaneRowStride(img, 0, &stride) == AMEDIA_OK)
+                self->analysisCallback_(y, w, h, stride);
+        }
+        AImage_delete(img);
+        img = nullptr;
+    }
 }
 
 void CameraSession::onImageAvailable(void* ctx, AImageReader* reader)

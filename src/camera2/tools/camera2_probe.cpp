@@ -230,6 +230,13 @@ int main(int argc, char** argv)
         std::printf("starting %dx%d %s preview for %d s (%s) ...\n",
                     kW, kH, usePrivate ? "PRIVATE" : "YUV_420_888", streamSecs,
                     doPoll ? "callback + poll" : "callback");
+        // Count QR-analysis (YUV luma) frames to prove the analysis stream works.
+        std::atomic<int> qrFrames{0};
+        std::atomic<int> qrW{0}, qrH{0}, qrStride{0};
+        session.setAnalysisCallback([&](const uint8_t* y, int w, int h, int stride) {
+            qrFrames.fetch_add(1, std::memory_order_relaxed);
+            qrW.store(w); qrH.store(h); qrStride.store(stride);
+        });
         if (!session.startPreview(kW, kH, fmt, usage)) {
             std::printf("startPreview failed: %s\n", session.lastError().c_str());
             session.close();
@@ -253,6 +260,8 @@ int main(int argc, char** argv)
         int total = session.frameCount();
         std::printf("captured %d frames in %d s = %.1f fps\n",
                     total, streamSecs, streamSecs ? (double)total / streamSecs : 0.0);
+        std::printf("QR analysis (YUV luma) frames: %d  (%dx%d stride %d)\n",
+                    qrFrames.load(), qrW.load(), qrH.load(), qrStride.load());
         // Teardown happens via session.close() below, which closes the session
         // and device before freeing the reader (correct order).
     }

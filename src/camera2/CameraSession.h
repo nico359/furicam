@@ -116,6 +116,14 @@ public:
         photoCallback_ = std::move(cb);
     }
 
+    // Receive luma frames from the analysis YUV stream (for QR scanning).  Called
+    // on a camera thread; decode synchronously and marshal results yourself.  The
+    // analysis stream exists only while previewing (photo mode), not recording.
+    void setAnalysisCallback(std::function<void(const uint8_t* y, int width, int height, int rowStride)> cb)
+    {
+        analysisCallback_ = std::move(cb);
+    }
+
     // Available JPEG capture sizes for the open camera (output configs).
     std::vector<StreamConfig> jpegSizes() const;
     // Request a specific JPEG capture size; (0,0) = the sensor's max.  Applied on
@@ -234,6 +242,7 @@ private:
     // Streaming callbacks (context is the CameraSession*).
     static void onImageAvailable(void* ctx, AImageReader* reader);
     static void onJpegImageAvailable(void* ctx, AImageReader* reader);
+    static void onAnalysisImageAvailable(void* ctx, AImageReader* reader);
     static void onSessionActive(void* ctx, ACameraCaptureSession* session);
     static void onSessionReady(void* ctx, ACameraCaptureSession* session);
     static void onSessionClosed(void* ctx, ACameraCaptureSession* session);
@@ -280,6 +289,16 @@ private:
     std::mutex                 photoMutex_;
     std::string                pendingPhotoPath_;
     std::function<void(const std::string&, bool)> photoCallback_;
+
+    // Analysis YUV output (CPU-readable luma) for QR/barcode scanning — added to
+    // the preview-only session (not video mode).  The listener hands the Y plane
+    // to analysisCallback_ (set by the bridge), which decodes off the GUI thread.
+    AImageReader*              analysisReader_   = nullptr;
+    ANativeWindow*             analysisWindow_   = nullptr;
+    ACaptureSessionOutput*     analysisOutput_   = nullptr;
+    ACameraOutputTarget*       analysisTarget_   = nullptr;
+    AImageReader_ImageListener analysisListener_{};
+    std::function<void(const uint8_t* y, int width, int height, int rowStride)> analysisCallback_;
 
     // Video recording (dedicated capture session targeting the encoder surface).
     std::unique_ptr<VideoEncoder>        encoder_;
