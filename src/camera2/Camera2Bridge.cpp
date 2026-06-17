@@ -24,6 +24,7 @@
 #include "Camera2NDK.h"
 
 #include <QDateTime>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QOpenGLFramebufferObject>
@@ -276,16 +277,25 @@ void Camera2Bridge::setLastPhotoPath(const QString& path)
     emit lastPhotoPathChanged();
 }
 
+// Captures go under <media-dir>/<binary name> (the app convention the built-in
+// gallery scans, e.g. ~/Pictures/furicam2 and ~/Videos/furicam2).
+static QString mediaSubdir()
+{
+    return QFileInfo(QCoreApplication::applicationFilePath()).fileName();
+}
+
 QString Camera2Bridge::defaultVideoPath() const
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
+                        + "/" + mediaSubdir();
     return QDir(dir).filePath(
         QStringLiteral("VID_%1.mp4").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")));
 }
 
 QString Camera2Bridge::defaultPhotoPath() const
 {
-    const QString dir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
+                        + "/" + mediaSubdir();
     return QDir(dir).filePath(
         QStringLiteral("IMG_%1.jpg").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")));
 }
