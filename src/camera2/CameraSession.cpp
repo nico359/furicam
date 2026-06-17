@@ -260,13 +260,36 @@ bool CameraSession::open(const std::string& id)
 
 void CameraSession::close()
 {
+    // Tear down any recording / video-mode / mic state first.
+    recording_ = false;
+    if (audioEnc_) {
+        audioEnc_->detach();
+        audioEnc_->stop();
+        audioEnc_.reset();
+    }
+    audioPrewarmed_ = false;
+
     // Order matters: close the session and device BEFORE freeing the
     // AImageReader/window they still reference, else cameraserver logs
     // "native window died from under us" and the close can stall.
     closeSessionLocked();
+
+    // Free the combined-session record objects (the preview-only ones are freed
+    // by freeStreamResources()).  Done before encoder_->close() releases the
+    // input surface these wrap.
+    if (recordRequest_)       { ACaptureRequest_free(recordRequest_);            recordRequest_ = nullptr; }
+    if (recordPreviewTarget_) { ACameraOutputTarget_free(recordPreviewTarget_);  recordPreviewTarget_ = nullptr; }
+    if (recordTarget_)        { ACameraOutputTarget_free(recordTarget_);         recordTarget_ = nullptr; }
+    if (recordOutput_)        { ACaptureSessionOutput_free(recordOutput_);       recordOutput_ = nullptr; }
+    videoMode_ = false;
+
     if (device_) {
         ACameraDevice_close(device_);
         device_ = nullptr;
+    }
+    if (encoder_) {
+        encoder_->close();   // releases the input surface (now unreferenced)
+        encoder_.reset();
     }
     freeStreamResources();
     openId_.clear();

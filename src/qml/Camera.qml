@@ -208,6 +208,10 @@ Item {
         id: cam2
         anchors.fill: parent
 
+        // Simultaneous preview+record is driven entirely by the translation
+        // layer (Camera2Bridge) — FuriCam just reports which tab is active.
+        videoMode: (typeof cslate !== "undefined") && cslate.state === "VideoCapture"
+
         Component.onCompleted: cam2.startCamera()
 
         onReadyChanged: {

@@ -177,6 +177,9 @@ void Camera2Bridge::startCamera()
     emit previewAspectRatioChanged();
     updateDisplayRotation();
     setupOrientationMonitor();
+    // Re-apply a pending video-mode request now that preview is streaming (also
+    // re-enters video mode after a camera switch, which reopens the session).
+    applyVideoMode();
     ready_.store(true);
     emit readyChanged();
     update();
@@ -341,6 +344,27 @@ void Camera2Bridge::enterVideoMode()
 void Camera2Bridge::exitVideoMode()
 {
     if (session_)
+        session_->exitVideoMode();
+}
+
+void Camera2Bridge::setVideoMode(bool on)
+{
+    if (on == videoModeDesired_)
+        return;
+    videoModeDesired_ = on;
+    applyVideoMode();
+    emit videoModeChanged();
+}
+
+void Camera2Bridge::applyVideoMode()
+{
+    // Reconcile the GUI's desired mode with the session.  No-op until preview is
+    // streaming (re-applied from startCamera) and never reconfigures mid-record.
+    if (!session_ || !session_->isStreaming() || recording_.load())
+        return;
+    if (videoModeDesired_ && !session_->isVideoMode())
+        session_->enterVideoMode();
+    else if (!videoModeDesired_ && session_->isVideoMode())
         session_->exitVideoMode();
 }
 

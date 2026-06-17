@@ -47,6 +47,13 @@ class Camera2Bridge
     Q_PROPERTY(bool    hasFrontCamera      READ hasFrontCamera        NOTIFY hasFrontCameraChanged)
     Q_PROPERTY(int     frameCount          READ frameCount            NOTIFY frameCountChanged)
 
+    // Video mode: bind this to the GUI's photo/video toggle.  When true, the
+    // bridge pre-configures the camera for simultaneous preview+record (the
+    // encoder joins the live preview session) so the record button just taps the
+    // running stream — preview never freezes and there is no spin-up.  This keeps
+    // the GUI a one-line binding; the Camera2 lifecycle policy lives here.
+    Q_PROPERTY(bool    videoMode           READ videoMode WRITE setVideoMode NOTIFY videoModeChanged)
+
     // Current exposure for the on-screen badge ("ISO 200, 1/60").  ISO here is
     // international standards organization sensor sensitivity; shutterNs is
     // exposure time in nanoseconds.
@@ -121,9 +128,13 @@ public:
     // Pre-configure simultaneous preview+record (e.g. on entering video mode):
     // the encoder surface joins the live preview session so startRecording just
     // taps it — preview never freezes and there is no capture-session spin-up.
-    // exitVideoMode() restores the preview-only session.
+    // exitVideoMode() restores the preview-only session.  Prefer the videoMode
+    // property (above) from QML; these are the lower-level primitives.
     Q_INVOKABLE void enterVideoMode();
     Q_INVOKABLE void exitVideoMode();
+
+    bool videoMode() const { return videoModeDesired_; }
+    void setVideoMode(bool on);
 
     // Take a single still photo.  Triggers a one-shot capture request to the
     // Joint Photographic Experts Group (JPEG) AImageReader.  settingsJson may
@@ -175,6 +186,7 @@ signals:
     void exposureChanged();
     void previewAspectRatioChanged();
     void lastPhotoPathChanged();
+    void videoModeChanged();
 
     // One-shot signals for outcomes.
     void cameraError(const QString& message);
@@ -187,6 +199,7 @@ private:
     void stopCameraSession();
     void updateDisplayRotation();
     void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
+    void applyVideoMode();            // reconcile videoModeDesired_ with the session
     QString defaultVideoPath() const;
     QString defaultPhotoPath() const;
 
@@ -204,6 +217,7 @@ private:
     std::atomic<bool>    recording_          {false};
     std::atomic<bool>    hasFrontCamera_     {false};
     std::atomic<int>     lensFacingPref_     {1};       // 1=back, 0=front
+    bool                 videoModeDesired_   = false;   // GUI's photo/video toggle
     std::atomic<int>     frameCount_         {0};
     std::atomic<int32_t> lastIso_            {0};
     std::atomic<int64_t> lastExposureNs_     {0};
