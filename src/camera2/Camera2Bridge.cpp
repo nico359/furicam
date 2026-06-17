@@ -26,6 +26,7 @@
 #include <QDateTime>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 
 #include <ReadBarcode.h>
 #include <BarcodeFormat.h>
@@ -593,12 +594,19 @@ void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
         return;
 
     const QString text = QString::fromStdString(bc.text());
+    // Map sensor-normalized corners to viewfinder-normalized: inverse of the
+    // renderer's texcoord rotation (Rot(displayRotation) about centre), then the
+    // FBO vertical mirror.  Emits {x,y} in [0,1] of the preview item.
+    const double rad = -displayRotation_.load() * 3.14159265358979 / 180.0;
+    const double cc = std::cos(rad), ss = std::sin(rad);
     QVariantList pts;
     const ZXing::Position& pos = bc.position();
     for (const auto& c : { pos.topLeft(), pos.topRight(), pos.bottomRight(), pos.bottomLeft() }) {
+        const double nx = (double)c.x / w - 0.5;
+        const double ny = (double)c.y / h - 0.5;
         QVariantMap m;
-        m["x"] = (double)c.x / w;
-        m["y"] = (double)c.y / h;
+        m["x"] = (cc * nx - ss * ny) + 0.5;
+        m["y"] = 1.0 - ((ss * nx + cc * ny) + 0.5);   // + FBO vertical mirror
         pts.append(m);
     }
     // Marshal the result to the GUI thread.

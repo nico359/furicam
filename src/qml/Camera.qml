@@ -233,12 +233,14 @@ Item {
     // bridge emits qrDetected(text, points).  Show a tappable result banner;
     // tapping it parses the code and offers the matching action (open/connect/copy).
     property string qrText: ""
+    property var    qrPoints: []
     property bool   qrVisible: false
 
     Connections {
         target: cam2
         function onQrDetected(text, points) {
             cameraItem.qrText = text
+            cameraItem.qrPoints = points
             cameraItem.qrVisible = true
             qrClearTimer.restart()
         }
@@ -512,38 +514,53 @@ Item {
         onScaleChanged: cameraItem.handleSetZoom(scale * zoomFactor)
     }
 
-    // Tappable QR result banner (shown while a code is in view, photo mode).
-    Rectangle {
-        id: qrBanner
+    // Box drawn around the detected QR code (tappable → action popup).
+    Item {
+        id: qrOverlay
         z: 9000
+        anchors.fill: parent
         visible: cameraItem.qrVisible && !mediaView.visible
                  && (typeof cslate === "undefined" || cslate.state === "PhotoCapture")
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 150 * window.scalingRatio
-        width: Math.min(parent.width - 40 * window.scalingRatio,
-                        qrLabel.implicitWidth + 64 * window.scalingRatio)
-        height: 46 * window.scalingRatio
-        radius: 23 * window.scalingRatio
-        color: "#dd1d6fcf"
-        Row {
-            anchors.centerIn: parent
-            spacing: 10 * window.scalingRatio
-            Text {
-                text: "⌗"
-                color: "white"; font.pixelSize: 20 * window.scalingRatio
-                anchors.verticalCenter: parent.verticalCenter
+        property bool valid: cameraItem.qrPoints && cameraItem.qrPoints.length === 4
+        property real minX: valid ? Math.min(qrPoints[0].x, qrPoints[1].x, qrPoints[2].x, qrPoints[3].x) : 0
+        property real maxX: valid ? Math.max(qrPoints[0].x, qrPoints[1].x, qrPoints[2].x, qrPoints[3].x) : 0
+        property real minY: valid ? Math.min(qrPoints[0].y, qrPoints[1].y, qrPoints[2].y, qrPoints[3].y) : 0
+        property real maxY: valid ? Math.max(qrPoints[0].y, qrPoints[1].y, qrPoints[2].y, qrPoints[3].y) : 0
+
+        Rectangle {
+            id: qrBox
+            visible: qrOverlay.valid
+            x: qrOverlay.minX * qrOverlay.width
+            y: qrOverlay.minY * qrOverlay.height
+            width:  Math.max(40 * window.scalingRatio, (qrOverlay.maxX - qrOverlay.minX) * qrOverlay.width)
+            height: Math.max(40 * window.scalingRatio, (qrOverlay.maxY - qrOverlay.minY) * qrOverlay.height)
+            radius: 8 * window.scalingRatio
+            color: "#330099ff"
+            border.color: "#3399ff"
+            border.width: 3 * window.scalingRatio
+
+            // Decoded text label just above the box.
+            Rectangle {
+                anchors.bottom: parent.top
+                anchors.bottomMargin: 6 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(cameraItem.width - 24 * window.scalingRatio,
+                                qrLabel.implicitWidth + 24 * window.scalingRatio)
+                height: qrLabel.implicitHeight + 12 * window.scalingRatio
+                radius: 8 * window.scalingRatio
+                color: "#dd1d6fcf"
+                Text {
+                    id: qrLabel
+                    anchors.centerIn: parent
+                    width: parent.width - 16 * window.scalingRatio
+                    text: cameraItem.qrText
+                    color: "white"; font.pixelSize: 13 * window.scalingRatio
+                    elide: Text.ElideRight; maximumLineCount: 1
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
-            Text {
-                id: qrLabel
-                text: cameraItem.qrText
-                color: "white"; font.pixelSize: 14 * window.scalingRatio
-                elide: Text.ElideRight; maximumLineCount: 1
-                width: Math.min(implicitWidth, cameraItem.width - 130 * window.scalingRatio)
-                anchors.verticalCenter: parent.verticalCenter
-            }
+            MouseArea { anchors.fill: parent; onClicked: cameraItem.handleQrTap() }
         }
-        MouseArea { anchors.fill: parent; onClicked: cameraItem.handleQrTap() }
     }
 
     FastBlur {
