@@ -1,0 +1,13 @@
+#!/usr/bin/env xdg-open
+# Author Alexey T. / Erik Inkinen / GNU GPL3
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FuriCam2
+Exec=/usr/bin/furicam2
+TryExec=/usr/bin/furicam2
+Icon=furicam
+Terminal=false
+StartupNotify=false
+Comment=Camera (patched: finalize MKV on stop)
+Categories=AudioVideo;Video;Photography

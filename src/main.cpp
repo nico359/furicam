@@ -20,6 +20,9 @@
 #include "whitebalancecontroller.h"
 #include "hdrprocessor.h"
 #include "meteringcontroller.h"
+#ifdef FURICAM2_CAMERA2
+#include "camera2/Camera2Bridge.h"
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -27,11 +30,11 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 #endif
     QApplication app(argc, argv);
-    app.setOrganizationName("FuriCam");
+    app.setOrganizationName("FuriCam2");
     app.setOrganizationDomain("github.io");
 
     SingleInstance singleInstance;
-    if (!singleInstance.listen("FuriCamApp")) {
+    if (!singleInstance.listen("FuriCam2App")) {
         qDebug() << "Application already running";
         return 0;
     }
@@ -40,6 +43,9 @@ int main(int argc, char *argv[])
     qmlRegisterType<WhiteBalanceController>("FuriCam", 1, 0, "WhiteBalanceController");
     qmlRegisterType<HdrProcessor>("FuriCam", 1, 0, "HdrProcessor");
     qmlRegisterType<MeteringController>("FuriCam", 1, 0, "MeteringController");
+#ifdef FURICAM2_CAMERA2
+    qmlRegisterType<furicam2::Camera2Bridge>("FuriCam", 1, 0, "Camera2Bridge");
+#endif
 
     QIcon::setThemeName("default");
     QIcon::setThemeSearchPaths(QStringList("/usr/share/icons"));

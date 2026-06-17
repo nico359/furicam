@@ -1,2 +1,5 @@
-build
-*.pro.userbuild/
+build/
+build-*/
+*.pro.user
+*.user
+*.o
