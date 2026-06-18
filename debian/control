@@ -1,14 +1,13 @@
-Source: furicam
-Section: libs
-Maintainer: nico359 <124350776+nico359@users.noreply.github.com>
+Source: furicam2
+Section: graphics
+Maintainer: Sean Pollard <spollard08@gmail.com>
 Priority: optional
 Build-Depends: debhelper-compat (= 13),
                cmake,
                qtbase5-dev,
                qtdeclarative5-dev,
-               libqt5multimedia5-plugins,
                qttools5-dev-tools,
-               libz-dev,
+               zlib1g-dev,
                qtmultimedia5-dev,
                libgstreamer1.0-dev,
                libgstreamer-plugins-base1.0-dev,
@@ -23,30 +22,34 @@ Build-Depends: debhelper-compat (= 13),
                libegl-dev,
 Standards-Version: 4.7.0
 
-Package: furicam
+Package: furicam2
 Architecture: any
 Multi-Arch: foreign
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         furicam,
          qml-module-qtmultimedia,
-         libqt5multimedia5-plugins, 
-         qml-module-qtquick2, 
-         qml-module-qtquick-controls2, 
-         qml-module-qtquick-window2, 
-         qt5-cameraplugin-aal, 
-         qml-module-qt-labs-platform, 
-         qml-module-qt-labs-folderlistmodel, 
-         qml-module-qt-labs-settings, 
-         qml-module-qtquick-layouts, 
+         qml-module-qtquick2,
+         qml-module-qtquick-controls2,
+         qml-module-qtquick-window2,
+         qml-module-qt-labs-platform,
+         qml-module-qt-labs-folderlistmodel,
+         qml-module-qt-labs-settings,
+         qml-module-qtquick-layouts,
          qml-module-qtgraphicaleffects,
          qml-module-qtquick-shapes,
-         mkvtoolnix,
-         libqt5svg5,
-         libgstreamer1.0-0,
-         gstreamer1.0-droid,
-         gstreamer1.0-plugins-good,
-         gstreamer1.0-plugins-base,
-         gstreamer1.0-libav,
          qml-module-qtsensors,
-Description: FuriCam - an enhanced camera app for FuriPhone.
+         libqt5svg5,
+         gstreamer1.0-plugins-base,
+         gstreamer1.0-plugins-good,
+         gstreamer1.0-libav,
+Description: FuriCam2 - Camera2/libhybris camera app for the FuriPhone FLX1s
+ A camera app for FuriOS that drives the camera through the Android Camera2
+ native development kit (NDK) via libhybris, replacing the QtMultimedia/gst-droid
+ backend.  Photo, 4K/HD H.264 video, WYSIWYG aspect ratios, flash (off/on/auto),
+ white balance, live QR scanning, macro/secondary cameras, HDR and GPS
+ geotagging.
+ .
+ Coexists with the original furicam, whose shared icon, GSettings schema, polkit
+ rule and config it reuses.

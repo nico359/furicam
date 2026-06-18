@@ -1,28 +1,14 @@
-furicam (1.2.0-1) unstable; urgency=medium
+furicam2 (2.0.0-1) unstable; urgency=medium
 
-  * Add HDR burst photography using OpenCV Mertens fusion
-  * Add MeteringController for metering-based exposure hints
-  * Add color correction with adjustable RGB channels
-  * Add OpenCV build dependencies to debian/control
-  * Move HDR toggle to config row 2, styled like AWB button
+  * Initial furicam2 release: camera driven through the Android Camera2 NDK via
+    libhybris, replacing the QtMultimedia/gst-droid backend.
+  * Photo capture (up to 21 MP) and 4K/HD H.264 video into MP4 with AAC audio.
+  * WYSIWYG aspect ratios (4:3, 16:9, 1:1) with matching letterboxed preview.
+  * Flash off/on/auto (auto emulated via AE-state metering on this HAL).
+  * White balance presets, live QR scanning, macro/secondary cameras,
+    front-camera mirror, tap-to-focus, pinch zoom.
+  * HDR (OpenCV Mertens fusion) and GPS geotagging carried over.
+  * Coexists with the original furicam, reusing its icon, GSettings schema,
+    polkit rule and config.
 
- -- nico359 <124350776+nico359@users.noreply.github.com>  Fri, 10 Apr 2026 12:00:00 +0000
-
-furicam (1.1.0-1) unstable; urgency=medium
-
-  * Add zoom slider with magnification indicator
-  * Fix zoom display to show estimated magnification (1.0×-4.0×)
-  * Reset zoom on camera switch
-
- -- nico359 <124350776+nico359@users.noreply.github.com>  Thu, 20 Mar 2026 13:30:00 +0000
-
-furicam (1.0.0-1) unstable; urgency=medium
-
-  * Initial release of FuriCam
-  * H.264/MP4 video recording with configurable bitrate
-  * Resolution picker with per-camera memory
-  * JPEG quality adjustment
-  * Grid overlay and level indicator (sensorfw accelerometer)
-  * Camera resume on focus change
-
- -- nico359 <124350776+nico359@users.noreply.github.com>  Wed, 19 Mar 2026 14:20:00 +0000
+ -- Sean Pollard <spollard08@gmail.com>  Wed, 18 Jun 2026 12:00:00 +0000
