@@ -811,6 +811,55 @@ QVariantList Camera2Bridge::availableResolutions()
     return list;
 }
 
+QVariantList Camera2Bridge::availableVideoResolutions()
+{
+    QVariantList list;
+    if (!session_)
+        return list;
+    auto sizes = session_->privateSizes();
+    // The H.264 encoder here rejects anything outside the 4K box (verified
+    // on-device: width>3840 or height>2160 → AMediaCodec_configure fails).  Keep
+    // clean-aspect, sensibly-sized entries; collapse encoder-alignment
+    // near-duplicates (e.g. 1920×1088 vs 1920×1080 — height padded to a multiple
+    // of 16) to the size closest to the exact aspect.
+    const double aspects[] = { 16.0 / 9.0, 4.0 / 3.0, 1.0, 3.0 / 2.0 };
+    struct Pick { CameraSession::StreamConfig s; int ai; double diff; };
+    std::vector<Pick> keep;
+    for (const auto& s : sizes) {
+        if (s.isInput || s.width < 640 || s.width > 3840 || s.height > 2160)
+            continue;
+        const double r = (double)s.width / s.height;
+        int ai = -1; double best = 0.03;   // also the clean-aspect threshold
+        for (int i = 0; i < (int)(sizeof(aspects) / sizeof(aspects[0])); ++i) {
+            const double d = std::abs(r - aspects[i]);
+            if (d < best) { best = d; ai = i; }
+        }
+        if (ai < 0)
+            continue;   // not within 0.03 of any clean aspect
+        // Same width + same canonical aspect ⇒ a near-duplicate; keep the closest.
+        bool dup = false;
+        for (auto& p : keep)
+            if (p.s.width == s.width && p.ai == ai) {
+                if (best < p.diff) { p.s = s; p.diff = best; }
+                dup = true;
+                break;
+            }
+        if (!dup)
+            keep.push_back({ s, ai, best });
+    }
+    std::sort(keep.begin(), keep.end(),
+              [](const Pick& a, const Pick& b) {
+                  return (long)a.s.width * a.s.height > (long)b.s.width * b.s.height;
+              });
+    for (const auto& p : keep) {
+        QVariantMap m;
+        m["width"]  = p.s.width;
+        m["height"] = p.s.height;
+        list.append(m);
+    }
+    return list;
+}
+
 void Camera2Bridge::setResolution(int width, int height)
 {
     if (!session_)

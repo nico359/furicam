@@ -139,6 +139,8 @@ public:
 
     // Available JPEG capture sizes for the open camera (output configs).
     std::vector<StreamConfig> jpegSizes() const;
+    // Available PRIVATE (preview/recording-capable) sizes for the open camera.
+    std::vector<StreamConfig> privateSizes() const;
     // Request a specific JPEG capture size; (0,0) = the sensor's max.  Applied on
     // the next startPreview (the caller restarts the camera to take effect).
     void setJpegSize(int width, int height) { reqJpegW_ = width; reqJpegH_ = height; }

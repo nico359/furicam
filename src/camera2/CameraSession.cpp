@@ -888,6 +888,20 @@ std::vector<CameraSession::StreamConfig> CameraSession::jpegSizes() const
     return out;
 }
 
+std::vector<CameraSession::StreamConfig> CameraSession::privateSizes() const
+{
+    std::vector<StreamConfig> out;
+    for (const auto& c : cameras_) {
+        if (c.id != openId_)
+            continue;
+        for (const auto& s : c.outputs)
+            if (s.format == AIMAGE_FORMAT_PRIVATE && !s.isInput)
+                out.push_back(s);
+        break;
+    }
+    return out;
+}
+
 bool CameraSession::capturePhoto(const std::string& path)
 {
     if (!captureSession_ || !jpegWindow_) {

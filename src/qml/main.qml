@@ -196,14 +196,6 @@ ApplicationWindow {
         color: "black"
     }
 
-    ListModel {
-        id: videoResolutionModel
-        ListElement { label: "4K (3840×2160)";  resWidth: 3840; resHeight: 2160 }
-        ListElement { label: "1080p (1920×1080)"; resWidth: 1920; resHeight: 1080 }
-        ListElement { label: "720p (1280×720)";  resWidth: 1280; resHeight: 720  }
-        ListElement { label: "480p (854×480)";   resWidth: 854;  resHeight: 480  }
-    }
-
     Item {
         id: focusState
 
@@ -1928,9 +1920,9 @@ ApplicationWindow {
             ListView {
                 id: videoResolutionList
                 width: parent.width
-                height: videoResolutionModel.count * 46 * window.scalingRatio
+                height: settingsDrawer.height * 0.5
                 clip: true
-                model: videoResolutionModel
+                model: cameraLoader.item ? cameraLoader.item.videoResolutionModel : null
                 spacing: 2 * window.scalingRatio
 
                 delegate: Rectangle {
