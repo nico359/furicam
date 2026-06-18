@@ -3,3 +3,12 @@ build-*/
 *.pro.user
 *.user
 *.o
+# packaging / on-phone build artifacts
+*.deb
+deb-stage/
+qtmm-sysroot/
+opencv-mini/
+debian/furicam2/
+debian/.debhelper/
+debian/files
+debian/*.substvars
