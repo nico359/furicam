@@ -44,6 +44,7 @@ public:
 // ***************** Video Metadata *****************
     Q_INVOKABLE void getVideoMetadata(const QString &fileUrl);
     Q_INVOKABLE QString runMkvInfo(const QString &fileUrl);
+    Q_INVOKABLE void finalizeMkv(const QString &fileUrl);
     Q_INVOKABLE QString getVideoDate(const QString &fileUrl);
     Q_INVOKABLE QString getVideoDimensions(const QString &fileUrl);
     Q_INVOKABLE QString getDuration(const QString &fileUrl);

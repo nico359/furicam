@@ -704,7 +704,7 @@ Item {
                     (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
                     "videoflip video-direction=auto " +
                     "! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
-                    "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
+                    "autoaudiosrc ! queue ! audioconvert ! audioresample ! voaacenc bitrate=128000 ! aacparse ! mux. " +
                     "matroskamux name=mux ! filesink location=" + outputPath,
                 back: "gst-pipeline: droidcamsrc mode=2 camera-device=" + camera.deviceId + " ! video/x-raw ! videoconvert ! qtvideosink",
                 backRecord:
@@ -715,15 +715,79 @@ Item {
                     (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
                     "videoflip video-direction=" + cameraItem.lockedVideoRotation +
                     " ! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
-                    "autoaudiosrc ! queue ! audioconvert ! droidaenc ! mux. " +
+                    "autoaudiosrc ! queue ! audioconvert ! audioresample ! voaacenc bitrate=128000 ! aacparse ! mux. " +
                     "matroskamux name=mux ! filesink location=" + outputPath
             }
         ]
 
         onError: {
+            console.log("FuriCam pipeline error:", camGst.error, camGst.errorString)
+            // Only treat the error as a real recording failure if we still
+            // thought we were recording. MediaPlayer.error fires routinely
+            // during teardown of a gst-pipeline: URI ("No valid frames
+            // decoded before end of stream", "Stream contains no data") —
+            // those are noise, not a failure. Without this gate every
+            // successful stop pops the banner.
+            if (window.videoCaptured) {
+                // Flip the flag first so finalizeMkv's blocking wait can't
+                // re-enter this handler if more errors fire during it.
+                window.videoCaptured = false
+                fileManager.finalizeMkv(camGst.outputPath)
+                camera.cameraState = Camera.UnloadedState
+                camera.start()
+                cameraItem.errorBannerText = camGst.errorString && camGst.errorString.length > 0
+                    ? ("Recording stopped: " + camGst.errorString)
+                    : "Recording stopped unexpectedly."
+                cameraItem.errorBannerVisible = true
+                errorBannerTimer.restart()
+            }
+            // Keep the backend-fallback hint in case more backends are added.
             if (backendId + 1 in backends) {
                 backendId++;
             }
+        }
+    }
+
+    // Lightweight banner shown when the recording pipeline errors out, so
+    // the user actually finds out instead of staring at a UI that keeps
+    // pretending to record.
+    property bool errorBannerVisible: false
+    property string errorBannerText: ""
+    Timer {
+        id: errorBannerTimer
+        interval: 5000
+        repeat: false
+        onTriggered: cameraItem.errorBannerVisible = false
+    }
+    Rectangle {
+        id: errorBanner
+        z: 10000
+        anchors.top: parent.top
+        anchors.topMargin: 16
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width - 24, errorBannerLabel.implicitWidth + 32)
+        height: errorBannerLabel.implicitHeight + 20
+        radius: 8
+        color: "#dd8a1c1c"
+        border.color: "#ffffff"
+        border.width: 1
+        visible: cameraItem.errorBannerVisible || opacity > 0
+        opacity: cameraItem.errorBannerVisible ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+        Text {
+            id: errorBannerLabel
+            anchors.fill: parent
+            anchors.margins: 10
+            text: cameraItem.errorBannerText
+            color: "white"
+            font.pixelSize: 14
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: cameraItem.errorBannerVisible = false
         }
     }
 
@@ -744,8 +808,19 @@ Item {
             camGst.play();
             window.videoCaptured = true;
         } else {
-            camGst.stop();
+            // Mark "no longer recording" FIRST. camGst.stop() and the
+            // finalizeMkv QProcess wait both spin the QML event loop, which
+            // lets MediaPlayer.onError fire mid-teardown. Without flipping
+            // this flag up front the error handler would see
+            // videoCaptured=true and treat benign shutdown errors as a real
+            // recording failure.
             window.videoCaptured = false;
+            var recordedPath = camGst.outputPath;
+            camGst.stop();
+            // matroskamux in the recording pipeline never receives EOS, so
+            // the on-disk MKV is missing its Duration / SeekHead / Cues.
+            // Re-mux it through mkvmerge to make it actually playable.
+            fileManager.finalizeMkv(recordedPath);
             camera.cameraState = Camera.UnloadedState;
             camera.start();
         }
