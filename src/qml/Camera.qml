@@ -298,6 +298,10 @@ Item {
                 focusState.state = "Default"
                 cameraItem.fnAspectRatio()
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
+                // Sync the saved camera position to the actual camera — the flash
+                // button (and other UI) gate on settings.cameraPosition, which
+                // otherwise defaults to FrontFace while we open the back camera.
+                settings.cameraPosition = frontActive ? Camera.FrontFace : Camera.BackFace
             }
         }
         onCameraError: {
