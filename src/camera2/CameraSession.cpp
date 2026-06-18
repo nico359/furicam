@@ -1250,6 +1250,22 @@ void CameraSession::setAfMode(int afMode)   { ctlAfMode_  = afMode;  applyContro
 void CameraSession::setTorch(bool on)       { ctlTorch_   = on ? 1 : 0; applyControlsToActive(); }
 void CameraSession::setFlashMode(int mode)  { flashMode_  = mode;       applyControlsToActive(); }
 
+// Kick an AE precapture metering pass on the active repeating request (a pre-flash
+// to decide whether AUTO flash should fire on the upcoming still).  One-shot:
+// START on a single capture, then reset to IDLE so the repeating request doesn't
+// keep re-triggering.
+void CameraSession::triggerPrecapture()
+{
+    if (!captureSession_ || !activeRequest_)
+        return;
+    uint8_t start = 1;   // ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_START
+    ACaptureRequest_setEntry_u8(activeRequest_, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER, 1, &start);
+    int seq = 0;
+    ACameraCaptureSession_capture(captureSession_, nullptr, 1, &activeRequest_, &seq);
+    uint8_t idle = 0;    // ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER_IDLE
+    ACaptureRequest_setEntry_u8(activeRequest_, ACAMERA_CONTROL_AE_PRECAPTURE_TRIGGER, 1, &idle);
+}
+
 void CameraSession::setZoomRatio(float ratio)
 {
     if (ratio < 1.0f)

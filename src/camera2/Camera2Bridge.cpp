@@ -580,6 +580,20 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
         captureNextHdrFrame();
         return;
     }
+    // Auto flash: run an AE precapture (pre-flash metering) first, then shoot once
+    // the HAL has decided whether to fire.  On/Off need no precapture.
+    if (flashMode_ == 2) {
+        session_->triggerPrecapture();
+        QTimer::singleShot(700, this, [this, outputPath] { doSingleCapture(outputPath); });
+        return;
+    }
+    doSingleCapture(outputPath);
+}
+
+void Camera2Bridge::doSingleCapture(const QString& outputPath)
+{
+    if (!session_)
+        return;
     const QString path = outputPath.isEmpty() ? defaultPhotoPath() : outputPath;
     QDir().mkpath(QFileInfo(path).absolutePath());
     if (!session_->capturePhoto(path.toStdString()))
@@ -699,7 +713,7 @@ void Camera2Bridge::setFocusPoint(float x, float y)
 }
 
 void Camera2Bridge::setTorch(bool on) { if (session_) session_->setTorch(on); }
-void Camera2Bridge::setFlashMode(int mode) { if (session_) session_->setFlashMode(mode); }
+void Camera2Bridge::setFlashMode(int mode) { flashMode_ = mode; if (session_) session_->setFlashMode(mode); }
 
 void Camera2Bridge::setWhiteBalanceMode(int appMode)
 {

@@ -183,6 +183,7 @@ public:
     void  setZoomRatio(float ratio);                       // 1.0 .. maxZoomRatio()
     void  setTorch(bool on);
     void  setFlashMode(int mode);                          // 0=off, 1=on, 2=auto (per-shot)
+    void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
     float maxZoomRatio() const { return 4.0f; }            // this device reports 4x
 

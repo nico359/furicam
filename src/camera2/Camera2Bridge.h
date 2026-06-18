@@ -251,6 +251,7 @@ private:
     void recomputePreviewAspect();    // previewAspectRatio_ + cropScale from still aspect
     void effectiveCaptureSize(int& w, int& h);   // chosen still size, else sensor max
     void onPhotoCaptured(const QString& path, bool ok);   // single + HDR-burst routing
+    void doSingleCapture(const QString& outputPath);      // one still (after any precapture)
     void captureNextHdrFrame();
     void finishHdrBurst();            // fuse the burst on a worker thread
     void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
@@ -299,6 +300,7 @@ private:
     bool              hdrBurstActive_ = false;
     QStringList       hdrPaths_;
     QString           hdrFinalPath_;
+    int               flashMode_      = 0;   // 0=off 1=on 2=auto (mirrors the engine)
 
     // Photo / video bookkeeping.
     QString        lastPhotoPath_;
