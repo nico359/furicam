@@ -90,10 +90,11 @@ Item {
         for (var i = 0; i < res.length; i++) {
             var w = res[i].width
             var h = res[i].height
+            var g = gcd(w, h)
             var mp = Math.round((w * h) / 100000) / 10
             videoResModel.append({
                 "resWidth": w, "resHeight": h,
-                "label": mp + " MP (" + w + "×" + h + ")"
+                "label": mp + " MP (" + w + "×" + h + ")  " + (w / g) + ":" + (h / g)
             })
         }
     }
