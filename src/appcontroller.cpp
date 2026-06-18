@@ -127,8 +127,8 @@ void AppController::initializeSettings()
 void AppController::createDirectories()
 {
     if (m_fileManager) {
-        m_fileManager->createDirectory(QString("/Pictures/furicam2"));
-        m_fileManager->createDirectory(QString("/Videos/furicam2"));
+        m_fileManager->createDirectory(QString("/Pictures/furicam"));
+        m_fileManager->createDirectory(QString("/Videos/furicam"));
     }
 }
 

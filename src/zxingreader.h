@@ -8,15 +8,6 @@
 
 #include <ReadBarcode.h>
 
-// Compatibility shim: zxing-cpp 2.x renamed ZXing::Result -> ZXing::Barcode
-// (and the vector alias Results -> Barcodes). The Barcode type retains the
-// same `isValid()` / accessor API the source uses, so a plain typedef is
-// enough to keep the old code building against the new header.
-namespace ZXing {
-    using Result = Barcode;
-    using Results = Barcodes;
-}
-
 #include <QImage>
 #include <QDebug>
 #include <QMetaType>
@@ -119,7 +110,7 @@ public:
 
 	explicit Result(ZXing::Result&& r) : ZXing::Result(std::move(r)) {
 		_text = QString::fromStdString(ZXing::Result::text());
-		_bytes = QByteArray(reinterpret_cast<const char*>(ZXing::Result::bytes().data()), static_cast<int>(ZXing::Result::bytes().size()));
+		_bytes = QByteArray(reinterpret_cast<const char*>(ZXing::Result::bytes().data()), Size(ZXing::Result::bytes()));
 		auto& pos = ZXing::Result::position();
 		auto qp = [&pos](int i) { return QPoint(pos[i].x, pos[i].y); };
 		_position = {qp(0), qp(1), qp(2), qp(3)};

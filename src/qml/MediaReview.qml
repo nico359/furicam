@@ -21,8 +21,8 @@ Rectangle {
     property var lastImg: index == -1 ? "" : imgModel.get(viewRect.index, "fileUrl")
     property string currentFileUrl: viewRect.index === -1 || imgModel.get(viewRect.index, "fileUrl") === undefined ? "" : imgModel.get(viewRect.index, "fileUrl").toString()
     property var folder: cslate.state == "VideoCapture" ?
-                         StandardPaths.writableLocation(StandardPaths.MoviesLocation) + "/furicam2" :
-                         StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam2"
+                         StandardPaths.writableLocation(StandardPaths.MoviesLocation) + "/furicam" :
+                         StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam"
     // Internal toggle used by refresh() to force FolderListModel rescan.
     property bool _refreshClearing: false
     property var deletePopUp: "closed"

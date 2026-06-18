@@ -1,17 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2024 Furi Labs
-// Copyright (C) 2026 Sean Pollard <spollard08@gmail.com>
 //
-// Camera.qml — the camera item.  Rewritten to drive the Camera2 engine
-// (Camera2Bridge) instead of the QtMultimedia Camera + gst-droid pipeline,
-// while keeping the EXACT contract main.qml depends on (the handle*/set*
-// functions, the resolutionModel/currentRes*/maxZoom/currentZoom properties,
-// and the photoSaved() signal).  main.qml is unchanged.
-//
-// QtMultimedia is still imported, but ONLY for its enum *values* (Camera.FlashOff,
-// Camera.FrontFace, Camera.FocusContinuous, …) that main.qml passes in — no
-// QtMultimedia Camera/VideoOutput is instantiated here anymore.
+// Authors:
+// Joaquin Philco <joaquinphilco@gmail.com>
 
+import QtQuick 2.0
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Window 2.12
@@ -20,314 +13,445 @@ import QtMultimedia 5.15
 import QtQuick.Layouts 1.15
 import Qt.labs.settings 1.0
 import Qt.labs.platform 1.1
+import ZXing 1.0
 import FuriCam 1.0
+
 
 Item {
     id: cameraItem
     width: 400
     height: 800
 
+    property alias cam: camGst
     property int lockedVideoRotation: 0
 
     property alias resolutionModel: resModel
     property int currentResWidth: 0
     property int currentResHeight: 0
 
-    // Zoom is exposed in the legacy "slider value" model main.qml expects:
-    //   maxZoom is the slider range, currentZoom is the slider value, and the
-    //   magnification label main.qml shows is 1 + (currentZoom/maxZoom)*3.
-    property real currentZoom: 0
-    property real maxZoom: cam2.ready ? cam2.maxZoom() : 0
+    property real currentZoom: camera.digitalZoom
+    property real maxZoom: camera.cameraStatus == Camera.ActiveStatus
+                           ? camera.maximumDigitalZoom : 0
 
-    property int  colorTemperature: 0
-    property bool frontActive: false
+    property int colorTemperature: 0
 
-    // Emitted whenever a final photo has been saved and is ready for the gallery.
+    // Emitted whenever a final image (regular or HDR) has been fully saved
+    // and is ready to appear in the gallery.  Connected in main.qml's
+    // connectSignals() so the gallery can refresh where mediaView is in scope.
     signal photoSaved()
 
-    // Kept instantiated for compatibility; HDR/metering are simplified for the
-    // Camera2 path (single capture).  TODO: HDR via Camera2 exposure bracketing.
-    HdrProcessor      { id: hdrProcessor }
-    MeteringController { id: meteringController }
+    function setColorTemperature(temp) {
+        // Unused — kept for compatibility
+        colorTemperature = temp
+    }
 
-    ListModel { id: resModel }
+    function setWhiteBalanceMode(mode) {
+        whiteBalance.setMode(mode)
+    }
 
-    function setColorTemperature(temp) { colorTemperature = temp }
 
-    function setWhiteBalanceMode(mode) { cam2.setWhiteBalanceMode(mode) }
+    WhiteBalanceController {
+        id: whiteBalance
+    }
 
-    function gcd(a, b) { return b == 0 ? a : gcd(b, a % b) }
+    MeteringController {
+        id: meteringController
+    }
 
-    // Populate the photo-resolution picker from the engine's JPEG output sizes.
-    function fnAspectRatio() {
-        resModel.clear()
-        var res = cam2.availableResolutions()
-        for (var i = 0; i < res.length; i++) {
-            var w = res[i].width
-            var h = res[i].height
-            var g = gcd(w, h)
-            var mp = Math.round((w * h) / 100000) / 10
-            resModel.append({
-                "resWidth": w, "resHeight": h,
-                "aspectRatio": (w / g) + ":" + (h / g),
-                "mp": mp, "label": mp + " MP (" + w + "×" + h + ")  " + (w / g) + ":" + (h / g)
-            })
+    // ── HDR burst state ──────────────────────────────────────────────────────
+    HdrProcessor {
+        id: hdrProcessor
+    }
+
+    property bool   hdrBurstActive:  false
+    property var    hdrFramePaths:   []
+    property int    hdrFrameIndex:   0
+    // Metering regions for the 3-frame bracket in normalised [0,1] coordinates:
+    //   frame 0 → top of frame (bright/sky) → AE underexposes  → dark frame
+    //   frame 1 → centre                    → AE base exposure → normal frame
+    //   frame 2 → bottom of frame (shadow)  → AE overexposes   → bright frame
+    readonly property var hdrMeteringPoints: [
+        { x: 0.5, y: 0.1 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.5, y: 0.9 }
+    ]
+    // Relative path for fileManager.createDirectory (which prepends the home dir).
+    readonly property string hdrBurstRelDir: "/Pictures/furicam/.burst"
+    // Absolute path for captureToLocation and processHdrBurst.
+    // StandardPaths returns a file:/// URL on this platform; strip the scheme.
+    readonly property string hdrBurstAbsDir: StandardPaths.writableLocation(StandardPaths.PicturesLocation).toString().replace("file://", "") + "/furicam/.burst"
+
+    Timer {
+        id: hdrCaptureTimer
+        interval: 200  // ms between burst frames — fast for good alignment
+        repeat: false
+        onTriggered: camera.imageCapture.captureToLocation(hdrBurstAbsDir + "/burst_" + hdrFrameIndex + ".jpg")
+    }
+
+    ListModel {
+        id: resModel
+    }
+
+    function gcd(a, b) {
+        if (b == 0) {
+            return a;
+        } else {
+            return gcd(b, a % b);
         }
-        // Default to the largest (first) size until the user picks one.
-        if (res.length > 0 && currentResWidth === 0) {
-            currentResWidth = res[0].width
-            currentResHeight = res[0].height
+    }
+
+    function fnAspectRatio() {
+        var maxResolution = {width: 0, height: 0};
+        var new43 = 0;
+        var new169 = 0;
+
+        resModel.clear();
+
+        for (var p in camera.imageCapture.supportedResolutions) {
+            var res = camera.imageCapture.supportedResolutions[p];
+
+            var gcdValue = gcd(res.width, res.height);
+            var aspectRatio = (res.width / gcdValue) + ":" + (res.height / gcdValue);
+            var mp = Math.round((res.width * res.height) / 100000) / 10;
+
+            resModel.append({
+                "resWidth": res.width,
+                "resHeight": res.height,
+                "aspectRatio": aspectRatio,
+                "mp": mp,
+                "label": mp + " MP (" + res.width + "×" + res.height + ") " + aspectRatio
+            });
+
+            if (res.width * res.height > maxResolution.width * maxResolution.height) {
+                maxResolution = res;
+            }
+
+            if (aspectRatio === "4:3" && !new43) {
+                new43 = 1;
+                camera.firstFourThreeResolution = res;
+            }
+
+            if (aspectRatio === "16:9" && !new169) {
+                new169 = 1;
+                camera.firstSixteenNineResolution = res;
+            }
+        }
+
+        // Apply stored resolution if available
+        var storedW = settings.cameras[camera.deviceId] ? settings.cameras[camera.deviceId].resWidth : 0;
+        var storedH = settings.cameras[camera.deviceId] ? settings.cameras[camera.deviceId].resHeight : 0;
+
+        if (storedW > 0 && storedH > 0) {
+            // Verify the stored resolution is still valid
+            var found = false;
+            for (var i = 0; i < camera.imageCapture.supportedResolutions.length; i++) {
+                var sr = camera.imageCapture.supportedResolutions[i];
+                if (sr.width === storedW && sr.height === storedH) {
+                    camera.imageCapture.resolution = Qt.size(storedW, storedH);
+                    currentResWidth = storedW;
+                    currentResHeight = storedH;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                // Fallback to aspect ratio preference
+                if (camera.aspWide && camera.firstSixteenNineResolution != undefined) {
+                    camera.imageCapture.resolution = camera.firstSixteenNineResolution;
+                } else if (camera.firstFourThreeResolution != undefined) {
+                    camera.imageCapture.resolution = camera.firstFourThreeResolution;
+                }
+            }
+        } else if (camera.aspWide && camera.firstSixteenNineResolution != undefined) {
+            camera.imageCapture.resolution = camera.firstSixteenNineResolution;
+        } else {
+            if (camera.firstFourThreeResolution != undefined) {
+                camera.imageCapture.resolution = camera.firstFourThreeResolution;
+            }
+        }
+
+        // Track the applied resolution
+        if (camera.imageCapture.resolution.width > 0) {
+            currentResWidth = camera.imageCapture.resolution.width;
+            currentResHeight = camera.imageCapture.resolution.height;
+        }
+
+        if (settings.cameras[camera.deviceId] && settings.cameras[camera.deviceId].resolution !== undefined && camera.imageCapture.supportedResolutions[0] != undefined) {
+            settings.cameras[camera.deviceId].resolution = Math.round(
+                (camera.imageCapture.supportedResolutions[0].width * camera.imageCapture.supportedResolutions[0].height) / 1000000
+            );
         }
     }
 
     function setResolution(width, height) {
-        currentResWidth = width
-        currentResHeight = height
-        if (settings.cameras && settings.cameras[settings.cameraId]) {
-            settings.cameras[settings.cameraId].resWidth = width
-            settings.cameras[settings.cameraId].resHeight = height
+        camera.imageCapture.resolution = Qt.size(width, height);
+        currentResWidth = width;
+        currentResHeight = height;
+        if (settings.cameras[camera.deviceId]) {
+            settings.cameras[camera.deviceId].resWidth = width;
+            settings.cameras[camera.deviceId].resHeight = height;
+            var g = gcd(width, height);
+            settings.aspWide = ((width / g) === 16 && (height / g) === 9) ? 1 : 0;
         }
-        cam2.setResolution(width, height)   // restarts the camera at the new still size
     }
 
     function handleSetFlashState(flashState) {
-        // No-op: the flash mode is applied via the reactive `flashMode` binding on
-        // cam2 (settings.flashMode → engine), which also covers startup.  Doing an
-        // imperative cam2.setFlashMode here would break that binding.
+        camera.flash.mode = flashState;
     }
 
     function handleCameraTakeShot() {
         pinchArea.enabled = true
-        if (settings.soundOn === 1)
-            sound.play()
-        if (mediaView.index < 0)
-            mediaView.folder = StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam2"
-        // Single full-resolution capture; the engine writes the JPEG and emits
-        // photoSaved(path), handled in onPhotoSaved below.
-        cam2.capturePhoto("")
+        if (settings.hdrEnabled && !hdrBurstActive) {
+            hdrBurstActive  = true
+            hdrFramePaths   = []
+            hdrFrameIndex   = 0
+            fileManager.createDirectory(hdrBurstRelDir)
+            hdrProcessor.cleanBurstDir(hdrBurstAbsDir)
+            // Metering shift is best-effort — may not work on all devices.
+            meteringController.setMeteringPoint(hdrMeteringPoints[0].x, hdrMeteringPoints[0].y)
+            hdrCaptureTimer.start()
+        } else {
+            camera.imageCapture.capture()
+        }
     }
 
-    function handleCameraTakeVideo() { handleVideoRecording() }
+    function handleCameraTakeVideo() {
+        handleVideoRecording()
+    }
 
     function handleCameraChangeResolution(resolution) {
-        // 4:3 / 16:9 toggle — cosmetic until engine capture-size selection lands.
+        if (camera !== null) {
+            if (resolution == "4:3") {
+                camera.imageCapture.resolution = camera.firstFourThreeResolution
+            }
+            else if (resolution == "16:9") {
+                camera.imageCapture.resolution = camera.firstSixteenNineResolution
+            }
+        }
     }
 
     function handleStopCamera() {
-        cam2.stopCamera()
-        cameraLoader.active = false
+        if (camera !== null && camera !== undefined) {
+            camera.stop();
+            cameraLoader.active = false;
+        }
     }
 
-    function handleStartCamera() { cam2.startCamera() }
+    function handleStartCamera() {
+        camera.start();
+    }
 
     function handleSetFocusMode(focusMode) {
-        // FocusContinuous -> continuous AF + AE unlocked; FocusAuto (the app's
-        // "locked" state) -> hold focus + lock AE.
-        if (focusMode === Camera.FocusContinuous) {
-            cam2.setAutoFocus()
-            cam2.setAELock(false)
-        } else {
-            cam2.setFocusLock(true)
-            cam2.setAELock(true)
-        }
+        camera.focus.focusMode = focusMode;
     }
 
     function handleSetFocusPointMode(focusPointMode) {
-        // The focus region is driven by the tap handler (cam2.setFocusPoint).
+        camera.focus.focusPointMode = focusPointMode;
     }
 
     function handleSetCameraAspWide(aspWide) {
-        // Aspect-ratio preference is cosmetic for the Camera2 capture path.
+        if (camera !== null) {
+            camera.aspWide = aspWide;
+        }
     }
 
     function handleSetDeviceID(deviceIdToSet) {
-        var cams = cam2.availableCameras()
-        var facing = (cams[deviceIdToSet] !== undefined) ? cams[deviceIdToSet].facing : 1  // 0=front,1=back
-        // Keep the gesture/mirror state in sync first so the cameraPosition change
-        // below doesn't trigger applyCameraPosition() into a redundant switch.
-        frontActive = (facing === 0)
-        settings.cameraPosition = (facing === 0) ? Camera.FrontFace : Camera.BackFace
-        cam2.selectCamera(deviceIdToSet)
+        camera.deviceId = deviceIdToSet
+        settings.deviceId = deviceIdToSet
     }
 
     function handleSetZoom(zoomLevel) {
-        var z = Math.max(0, Math.min(zoomLevel, maxZoom))
-        currentZoom = z
-        var ratio = 1.0 + (maxZoom > 0 ? (z / maxZoom) : 0) * (cam2.maxZoom() - 1.0)
-        cam2.setZoom(ratio)
+        camera.setDigitalZoom(Math.max(0, Math.min(zoomLevel, camera.maximumDigitalZoom)))
     }
 
-    // Populate the camera selector from the engine's full list (incl. the
-    // secondary back/macro camera), keyed by camera index.
     function initializeCameraList() {
-        allCamerasModel.clear()
-        window.backCameras = 0
-        window.frontCameras = 0
-        var cams = cam2.availableCameras()
-        for (var i = 0; i < cams.length; i++) {
-            var c = cams[i]   // {index, facing(0=front,1=back), megapixels}
-            allCamerasModel.append({
-                "cameraId": c.index, "index": c.index,
-                "position": (c.facing === 1) ? Camera.BackFace : Camera.FrontFace
-            })
-            if (settings.cameras[c.index])
-                settings.cameras[c.index].resolution = c.megapixels
-            if (c.facing === 1) window.backCameras += 1
-            else window.frontCameras += 1
+        var blacklist = []
+
+        if (settingsCommon.blacklist !== "") {
+            blacklist = settingsCommon.blacklist.split(',');
         }
-    }
 
-    function applyCameraPosition() {
-        var wantFront = (settings.cameraPosition === Camera.FrontFace)
-        if (wantFront !== frontActive) {
-            cam2.switchCamera()
-            frontActive = wantFront
-        }
-    }
+        allCamerasModel.clear();
 
-    // Enter/leave video mode, setting the recording size atomically BEFORE video
-    // mode so the encoder is built at the right resolution from the start.
-    function applyVideoMode() {
-        if (typeof cslate === "undefined" || !cam2.ready)
-            return
-        if (cslate.state === "VideoCapture") {
-            cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)
-            cam2.videoMode = true
-        } else {
-            cam2.videoMode = false
-        }
-    }
+        for (var i = 0; i < QtMultimedia.availableCameras.length; i++) {
+            var cameraInfo = QtMultimedia.availableCameras[i];
+            var isBlacklisted = false;
 
-    function handleVideoRecording() {
-        if (!window.videoCaptured) {
-            // Lock in the current size right before recording (also covers a
-            // resolution change made while already in video mode).
-            cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)
-            cam2.startRecording("")   // attaches the pre-warmed mic, finalizes an MP4
-            window.videoCaptured = true
-        } else {
-            cam2.stopRecording()
-            window.videoCaptured = false
-        }
-    }
+            for (var p in blacklist) {
+                if (blacklist[p] == cameraInfo.deviceId) {
+                    console.log("Camera with the id:", blacklist[p], "is blacklisted, not adding to camera list!");
+                    isBlacklisted = true;
+                    break;
+                }
+            }
 
-    // Post-process + announce a saved photo (fires on the GUI thread).
-    function onCam2PhotoSaved(path) {
-        if (settings.colorCorrectionEnabled) {
-            fileManager.applyColorCorrection(path,
-                settings.colorCorrectionRed, settings.colorCorrectionGreen,
-                settings.colorCorrectionBlue, settings.colorCorrectionSaturation)
-        }
-        if (settings.jpegQuality < 100)
-            fileManager.reencodeJpeg(path, settings.jpegQuality)
-        if (window.locationAvailable === 1)
-            fileManager.appendGPSMetadata(path)
-        photoSaved()
-    }
+            if (isBlacklisted) {
+                continue;
+            }
 
-    // React to camera-position changes (gestures set settings.cameraPosition).
-    Connections {
-        target: settings
-        function onCameraPositionChanged() { cameraItem.applyCameraPosition() }
-    }
-
-    // Enter/leave video mode as the photo/video tab changes.
-    Connections {
-        target: cslate
-        function onStateChanged() { cameraItem.applyVideoMode() }
-    }
-
-    // ── Live QR scanning ─────────────────────────────────────────────────────
-    // The engine decodes QR codes from the analysis stream (photo mode) and the
-    // bridge emits qrDetected(text, points).  Show a tappable result banner;
-    // tapping it parses the code and offers the matching action (open/connect/copy).
-    property string qrText: ""
-    property var    qrPoints: []
-    property bool   qrVisible: false
-
-    Connections {
-        target: cam2
-        function onQrDetected(text, points) {
-            cameraItem.qrText = text
-            cameraItem.qrPoints = points
-            cameraItem.qrVisible = true
-            qrClearTimer.restart()
-        }
-    }
-    Timer {
-        id: qrClearTimer
-        interval: 1500
-        onTriggered: cameraItem.qrVisible = false
-    }
-
-    function handleQrTap() {
-        if (!qrText.length)
-            return
-        var qrType = QRCodeHandler.parseQrString(qrText)
-        if (qrType === "URL") {
-            window.openPopup("Open URL?", qrText,
-                [{text: "Cancel"}, {text: "Copy"}, {text: "Open", isPrimary: true}], qrText)
-        } else if (qrType === "WIFI") {
-            var wifiID = QRCodeHandler.getWifiId()
-            window.openPopup("Connect to Network?", wifiID,
-                [{text: "Cancel"}, {text: "Connect", isPrimary: true}], wifiID)
-        } else {
-            window.openPopup("QR Code Detected", "Content: " + qrText,
-                [{text: "OK", isPrimary: true}, {text: "Copy"}], qrText)
-        }
-    }
-
-
-    // ── The live preview: the Camera2 engine item ───────────────────────────
-    // Dark backdrop behind the letterboxed preview (fills the aspect-ratio bars).
-    Rectangle {
-        anchors.fill: parent
-        color: "black"
-        z: -1
-    }
-
-    Camera2Bridge {
-        id: cam2
-        // Letterbox the preview to its capture-matched aspect (WYSIWYG).  The aspect
-        // itself is decided in the bridge (mid layer); previewAspectRatio is the
-        // on-screen width/height.  Children (grid/focus/zoom) ride along for free.
-        property real dispAspect: previewAspectRatio > 0 ? previewAspectRatio : (9.0 / 16.0)
-        width: Math.min(parent.width, parent.height * dispAspect)
-        height: width / dispAspect
-        anchors.centerIn: parent
-        hdrEnabled: settings.hdrEnabled   // HDR burst+fuse handled in the bridge
-        // Flash mode tracks the GUI setting reactively (applied on startup + every
-        // change), mapping the QtMultimedia enum to the engine's 0=off/1=on/2=auto.
-        flashMode: (settings.flashMode === Camera.FlashOn) ? 1
-                 : (settings.flashMode === Camera.FlashAuto) ? 2 : 0
-
-        // Video mode + recording size are applied atomically at discrete moments
-        // (entering video mode, starting a recording) via applyVideoMode() /
-        // handleVideoRecording() — reactive split bindings churned and could
-        // produce a mismatched (e.g. 1920x2160) size.
-        Component.onCompleted: cam2.startCamera()
-
-        onReadyChanged: {
-            if (ready) {
-                focusState.state = "Default"
-                cameraItem.fnAspectRatio()
-                cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
-                // Sync GUI position state to the camera that actually opened (bridge
-                // ground truth) — the flash button and other UI gate on
-                // settings.cameraPosition, and reading frontActive here would race
-                // with the switch that triggered this signal.
-                frontActive = (cam2.currentFacing() === 0)   // 0=front
-                settings.cameraPosition = frontActive ? Camera.FrontFace : Camera.BackFace
+            if (cameraInfo.position === Camera.BackFace) {
+                allCamerasModel.append({"cameraId": cameraInfo.deviceId, "index": i, "position": cameraInfo.position});
+                window.backCameras += 1;
+            } else if (cameraInfo.position === Camera.FrontFace) {
+                allCamerasModel.insert(0, {"cameraId": cameraInfo.deviceId, "index": i, "position": cameraInfo.position});
+                window.frontCameras += 1;
             }
         }
-        onCameraError: {
-            cameraItem.errorBannerText = message
-            cameraItem.errorBannerVisible = true
-            errorBannerTimer.restart()
-        }
-        onPhotoSaved: cameraItem.onCam2PhotoSaved(path)
+    }
 
-        // Live color correction, same shader the legacy path used.
+    Camera {
+        id: camera
+        objectName: "camera"
+        captureMode: Camera.CaptureStillImage
+
+        property variant firstFourThreeResolution
+        property variant firstSixteenNineResolution
+        property var aspWide: 0
+
+        position: settings.cameraPosition
+
+        deviceId: settings.cameraId
+
+        focus {
+            focusMode: settings.focusMode
+            focusPointMode: settings.focusPointMode
+        }
+
+        imageProcessing {
+            whiteBalanceMode: CameraImageProcessing.WhiteBalanceAuto
+        }
+
+        flash {
+            mode: settings.flashMode
+        }
+
+        imageCapture {
+            onImageCaptured: {
+                if (settings.soundOn === 1) {
+                    sound.play()
+                }
+
+                if (mediaView.index < 0) {
+                    mediaView.folder = StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam"
+                }
+            }
+
+            onImageSaved: {
+                if (hdrBurstActive) {
+                    // Collect the raw burst frame — skip normal post-processing.
+                    var paths = hdrFramePaths
+                    paths.push(path)
+                    hdrFramePaths = paths
+                    hdrFrameIndex++
+
+                    if (hdrFrameIndex < hdrMeteringPoints.length) {
+                        // Shift metering to the next region and wait for AE to settle.
+                        meteringController.setMeteringPoint(hdrMeteringPoints[hdrFrameIndex].x, hdrMeteringPoints[hdrFrameIndex].y)
+                        hdrCaptureTimer.start()
+                    } else {
+                        // All frames captured.
+                        // Reset state FIRST so a failure below doesn't leave it stuck.
+                        hdrBurstActive = false
+                        meteringController.resetMetering()
+
+                        var picturesDir = StandardPaths.writableLocation(StandardPaths.PicturesLocation).toString().replace("file://", "") + "/furicam"
+                        var resultPath = hdrProcessor.processHdrBurst(hdrFramePaths, picturesDir)
+                        if (resultPath !== "") {
+                            if (settings.colorCorrectionEnabled) {
+                                fileManager.applyColorCorrection(resultPath,
+                                    settings.colorCorrectionRed,
+                                    settings.colorCorrectionGreen,
+                                    settings.colorCorrectionBlue,
+                                    settings.colorCorrectionSaturation);
+                            }
+                            if (settings.jpegQuality < 100) {
+                                fileManager.reencodeJpeg(resultPath, settings.jpegQuality);
+                            }
+                            if (window.locationAvailable === 1) {
+                                fileManager.appendGPSMetadata(resultPath);
+                            }
+                        }
+                        photoSaved()
+                    }
+                } else {
+                    if (settings.colorCorrectionEnabled) {
+                        fileManager.applyColorCorrection(path,
+                            settings.colorCorrectionRed,
+                            settings.colorCorrectionGreen,
+                            settings.colorCorrectionBlue,
+                            settings.colorCorrectionSaturation);
+                    }
+                    if (settings.jpegQuality < 100) {
+                        fileManager.reencodeJpeg(path, settings.jpegQuality);
+                    }
+                    if (window.locationAvailable === 1 ) {
+                        fileManager.appendGPSMetadata(path);
+                    }
+                    photoSaved()
+                }
+            }
+        }
+
+        Component.onCompleted: {
+            camera.stop()
+            var currentCam = settings.cameraId
+            for (var i = 0; i < QtMultimedia.availableCameras.length; i++) {
+                if (settings.cameras[i].resolution == 0)
+                    camera.deviceId = i
+            }
+
+            if (settings.aspWide == 1 || settings.aspWide == 0) {
+                camera.aspWide = settings.aspWide
+            }
+
+            cameraItem.fnAspectRatio()
+
+            camera.deviceId = currentCam
+            camera.start()
+
+            settings.cameraPosition = camera.position
+        }
+
+        onCameraStatusChanged: {
+            if (camera.cameraStatus == Camera.LoadedStatus) {
+                if (resModel.count === 0) {
+                    cameraItem.fnAspectRatio()
+                }
+            } else if (camera.cameraStatus == Camera.ActiveStatus) {
+                focusState.state = "Default"
+                camera.focus.focusMode = Camera.FocusContinuous
+                camera.focus.focusPointMode = Camera.FocusPointCenter
+            }
+        }
+
+        onDeviceIdChanged: {
+            resModel.clear();
+            settings.setValue("cameraId", deviceId);
+            camera.setDigitalZoom(1.0)
+        }
+
+        onAspWideChanged: {
+            settings.setValue("aspWide", aspWide);
+        }
+
+        onPositionChanged: {
+            settings.cameraId = deviceId
+        }
+    }
+
+    VideoOutput {
+        id: viewfinder
+
+        property var gcdValue: gcd(camera.viewfinder.resolution.width, camera.viewfinder.resolution.height)
+
+        width: parent.width
+        height: parent.height
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: gcdValue === "16:9" ? -30 * window.scalingRatio : -60 * window.scalingRatio
+        source: camera
+        autoOrientation: true
+        filters: cslate.state === "PhotoCapture" ? [qrCodeComponent.qrcode] : []
+
         layer.enabled: settings.colorCorrectionEnabled
         layer.effect: ShaderEffect {
             property real redScale:   settings.colorCorrectionRed
@@ -339,9 +463,12 @@ Item {
 
         PinchArea {
             id: pinchArea
-            anchors.fill: parent
+            x: parent.width / 2 - parent.contentRect.width / 2
+            y: parent.height / 2 - parent.contentRect.height / 2
+            width: parent.contentRect.width
+            height: parent.contentRect.height
             pinch.target: camZoom
-            pinch.maximumScale: (cameraItem.maxZoom > 0 ? cameraItem.maxZoom : 1) / camZoom.zoomFactor
+            pinch.maximumScale: camera.maximumDigitalZoom / camZoom.zoomFactor
             pinch.minimumScale: 0
             enabled: !mediaView.visible && !window.videoCaptured
 
@@ -368,20 +495,20 @@ Item {
                     var currentTime = new Date().getTime();
                     if (currentTime - lastTapTime < doubleTapInterval) {
                         window.blurView = 1;
-                        settings.cameraPosition = settings.cameraPosition === Camera.BackFace ? Camera.FrontFace : Camera.BackFace;
-                        settings.flashMode = settings.cameraPosition === Camera.FrontFace ? Camera.FlashOff : settings.flashMode;
+                        settings.cameraPosition = camera.position === Camera.BackFace ? Camera.FrontFace : Camera.BackFace;
+                        settings.flashMode = camera.position === Camera.FrontFace ? Camera.FlashOff : settings.flashMode;
                         cameraSwitchDelay.start();
                         lastTapTime = 0;
                     } else {
                         lastTapTime = currentTime;
                         if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > swipeThreshold) {
-                            if (deltaY > 0) { // Swipe down
+                            if (deltaY > 0) { // Swipe down logic
                                 configBarDrawer.open()
-                            } else { // Swipe up — flip camera
+                            } else { // Swipe up logic
                                 window.blurView = 1;
-                                settings.flashMode = Camera.FlashOff
-                                settings.cameraPosition = settings.cameraPosition === Camera.BackFace ? Camera.FrontFace : Camera.BackFace;
-                                settings.flashMode = settings.cameraPosition === Camera.FrontFace ? Camera.FlashOff : settings.flashMode;
+                                settings.flashMode= Camera.FlashOff
+                                settings.cameraPosition = camera.position === Camera.BackFace ? Camera.FrontFace : Camera.BackFace;
+                                settings.flashMode = camera.position === Camera.FrontFace ? Camera.FlashOff : settings.flashMode;
                                 cameraSwitchDelay.start();
                             }
                         } else if (Math.abs(deltaX) > swipeThreshold) {
@@ -394,8 +521,25 @@ Item {
                                 window.swipeDirection = 1
                                 swappingDelay.start()
                             }
-                        } else { // Tap — focus here
-                            var relativePoint = Qt.point(mouse.x / width, mouse.y / height)
+                        } else { // Touch
+                            var relativePoint;
+
+                            switch (viewfinder.orientation) {
+                                case 0:
+                                    relativePoint = Qt.point(mouse.x / viewfinder.contentRect.width, mouse.y / viewfinder.contentRect.height)
+                                    break
+                                case 90:
+                                    relativePoint = Qt.point(1 - (mouse.y / viewfinder.contentRect.height), mouse.x / viewfinder.contentRect.width)
+                                    break
+                                case 180:
+                                    absolutePoint = Qt.point(1 - (mouse.x / viewfinder.contentRect.width), 1 - (mouse.y / viewfinder.contentRect.height))
+                                    break
+                                case 270:
+                                    relativePoint = Qt.point(mouse.y / viewfinder.contentRect.height, 1 - (mouse.x / viewfinder.contentRect.width))
+                                    break
+                                default:
+                                    console.error("wtf")
+                            }
 
                             if (aefLockTimer.running) {
                                 focusState.state = "TargetLocked"
@@ -406,7 +550,7 @@ Item {
                             }
 
                             if (window.aeflock !== "AEFLockOn" || focusState.state === "TargetLocked") {
-                                cam2.setFocusPoint(relativePoint.x, relativePoint.y)
+                                camera.focus.customFocusPoint = relativePoint
                                 focusPointRect.width = 60 * window.scalingRatio
                                 focusPointRect.height = 60 * window.scalingRatio
                                 window.focusPointVisible = true
@@ -429,7 +573,11 @@ Item {
 
             Rectangle {
                 id: focusPointRect
-                border { width: 2; color: "#FDD017" }
+                border {
+                    width: 2
+                    color: "#FDD017"
+                }
+
                 color: "transparent"
                 radius: 5 * window.scalingRatio
                 width: 80 * window.scalingRatio
@@ -450,10 +598,31 @@ Item {
                 visible: settings.gridEnabled === 1
                 enabled: false
                 z: 1
-                Rectangle { x: parent.width / 3;       width: 1; height: parent.height; color: "#50ffffff" }
-                Rectangle { x: parent.width * 2 / 3;   width: 1; height: parent.height; color: "#50ffffff" }
-                Rectangle { y: parent.height / 3;      width: parent.width; height: 1;  color: "#50ffffff" }
-                Rectangle { y: parent.height * 2 / 3;  width: parent.width; height: 1;  color: "#50ffffff" }
+
+                Rectangle {
+                    x: parent.width / 3
+                    width: 1
+                    height: parent.height
+                    color: "#50ffffff"
+                }
+                Rectangle {
+                    x: parent.width * 2 / 3
+                    width: 1
+                    height: parent.height
+                    color: "#50ffffff"
+                }
+                Rectangle {
+                    y: parent.height / 3
+                    width: parent.width
+                    height: 1
+                    color: "#50ffffff"
+                }
+                Rectangle {
+                    y: parent.height * 2 / 3
+                    width: parent.width
+                    height: 1
+                    color: "#50ffffff"
+                }
             }
 
             // Level indicator
@@ -466,14 +635,19 @@ Item {
                 rotation: window.levelAngle
                 enabled: false
                 z: 2
+
                 Rectangle {
                     anchors.centerIn: parent
                     width: parent.width
                     height: 2 * window.scalingRatio
                     color: window.isLevel ? "#4CAF50" : "#80ffffff"
                     radius: 1
-                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                    Behavior on color {
+                        ColorAnimation { duration: 200 }
+                    }
                 }
+
                 Rectangle {
                     anchors.centerIn: parent
                     width: 8 * window.scalingRatio
@@ -482,22 +656,101 @@ Item {
                     color: window.isLevel ? "#4CAF50" : "#80ffffff"
                     border.width: 1
                     border.color: window.isLevel ? "#388E3C" : "#40ffffff"
-                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                    Behavior on color {
+                        ColorAnimation { duration: 200 }
+                    }
                 }
             }
         }
 
-        // Dim overlay during transitions.
+        QrCode {
+            id: qrCodeComponent
+            viewfinder: viewfinder
+            openPopupFunction: openPopup
+        }
+
         Rectangle {
             anchors.fill: parent
             opacity: blurView ? 1 : 0
             color: "#40000000"
             visible: opacity != 0
-            Behavior on opacity { NumberAnimation { duration: 300 } }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 300
+                }
+            }
         }
     }
 
-    // ── Pipeline-error banner (kept for surfacing engine errors) ────────────
+    MediaPlayer {
+        id: camGst
+        autoPlay: false
+        videoOutput: viewfinder
+        property var backendId: 0
+        property string outputPath: StandardPaths.writableLocation(StandardPaths.MoviesLocation).toString().replace("file://","") +
+                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mkv"
+
+        property int vidW: settings.videoResWidth
+        property int vidH: settings.videoResHeight
+
+        property var backends: [
+            {
+                front: "gst-pipeline: droidcamsrc mode=2 camera-device=1 ! video/x-raw ! videoconvert ! qtvideosink",
+                frontRecord: "gst-pipeline: droidcamsrc camera_device=1 mode=2 ! tee name=t " +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! videoflip video-direction=2 ! qtvideosink " +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! " +
+                    (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
+                    "videoflip video-direction=auto " +
+                    "! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
+                    "autoaudiosrc ! queue ! audioconvert ! audioresample ! voaacenc bitrate=128000 ! aacparse ! mux. " +
+                    "matroskamux name=mux ! filesink location=" + outputPath,
+                back: "gst-pipeline: droidcamsrc mode=2 camera-device=" + camera.deviceId + " ! video/x-raw ! videoconvert ! qtvideosink",
+                backRecord:
+                    "gst-pipeline: droidcamsrc camera-device=" + camera.deviceId + " mode=2 ! tee name=t " +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH + " ! videoconvert ! qtvideosink " +
+                    "t. ! queue ! videoscale ! video/x-raw, width=" + vidW + ", height=" + vidH +
+                    " ! videoconvert ! " +
+                    (settings.colorCorrectionEnabled ? "videobalance hue=0.08 saturation=" + settings.colorCorrectionSaturation + " ! " : "") +
+                    "videoflip video-direction=" + cameraItem.lockedVideoRotation +
+                    " ! x264enc bitrate=" + settings.videoBitrate + " speed-preset=ultrafast tune=zerolatency ! video/x-h264, profile=baseline ! h264parse ! mux. " +
+                    "autoaudiosrc ! queue ! audioconvert ! audioresample ! voaacenc bitrate=128000 ! aacparse ! mux. " +
+                    "matroskamux name=mux ! filesink location=" + outputPath
+            }
+        ]
+
+        onError: {
+            console.log("FuriCam pipeline error:", camGst.error, camGst.errorString)
+            // Only treat the error as a real recording failure if we still
+            // thought we were recording. MediaPlayer.error fires routinely
+            // during teardown of a gst-pipeline: URI ("No valid frames
+            // decoded before end of stream", "Stream contains no data") —
+            // those are noise, not a failure. Without this gate every
+            // successful stop pops the banner.
+            if (window.videoCaptured) {
+                // Flip the flag first so finalizeMkv's blocking wait can't
+                // re-enter this handler if more errors fire during it.
+                window.videoCaptured = false
+                fileManager.finalizeMkv(camGst.outputPath)
+                camera.cameraState = Camera.UnloadedState
+                camera.start()
+                cameraItem.errorBannerText = camGst.errorString && camGst.errorString.length > 0
+                    ? ("Recording stopped: " + camGst.errorString)
+                    : "Recording stopped unexpectedly."
+                cameraItem.errorBannerVisible = true
+                errorBannerTimer.restart()
+            }
+            // Keep the backend-fallback hint in case more backends are added.
+            if (backendId + 1 in backends) {
+                backendId++;
+            }
+        }
+    }
+
+    // Lightweight banner shown when the recording pipeline errors out, so
+    // the user actually finds out instead of staring at a UI that keeps
+    // pretending to record.
     property bool errorBannerVisible: false
     property string errorBannerText: ""
     Timer {
@@ -538,61 +791,52 @@ Item {
         }
     }
 
-    // Pinch-zoom helper (drives handleSetZoom as the pinch scale changes).
+    function handleVideoRecording() {
+        cameraItem.lockedVideoRotation = window.currentVideoRotation
+        if (window.videoCaptured == false) {
+            camGst.outputPath = StandardPaths.writableLocation(StandardPaths.MoviesLocation).toString().replace("file://","") +
+                                            "/furicam/video" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmsszzz") + ".mkv"
+
+            if (camera.position === Camera.BackFace) {
+                camGst.source = camGst.backends[camGst.backendId].backRecord;
+            } else {
+                camGst.source = camGst.backends[camGst.backendId].frontRecord;
+            }
+
+            camera.stop();
+
+            camGst.play();
+            window.videoCaptured = true;
+        } else {
+            // Mark "no longer recording" FIRST. camGst.stop() and the
+            // finalizeMkv QProcess wait both spin the QML event loop, which
+            // lets MediaPlayer.onError fire mid-teardown. Without flipping
+            // this flag up front the error handler would see
+            // videoCaptured=true and treat benign shutdown errors as a real
+            // recording failure.
+            window.videoCaptured = false;
+            var recordedPath = camGst.outputPath;
+            camGst.stop();
+            // matroskamux in the recording pipeline never receives EOS, so
+            // the on-disk MKV is missing its Duration / SeekHead / Cues.
+            // Re-mux it through mkvmerge to make it actually playable.
+            fileManager.finalizeMkv(recordedPath);
+            camera.cameraState = Camera.UnloadedState;
+            camera.start();
+        }
+    }
+
     Item {
         id: camZoom
         property real zoomFactor: 2.0
         property real zoom: 0
-        NumberAnimation on zoom { duration: 200; easing.type: Easing.InOutQuad }
-        onScaleChanged: cameraItem.handleSetZoom(scale * zoomFactor)
-    }
+        NumberAnimation on zoom {
+            duration: 200
+            easing.type: Easing.InOutQuad
+        }
 
-    // Box drawn around the detected QR code (tappable → action popup).
-    Item {
-        id: qrOverlay
-        z: 9000
-        anchors.fill: cam2   // map normalized QR points onto the letterboxed preview
-        visible: cameraItem.qrVisible && !mediaView.visible
-                 && (typeof cslate === "undefined" || cslate.state === "PhotoCapture")
-        property bool valid: cameraItem.qrPoints && cameraItem.qrPoints.length === 4
-        property real minX: valid ? Math.min(qrPoints[0].x, qrPoints[1].x, qrPoints[2].x, qrPoints[3].x) : 0
-        property real maxX: valid ? Math.max(qrPoints[0].x, qrPoints[1].x, qrPoints[2].x, qrPoints[3].x) : 0
-        property real minY: valid ? Math.min(qrPoints[0].y, qrPoints[1].y, qrPoints[2].y, qrPoints[3].y) : 0
-        property real maxY: valid ? Math.max(qrPoints[0].y, qrPoints[1].y, qrPoints[2].y, qrPoints[3].y) : 0
-
-        Rectangle {
-            id: qrBox
-            visible: qrOverlay.valid
-            x: qrOverlay.minX * qrOverlay.width
-            y: qrOverlay.minY * qrOverlay.height
-            width:  Math.max(40 * window.scalingRatio, (qrOverlay.maxX - qrOverlay.minX) * qrOverlay.width)
-            height: Math.max(40 * window.scalingRatio, (qrOverlay.maxY - qrOverlay.minY) * qrOverlay.height)
-            radius: 8 * window.scalingRatio
-            color: "#330099ff"
-            border.color: "#3399ff"
-            border.width: 3 * window.scalingRatio
-
-            // Decoded text label just above the box.
-            Rectangle {
-                anchors.bottom: parent.top
-                anchors.bottomMargin: 6 * window.scalingRatio
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.min(cameraItem.width - 24 * window.scalingRatio,
-                                qrLabel.implicitWidth + 24 * window.scalingRatio)
-                height: qrLabel.implicitHeight + 12 * window.scalingRatio
-                radius: 8 * window.scalingRatio
-                color: "#dd1d6fcf"
-                Text {
-                    id: qrLabel
-                    anchors.centerIn: parent
-                    width: parent.width - 16 * window.scalingRatio
-                    text: cameraItem.qrText
-                    color: "white"; font.pixelSize: 13 * window.scalingRatio
-                    elide: Text.ElideRight; maximumLineCount: 1
-                    horizontalAlignment: Text.AlignHCenter
-                }
-            }
-            MouseArea { anchors.fill: parent; onClicked: cameraItem.handleQrTap() }
+        onScaleChanged: {
+            camera.setDigitalZoom(scale * zoomFactor)
         }
     }
 
@@ -600,11 +844,15 @@ Item {
         id: vBlur
         anchors.fill: parent
         opacity: blurView ? 1 : 0
-        source: cam2
+        source: viewfinder
         radius: 128
         visible: opacity != 0
         transparentBorder: false
-        Behavior on opacity { NumberAnimation { duration: 300 } }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 300
+            }
+        }
     }
 
     Glow {
@@ -615,6 +863,10 @@ Item {
         color: "black"
         source: vBlur
         visible: opacity != 0
-        Behavior on opacity { NumberAnimation { duration: 300 } }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 300
+            }
+        }
     }
 }
