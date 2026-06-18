@@ -141,7 +141,6 @@ Item {
     }
 
     function handleSetDeviceID(deviceIdToSet) {
-        settings.deviceId = deviceIdToSet
         var cams = cam2.availableCameras()
         var facing = (cams[deviceIdToSet] !== undefined) ? cams[deviceIdToSet].facing : 1  // 0=front,1=back
         // Keep the gesture/mirror state in sync first so the cameraPosition change
