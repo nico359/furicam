@@ -54,6 +54,11 @@ public:
     bool open(int width, int height, int fps, int bitrate, int orientationDeg);
     bool isOpen() const { return codec_ != nullptr; }
 
+    // Update the MP4 rotation hint used by the NEXT beginClip(), so each clip can
+    // be tagged with the device orientation at the moment recording starts (the
+    // codec/surface persist across clips, but the hint is written per clip).
+    void setOrientation(int deg) { orientation_ = ((deg % 360) + 360) % 360; }
+
     // The codec input surface — add it as a capture request's video target.
     // Valid between open() and close().
     ANativeWindow* inputWindow() const { return inputWindow_; }

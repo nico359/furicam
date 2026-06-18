@@ -116,6 +116,13 @@ public:
         photoCallback_ = std::move(cb);
     }
 
+    // Current device rotation in degrees clockwise from the natural (portrait)
+    // orientation (0/90/180/270), e.g. fed from the accelerometer.  Used ONLY to
+    // tag captures (JPEG_ORIENTATION + MP4 rotation hint) so a landscape-held
+    // shot saves landscape; it does NOT rotate the preview.  Set it just before
+    // capturePhoto()/startRecording().
+    void setDeviceRotation(int degrees) { deviceRotation_.store(((degrees % 360) + 360) % 360); }
+
     // Receive luma frames from the analysis YUV stream (for QR scanning).  Called
     // on a camera thread; decode synchronously and marshal results yourself.  The
     // analysis stream exists only while previewing (photo mode), not recording.
@@ -293,6 +300,21 @@ private:
     int                        reqJpegW_     = 0;   // requested capture size (0 = max)
     int                        reqJpegH_     = 0;
     int                        openSensorOrientation_ = 0;
+    int                        openFacing_   = -1;   // ACAMERA_LENS_FACING_* of the open camera
+    std::atomic<int>           deviceRotation_ {0};  // device tilt for capture tagging only
+
+    // JPEG_ORIENTATION / MP4 rotation hint for the open camera at the current
+    // device rotation (Android's getJpegOrientation: + for back, - for front).
+    int captureOrientation() const
+    {
+        const int sensor = ((openSensorOrientation_ % 360) + 360) % 360;
+        const int device = ((deviceRotation_.load() % 360) + 360) % 360;
+        const int o = (openFacing_ == ACAMERA_LENS_FACING_FRONT)
+                          ? (sensor - device + 360)
+                          : (sensor + device);
+        return ((o % 360) + 360) % 360;
+    }
+
     std::mutex                 photoMutex_;
     std::string                pendingPhotoPath_;
     std::function<void(const std::string&, bool)> photoCallback_;
