@@ -91,9 +91,13 @@ Item {
     }
 
     function handleSetFlashState(flashState) {
-        // Map the legacy flash cycle to the torch (continuous light).  A proper
-        // per-shot flash would set the capture-request flash mode — TODO.
-        cam2.setTorch(flashState !== Camera.FlashOff)
+        // Per-shot flash: Off / On (always) / Auto, applied to the still capture.
+        if (flashState === Camera.FlashOn)
+            cam2.setFlashMode(1)
+        else if (flashState === Camera.FlashAuto)
+            cam2.setFlashMode(2)
+        else
+            cam2.setFlashMode(0)
     }
 
     function handleCameraTakeShot() {

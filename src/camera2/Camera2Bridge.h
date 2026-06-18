@@ -176,6 +176,7 @@ public:
 
     // Torch (continuous flash for video lighting).
     Q_INVOKABLE void setTorch(bool on);
+    Q_INVOKABLE void setFlashMode(int mode);   // 0=off, 1=on, 2=auto (per-shot)
 
     // Called from QML when device rotation changes (degrees, 0/90/180/270
     // clockwise from natural portrait).  Combined with sensor mount angle to

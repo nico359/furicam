@@ -867,6 +867,12 @@ bool CameraSession::capturePhoto(const std::string& path)
     uint8_t quality = 95;
     ACaptureRequest_setEntry_u8(req, ACAMERA_JPEG_QUALITY, 1, &quality);
 
+    // Per-shot flash via the AE mode on this still capture.
+    uint8_t aeMode = ACAMERA_CONTROL_AE_MODE_ON;                 // off: normal AE, no flash
+    if (flashMode_ == 1)      aeMode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+    else if (flashMode_ == 2) aeMode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
+    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &aeMode);
+
     int seqId = 0;
     cs = ACameraCaptureSession_capture(captureSession_, nullptr, 1, &req, &seqId);
     // The NDK copies the request on submit, so the request/target can be freed now.

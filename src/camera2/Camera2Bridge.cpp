@@ -559,6 +559,7 @@ void Camera2Bridge::setFocusPoint(float x, float y)
 }
 
 void Camera2Bridge::setTorch(bool on) { if (session_) session_->setTorch(on); }
+void Camera2Bridge::setFlashMode(int mode) { if (session_) session_->setFlashMode(mode); }
 
 void Camera2Bridge::setWhiteBalanceMode(int appMode)
 {
