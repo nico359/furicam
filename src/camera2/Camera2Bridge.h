@@ -97,6 +97,10 @@ public:
     // texture each frame.
     AImageReader* previewReader() const { return previewReader_; }
     int           displayRotation() const { return displayRotation_.load(); }
+    // Centred sub-rect of the (4:3 full-FOV) preview stream to show, so the preview
+    // is cropped to the chosen still aspect (WYSIWYG).  Read on the render thread.
+    float         cropScaleX() const { return cropScaleX_.load(); }
+    float         cropScaleY() const { return cropScaleY_.load(); }
 
     // ── QML API ─────────────────────────────────────────────────────────────
     // All Q_INVOKABLE methods may be called from the QML/JavaScript thread.
@@ -233,8 +237,9 @@ private:
     void initCamera();
     void stopCameraSession();
     void updateDisplayRotation();
-    void pickPreviewStreamSize();     // set previewStream{W,H}_ to match the still aspect
-    void recomputePreviewAspect();    // previewAspectRatio_ from stream size + rotation
+    void pickPreviewStreamSize();     // set previewStream{W,H}_ (4:3 full FOV)
+    void recomputePreviewAspect();    // previewAspectRatio_ + cropScale from still aspect
+    void effectiveCaptureSize(int& w, int& h);   // chosen still size, else sensor max
     void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
     void rebuildVideoIfActive();      // re-enter video mode at a new size if active
@@ -269,6 +274,8 @@ private:
     std::atomic<int64_t> lastExposureNs_     {0};
     std::atomic<int64_t> lastQrMs_           {0};   // throttle QR decode rate
     std::atomic<float>   previewAspectRatio_ {9.0f / 16.0f};
+    std::atomic<float>   cropScaleX_         {1.0f};
+    std::atomic<float>   cropScaleY_         {1.0f};
     std::atomic<int>     sensorOrientation_  {90};
     std::atomic<int>     deviceRotation_     {0};
     std::atomic<int>     displayRotation_    {90};

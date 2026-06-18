@@ -56,9 +56,10 @@ const char* kVert =
     "attribute vec2 aPos;\n"
     "attribute vec2 aTex;\n"
     "uniform mat2 uTexRot;\n"
+    "uniform vec2 uCrop;\n"     // centred sub-rect of the stream texture to show
     "varying vec2 vTex;\n"
     "void main() {\n"
-    "    vTex = uTexRot * (aTex - vec2(0.5)) + vec2(0.5);\n"
+    "    vTex = uCrop * (uTexRot * (aTex - vec2(0.5))) + vec2(0.5);\n"
     "    gl_Position = vec4(aPos, 0.0, 1.0);\n"
     "}\n";
 
@@ -99,6 +100,7 @@ struct PreviewRenderer::Impl {
     GLint  (*glGetAttribLocation)(GLuint, const GLchar*) = nullptr;
     GLint  (*glGetUniformLocation)(GLuint, const GLchar*) = nullptr;
     void   (*glUniform1i)(GLint, GLint) = nullptr;
+    void   (*glUniform2f)(GLint, GLfloat, GLfloat) = nullptr;
     void   (*glUniformMatrix2fv)(GLint, GLsizei, GLboolean, const GLfloat*) = nullptr;
     void   (*glActiveTexture)(GLenum) = nullptr;
     void   (*glEnableVertexAttribArray)(GLuint) = nullptr;
@@ -119,7 +121,7 @@ struct PreviewRenderer::Impl {
     AImage*     held      = nullptr;
     GLuint      program   = 0;
     GLuint      texture   = 0;
-    GLint       aPos = -1, aTex = -1, uTex = -1, uRot = -1;
+    GLint       aPos = -1, aTex = -1, uTex = -1, uRot = -1, uCrop = -1;
     bool        inited    = false;
     bool        ok        = false;
     bool        haveFrame = false;
@@ -164,6 +166,7 @@ struct PreviewRenderer::Impl {
         glGetAttribLocation = load<GLint(*)(GLuint, const GLchar*)>("glGetAttribLocation");
         glGetUniformLocation = load<GLint(*)(GLuint, const GLchar*)>("glGetUniformLocation");
         glUniform1i         = load<void(*)(GLint, GLint)>("glUniform1i");
+        glUniform2f         = load<void(*)(GLint, GLfloat, GLfloat)>("glUniform2f");
         glUniformMatrix2fv  = load<void(*)(GLint, GLsizei, GLboolean, const GLfloat*)>("glUniformMatrix2fv");
         glActiveTexture     = load<void(*)(GLenum)>("glActiveTexture");
         glEnableVertexAttribArray  = load<void(*)(GLuint)>("glEnableVertexAttribArray");
@@ -210,6 +213,7 @@ struct PreviewRenderer::Impl {
         aTex = glGetAttribLocation(program, "aTex");
         uTex = glGetUniformLocation(program, "uTex");
         uRot = glGetUniformLocation(program, "uTexRot");
+        uCrop = glGetUniformLocation(program, "uCrop");
         glGenTextures(1, &texture);
         ok = true;
         return true;
@@ -247,7 +251,8 @@ void PreviewRenderer::cleanup()
     d_->haveFrame = false;
 }
 
-bool PreviewRenderer::render(AImageReader* reader, int viewW, int viewH, int rotationDeg)
+bool PreviewRenderer::render(AImageReader* reader, int viewW, int viewH, int rotationDeg,
+                             float cropX, float cropY)
 {
     Impl& d = *d_;
     if (!d.inited)
@@ -298,6 +303,8 @@ bool PreviewRenderer::render(AImageReader* reader, int viewW, int viewH, int rot
 
         d.glUseProgram(d.program);
         d.glUniformMatrix2fv(d.uRot, 1, GL_FALSE_, rot);
+        if (d.uCrop >= 0)
+            d.glUniform2f(d.uCrop, cropX, cropY);
         d.glActiveTexture(GL_TEXTURE0);
         d.glBindTexture(GL_TEXTURE_EXTERNAL_OES, d.texture);
         d.glUniform1i(d.uTex, 0);

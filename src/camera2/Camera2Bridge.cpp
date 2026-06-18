@@ -71,11 +71,14 @@ public:
         auto* bridge = static_cast<Camera2Bridge*>(item);
         reader_   = bridge->previewReader();
         rotation_ = bridge->displayRotation();
+        cropX_    = bridge->cropScaleX();
+        cropY_    = bridge->cropScaleY();
     }
 
     void render() override
     {
-        renderer_.render(reader_, viewSize_.width(), viewSize_.height(), rotation_);
+        renderer_.render(reader_, viewSize_.width(), viewSize_.height(), rotation_,
+                         cropX_, cropY_);
     }
 
 private:
@@ -83,6 +86,8 @@ private:
     QSize           viewSize_{1, 1};
     AImageReader*   reader_   = nullptr;
     int             rotation_ = 90;
+    float           cropX_    = 1.0f;
+    float           cropY_    = 1.0f;
 };
 
 } // namespace
@@ -331,37 +336,53 @@ void Camera2Bridge::updateDisplayRotation()
     recomputePreviewAspect();
 }
 
-// Choose a preview-stream size whose aspect matches the chosen still size, so the
-// preview shows the same framing that will be captured (WYSIWYG).  The still
-// aspect on this sensor is 4:3 by default (its largest size); 16:9 is a crop.
-void Camera2Bridge::pickPreviewStreamSize()
+// The effective still size: the user-chosen one, else the sensor's largest size.
+void Camera2Bridge::effectiveCaptureSize(int& cw, int& ch)
 {
-    int cw = captureW_, ch = captureH_;
+    cw = captureW_; ch = captureH_;
     if ((cw <= 0 || ch <= 0) && session_) {
-        long best = 0;                       // default still = sensor's largest size
+        long best = 0;
         for (const auto& s : session_->jpegSizes()) {
             const long area = (long)s.width * s.height;
             if (area > best) { best = area; cw = s.width; ch = s.height; }
         }
     }
-    if (cw <= 0 || ch <= 0) { previewStreamW_ = 1280; previewStreamH_ = 720; return; }
-
-    const double aspect = (double)cw / ch;
-    auto close = [&](double a) { return std::abs(aspect - a) < 0.05; };
-    if      (close(4.0 / 3.0)) { previewStreamW_ = 1280; previewStreamH_ = 960;  }
-    else if (close(1.0))       { previewStreamW_ = 1024; previewStreamH_ = 1024; }
-    else                       { previewStreamW_ = 1280; previewStreamH_ = 720;  } // 16:9 + fallback
+    if (cw <= 0 || ch <= 0) { cw = 4; ch = 3; }
 }
 
-// previewAspectRatio_ is the on-screen (post-rotation) width/height of the preview.
+// The preview stream is always the sensor's full-FOV (4:3) aspect; the renderer
+// crops it to the chosen still aspect (recomputePreviewAspect computes the crop),
+// so ANY still ratio (1:1, 3:2, 16:9 …) maps corner-for-corner with the capture.
+void Camera2Bridge::pickPreviewStreamSize()
+{
+    previewStreamW_ = 1280;
+    previewStreamH_ = 960;   // 4:3 full FOV (fallback to 720 only if this size fails)
+}
+
+// previewAspectRatio_ = the on-screen (post-rotation) w/h of the *still* aspect;
+// cropScale = the centred sub-rect of the 4:3 stream that equals that aspect.
 void Camera2Bridge::recomputePreviewAspect()
 {
+    int cw, ch;
+    effectiveCaptureSize(cw, ch);
+    const float ca = (float)cw / (float)ch;                                   // still aspect
+    const float sa = (float)previewStreamW_ / (float)previewStreamH_;         // stream aspect (~4:3)
+
+    // Crop the 4:3 stream down to the still aspect (it's always a centred crop of
+    // the full sensor): wider-than-4:3 crops height, narrower crops width.
+    float sx = 1.0f, sy = 1.0f;
+    if (ca >= sa) sy = sa / ca;
+    else          sx = ca / sa;
+    cropScaleX_.store(sx);
+    cropScaleY_.store(sy);
+
     const int rot = displayRotation_.load();
     const bool portrait = (rot == 90 || rot == 270);
-    const float a = portrait ? (float)previewStreamH_ / (float)previewStreamW_
-                             : (float)previewStreamW_ / (float)previewStreamH_;
+    const float a = portrait ? (float)ch / (float)cw : (float)cw / (float)ch;
     if (previewAspectRatio_.exchange(a) != a)
         emit previewAspectRatioChanged();
+    // The next preview frame (and the cam2 resize from previewAspectRatioChanged)
+    // re-render and pick up the new crop via the renderer's synchronize().
 }
 
 void Camera2Bridge::setLastPhotoPath(const QString& path)
@@ -651,10 +672,10 @@ void Camera2Bridge::setResolution(int width, int height)
         return;
     captureW_ = width;
     captureH_ = height;
+    recomputePreviewAspect();   // letterbox + crop follow the new still aspect at once
     session_->setJpegSize(width, height);
-    // Recreate the still output at the new size by restarting the camera; this
-    // also re-picks the preview stream so its aspect matches the new still size
-    // (not while recording — that would interrupt the clip).
+    // Recreate the still output (JPEG reader) at the new size by restarting the
+    // camera (not while recording — that would interrupt the clip).
     if (ready_.load() && !recording_.load()) {
         stopCamera();
         startCamera();
@@ -686,11 +707,15 @@ void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
     // FBO vertical mirror.  Emits {x,y} in [0,1] of the preview item.
     const double rad = -displayRotation_.load() * 3.14159265358979 / 180.0;
     const double cc = std::cos(rad), ss = std::sin(rad);
+    // The analysis stream is the full 4:3 FOV but the preview is cropped to the
+    // still aspect; expand the sensor-normalized point by the inverse crop so the
+    // box lands on the (cropped) preview, matching the renderer's uCrop.
+    const double cx = cropScaleX_.load(), cy = cropScaleY_.load();
     QVariantList pts;
     const ZXing::Position& pos = bc.position();
     for (const auto& c : { pos.topLeft(), pos.topRight(), pos.bottomRight(), pos.bottomLeft() }) {
-        const double nx = (double)c.x / w - 0.5;
-        const double ny = (double)c.y / h - 0.5;
+        const double nx = ((double)c.x / w - 0.5) / (cx > 0 ? cx : 1.0);
+        const double ny = ((double)c.y / h - 0.5) / (cy > 0 ? cy : 1.0);
         QVariantMap m;
         m["x"] = (cc * nx - ss * ny) + 0.5;
         m["y"] = (ss * nx + cc * ny) + 0.5;
