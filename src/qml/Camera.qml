@@ -70,7 +70,7 @@ Item {
             resModel.append({
                 "resWidth": w, "resHeight": h,
                 "aspectRatio": (w / g) + ":" + (h / g),
-                "mp": mp, "label": mp + " MP (" + w + "×" + h + ")"
+                "mp": mp, "label": mp + " MP (" + w + "×" + h + ")  " + (w / g) + ":" + (h / g)
             })
         }
         // Default to the largest (first) size until the user picks one.
