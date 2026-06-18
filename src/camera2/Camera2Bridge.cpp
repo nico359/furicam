@@ -186,10 +186,16 @@ void Camera2Bridge::startCamera()
         }, Qt::QueuedConnection);
     });
 
-    if (!session_->startPreview(1280, 720, AIMAGE_FORMAT_PRIVATE,
+    pickPreviewStreamSize();   // match the preview aspect to the chosen still aspect
+    if (!session_->startPreview(previewStreamW_, previewStreamH_, AIMAGE_FORMAT_PRIVATE,
                                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE, 30)) {
-        emit cameraError(QString::fromStdString(session_->lastError()));
-        return;
+        // Fall back to a universally-supported 16:9 preview if the picked size fails.
+        previewStreamW_ = 1280; previewStreamH_ = 720;
+        if (!session_->startPreview(previewStreamW_, previewStreamH_, AIMAGE_FORMAT_PRIVATE,
+                                    AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE, 30)) {
+            emit cameraError(QString::fromStdString(session_->lastError()));
+            return;
+        }
     }
 
     previewReader_ = session_->previewReader();
@@ -199,9 +205,7 @@ void Camera2Bridge::startCamera()
     });
     if (hasFrontCamera_.exchange(haveFront) != haveFront)
         emit hasFrontCameraChanged();
-    previewAspectRatio_.store(720.0f / 1280.0f);
-    emit previewAspectRatioChanged();
-    updateDisplayRotation();
+    updateDisplayRotation();   // also recomputes previewAspectRatio_ from the stream size
     setupOrientationMonitor();
     // Re-apply a pending video-mode request now that preview is streaming (also
     // re-enters video mode after a camera switch, which reopens the session).
@@ -324,6 +328,40 @@ void Camera2Bridge::updateDisplayRotation()
     const int sensor = sensorOrientation_.load();
     const int device = deviceRotation_.load();
     displayRotation_.store(((sensor - device + 180) % 360 + 360) % 360);
+    recomputePreviewAspect();
+}
+
+// Choose a preview-stream size whose aspect matches the chosen still size, so the
+// preview shows the same framing that will be captured (WYSIWYG).  The still
+// aspect on this sensor is 4:3 by default (its largest size); 16:9 is a crop.
+void Camera2Bridge::pickPreviewStreamSize()
+{
+    int cw = captureW_, ch = captureH_;
+    if ((cw <= 0 || ch <= 0) && session_) {
+        long best = 0;                       // default still = sensor's largest size
+        for (const auto& s : session_->jpegSizes()) {
+            const long area = (long)s.width * s.height;
+            if (area > best) { best = area; cw = s.width; ch = s.height; }
+        }
+    }
+    if (cw <= 0 || ch <= 0) { previewStreamW_ = 1280; previewStreamH_ = 720; return; }
+
+    const double aspect = (double)cw / ch;
+    auto close = [&](double a) { return std::abs(aspect - a) < 0.05; };
+    if      (close(4.0 / 3.0)) { previewStreamW_ = 1280; previewStreamH_ = 960;  }
+    else if (close(1.0))       { previewStreamW_ = 1024; previewStreamH_ = 1024; }
+    else                       { previewStreamW_ = 1280; previewStreamH_ = 720;  } // 16:9 + fallback
+}
+
+// previewAspectRatio_ is the on-screen (post-rotation) width/height of the preview.
+void Camera2Bridge::recomputePreviewAspect()
+{
+    const int rot = displayRotation_.load();
+    const bool portrait = (rot == 90 || rot == 270);
+    const float a = portrait ? (float)previewStreamH_ / (float)previewStreamW_
+                             : (float)previewStreamW_ / (float)previewStreamH_;
+    if (previewAspectRatio_.exchange(a) != a)
+        emit previewAspectRatioChanged();
 }
 
 void Camera2Bridge::setLastPhotoPath(const QString& path)
@@ -611,8 +649,11 @@ void Camera2Bridge::setResolution(int width, int height)
 {
     if (!session_)
         return;
+    captureW_ = width;
+    captureH_ = height;
     session_->setJpegSize(width, height);
-    // Recreate the still output at the new size by restarting the camera
+    // Recreate the still output at the new size by restarting the camera; this
+    // also re-picks the preview stream so its aspect matches the new still size
     // (not while recording — that would interrupt the clip).
     if (ready_.load() && !recording_.load()) {
         stopCamera();

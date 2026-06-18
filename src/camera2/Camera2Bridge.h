@@ -233,6 +233,8 @@ private:
     void initCamera();
     void stopCameraSession();
     void updateDisplayRotation();
+    void pickPreviewStreamSize();     // set previewStream{W,H}_ to match the still aspect
+    void recomputePreviewAspect();    // previewAspectRatio_ from stream size + rotation
     void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
     void rebuildVideoIfActive();      // re-enter video mode at a new size if active
@@ -258,6 +260,10 @@ private:
     bool                 videoModeDesired_   = false;   // GUI's photo/video toggle
     int                  videoW_             = 1920;     // recording size
     int                  videoH_             = 1080;
+    int                  captureW_           = 0;        // chosen still size (0 = sensor max)
+    int                  captureH_           = 0;
+    int                  previewStreamW_     = 1280;     // preview stream size; its aspect
+    int                  previewStreamH_     = 720;      // follows the still aspect (WYSIWYG)
     std::atomic<int>     frameCount_         {0};
     std::atomic<int32_t> lastIso_            {0};
     std::atomic<int64_t> lastExposureNs_     {0};

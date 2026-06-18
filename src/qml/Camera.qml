@@ -283,9 +283,22 @@ Item {
 
 
     // ── The live preview: the Camera2 engine item ───────────────────────────
+    // Dark backdrop behind the letterboxed preview (fills the aspect-ratio bars).
+    Rectangle {
+        anchors.fill: parent
+        color: "black"
+        z: -1
+    }
+
     Camera2Bridge {
         id: cam2
-        anchors.fill: parent
+        // Letterbox the preview to its capture-matched aspect (WYSIWYG).  The aspect
+        // itself is decided in the bridge (mid layer); previewAspectRatio is the
+        // on-screen width/height.  Children (grid/focus/zoom) ride along for free.
+        property real dispAspect: previewAspectRatio > 0 ? previewAspectRatio : (9.0 / 16.0)
+        width: Math.min(parent.width, parent.height * dispAspect)
+        height: width / dispAspect
+        anchors.centerIn: parent
 
         // Video mode + recording size are applied atomically at discrete moments
         // (entering video mode, starting a recording) via applyVideoMode() /
@@ -537,7 +550,7 @@ Item {
     Item {
         id: qrOverlay
         z: 9000
-        anchors.fill: parent
+        anchors.fill: cam2   // map normalized QR points onto the letterboxed preview
         visible: cameraItem.qrVisible && !mediaView.visible
                  && (typeof cslate === "undefined" || cslate.state === "PhotoCapture")
         property bool valid: cameraItem.qrPoints && cameraItem.qrPoints.length === 4

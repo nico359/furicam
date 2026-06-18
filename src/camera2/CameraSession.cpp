@@ -371,7 +371,12 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
     // Analysis YUV output (CPU-readable luma) for live QR/barcode scanning.
     // Present only while previewing (photo mode); excluded in video mode.
     if (withStill) {
-        const int aw = 1280, ah = 720;
+        // Match the analysis aspect to the preview so QR overlay coords align with
+        // the on-screen preview; cap width at 1280 to bound CPU decode cost.
+        int aw = width, ah = height;
+        if (aw > 1280) { ah = (int)((long)ah * 1280 / aw); aw = 1280; }
+        aw &= ~1; ah &= ~1;
+        if (aw <= 0 || ah <= 0) { aw = 1280; ah = 720; }
         if (AImageReader_new(aw, ah, AIMAGE_FORMAT_YUV_420_888, /*maxImages*/ 2, &analysisReader_) == AMEDIA_OK
             && analysisReader_) {
             analysisListener_.context          = this;
