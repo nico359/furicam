@@ -91,13 +91,9 @@ Item {
     }
 
     function handleSetFlashState(flashState) {
-        // Per-shot flash: Off / On (always) / Auto, applied to the still capture.
-        if (flashState === Camera.FlashOn)
-            cam2.setFlashMode(1)
-        else if (flashState === Camera.FlashAuto)
-            cam2.setFlashMode(2)
-        else
-            cam2.setFlashMode(0)
+        // No-op: the flash mode is applied via the reactive `flashMode` binding on
+        // cam2 (settings.flashMode → engine), which also covers startup.  Doing an
+        // imperative cam2.setFlashMode here would break that binding.
     }
 
     function handleCameraTakeShot() {
@@ -300,6 +296,10 @@ Item {
         height: width / dispAspect
         anchors.centerIn: parent
         hdrEnabled: settings.hdrEnabled   // HDR burst+fuse handled in the bridge
+        // Flash mode tracks the GUI setting reactively (applied on startup + every
+        // change), mapping the QtMultimedia enum to the engine's 0=off/1=on/2=auto.
+        flashMode: (settings.flashMode === Camera.FlashOn) ? 1
+                 : (settings.flashMode === Camera.FlashAuto) ? 2 : 0
 
         // Video mode + recording size are applied atomically at discrete moments
         // (entering video mode, starting a recording) via applyVideoMode() /

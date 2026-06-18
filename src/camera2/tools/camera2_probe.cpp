@@ -45,8 +45,11 @@ int main(int argc, char** argv)
     int         streamSecs = 0;
     bool        prewarm    = false;   // warm the mic before --record
     bool        videoModeTest = false; // simultaneous preview+record test
+    int         flashArg   = -1;      // 0=off 1=on 2=auto (with --photo)
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--all") == 0) {
+        if (std::strcmp(argv[i], "--flash") == 0 && i + 1 < argc) {
+            flashArg = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--all") == 0) {
             dumpAll = true;
         } else if (std::strcmp(argv[i], "--prewarm") == 0) {
             prewarm = true;
@@ -136,6 +139,27 @@ int main(int argc, char** argv)
             std::printf("startPreview failed: %s\n", session.lastError().c_str());
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(1500));   // let AE/AF settle
+            if (flashArg == 2) {
+                // Auto-flash emulation (same as the bridge): AE in ON_AUTO_FLASH,
+                // read AE_STATE, force ON_ALWAYS_FLASH when FLASH_REQUIRED.
+                session.setFlashMode(2);
+                std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                session.triggerPrecapture();
+                int s = 0;
+                for (int i = 0; i < 30; ++i) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    s = session.aeState();
+                    if (i >= 4 && (s == 2 || s == 3 || s == 4)) break;
+                }
+                std::printf("AUTO flash: final AE state=%d -> %s\n",
+                            s, (s == 4 ? "FIRE (always-flash)" : "no flash"));
+                session.setFlashMode(s == 4 ? 1 : 0);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            } else if (flashArg >= 0) {
+                session.setFlashMode(flashArg);
+                std::printf("flash mode set to %d (1=on 2=auto)\n", flashArg);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
             std::printf("capturing photo to %s ...\n", photoPath.c_str());
             if (!session.capturePhoto(photoPath))
                 std::printf("capturePhoto failed: %s\n", session.lastError().c_str());

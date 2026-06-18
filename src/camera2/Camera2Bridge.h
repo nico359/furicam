@@ -78,6 +78,10 @@ class Camera2Bridge
     // short burst and fuses it (HdrProcessor); the GUI stays a one-line binding.
     Q_PROPERTY(bool    hdrEnabled          READ hdrEnabled WRITE setHdrEnabled NOTIFY hdrEnabledChanged)
 
+    // Per-shot flash mode (0=off 1=on 2=auto).  Bind to the GUI's flash setting so
+    // it's applied on startup and on every change (not only via a signal on tap).
+    Q_PROPERTY(int     flashMode           READ flashMode  WRITE setFlashMode  NOTIFY flashModeChanged)
+
 public:
     explicit Camera2Bridge(QQuickItem* parent = nullptr);
     ~Camera2Bridge() override;
@@ -97,6 +101,7 @@ public:
     qreal   previewAspectRatio()  const { return previewAspectRatio_.load(); }
     bool    hdrEnabled()          const { return hdrEnabled_.load(); }
     void    setHdrEnabled(bool on);
+    int     flashMode()           const { return flashMode_; }
     QString lastPhotoPath()       const { QMutexLocker lk(&lastPhotoMutex_); return lastPhotoPath_; }
 
     // Accessed by the renderer on the render thread.  The renderer reads from
@@ -232,6 +237,7 @@ signals:
     void videoModeChanged();
     void videoSizeChanged();
     void hdrEnabledChanged();
+    void flashModeChanged();
 
     // One-shot signals for outcomes.
     void cameraError(const QString& message);

@@ -810,11 +810,8 @@ void CameraSession::onCaptureResult(void* ctx, ACameraCaptureSession* /*session*
     if (!self || !result)
         return;
     ACameraMetadata_const_entry e{};
-    if (ACameraMetadata_getConstEntry(result, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK && e.count >= 1) {
-        const int st = e.data.u8[0];
-        if (self->lastAeState_.exchange(st) != st)
-            self->log(fmt("AE state -> %d (0=inact 1=search 2=converged 3=locked 4=flash_req 5=precap)", st));
-    }
+    if (ACameraMetadata_getConstEntry(result, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK && e.count >= 1)
+        self->lastAeState_.store(e.data.u8[0]);
 }
 
 bool CameraSession::maxJpegSize(int* w, int* h) const
