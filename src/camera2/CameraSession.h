@@ -56,6 +56,12 @@ public:
         int64_t exposureMinNs  = 0;
         int64_t exposureMaxNs  = 0;
         bool manualSensor      = false;  // derived: MANUAL_SENSOR capability present
+        float zoomRatioMin     = 1.0f;   // CONTROL_ZOOM_RATIO_RANGE
+        float zoomRatioMax     = 0.0f;   // 0 = range absent (fall back to a default)
+        int   evCompMin        = 0;      // CONTROL_AE_COMPENSATION_RANGE
+        int   evCompMax        = 0;      // max==min = range absent
+        float evCompStep       = 0.0f;   // CONTROL_AE_COMPENSATION_STEP (EV per index)
+        bool  videoStabSupported = false;// CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES has ON
         std::vector<int>          capabilities;  // ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_*
         std::vector<StreamConfig> outputs;       // output stream configs only
     };
@@ -193,7 +199,17 @@ public:
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
     int   aeState() const { return lastAeState_.load(); }  // ACAMERA_CONTROL_AE_STATE_* (result)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
-    float maxZoomRatio() const { return 4.0f; }            // this device reports 4x
+    // Capability ranges of the open camera, read from its characteristics (not
+    // hardcoded): zoom-ratio max and the AE-compensation index range/step.
+    float maxZoomRatio() const { return openZoomMax_; }    // CONTROL_ZOOM_RATIO_RANGE max
+    int   evCompMin()    const { return openEvMin_; }      // AE comp index range (min)
+    int   evCompMax()    const { return openEvMax_; }      // AE comp index range (max)
+    float evCompStep()   const { return openEvStep_; }     // EV per AE-comp index
+    // Electronic video stabilization (EIS).  Applied to the recording request
+    // when the open camera supports it; the toggle defaults on.  No-op (mode OFF)
+    // on cameras without AVAILABLE_VIDEO_STABILIZATION_MODES = ON.
+    bool  videoStabSupported() const { return openVideoStab_; }
+    void  setVideoStabilization(bool on) { videoStabEnabled_ = on; }
 
     // Drain the reader from the *calling* thread (cross-check for whether frames
     // are arriving independently of the image-available callback).  Returns the
@@ -244,6 +260,7 @@ private:
     bool maxJpegSize(int* w, int* h) const;  // largest JPEG output of the open camera
     void applyControls(ACaptureRequest* req) const;  // write control state into a request
     bool applyControlsToActive();                    // re-submit the active repeating request
+    void applyVideoStabilization(ACaptureRequest* req) const;  // EIS on/off for a record request
 
     // ACameraDevice_StateCallbacks targets (context is the CameraSession*).
     static void onDeviceDisconnected(void* ctx, ACameraDevice* device);
@@ -301,6 +318,12 @@ private:
     int                        reqJpegH_     = 0;
     int                        openSensorOrientation_ = 0;
     int                        openFacing_   = -1;   // ACAMERA_LENS_FACING_* of the open camera
+    float                      openZoomMax_  = 4.0f; // CONTROL_ZOOM_RATIO_RANGE max (fallback 4x)
+    int                        openEvMin_    = -4;   // AE comp range (fallback ±4 @ 0.5 EV/step)
+    int                        openEvMax_    = 4;
+    float                      openEvStep_   = 0.5f;
+    bool                       openVideoStab_ = false;   // EIS supported by the open camera
+    bool                       videoStabEnabled_ = true; // user toggle (default on)
     std::atomic<int>           deviceRotation_ {0};  // device tilt for capture tagging only
 
     // JPEG_ORIENTATION / MP4 rotation hint for the open camera at the current
