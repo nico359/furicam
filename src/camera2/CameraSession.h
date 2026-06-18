@@ -184,6 +184,7 @@ public:
     void  setTorch(bool on);
     void  setFlashMode(int mode);                          // 0=off, 1=on, 2=auto (per-shot)
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
+    int   aeState() const { return lastAeState_.load(); }  // ACAMERA_CONTROL_AE_STATE_* (result)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
     float maxZoomRatio() const { return 4.0f; }            // this device reports 4x
 
@@ -248,6 +249,8 @@ private:
     static void onSessionActive(void* ctx, ACameraCaptureSession* session);
     static void onSessionReady(void* ctx, ACameraCaptureSession* session);
     static void onSessionClosed(void* ctx, ACameraCaptureSession* session);
+    static void onCaptureResult(void* ctx, ACameraCaptureSession* session,
+                                ACaptureRequest* request, const ACameraMetadata* result);
 
     LogFn                        logFn_;
     std::function<void()>        frameCallback_;
@@ -268,6 +271,8 @@ private:
     ACameraOutputTarget*                 outputTarget_    = nullptr;
     AImageReader_ImageListener           readerListener_{};
     ACameraCaptureSession_stateCallbacks sessionCb_{};
+    ACameraCaptureSession_captureCallbacks resultCb_{};   // reads AE_STATE off results
+    std::atomic<int>                     lastAeState_{0};
     bool                                 streaming_ = false;
     int                                  previewFps_ = 30;
 

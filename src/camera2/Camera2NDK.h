@@ -202,6 +202,7 @@ typedef enum acamera_metadata_tag {
     ACAMERA_CONTROL_AWB_MODE                       = ACAMERA_CONTROL_START + 11,
     ACAMERA_CONTROL_MODE                           = ACAMERA_CONTROL_START + 15,
     ACAMERA_CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES = ACAMERA_CONTROL_START + 20,
+    ACAMERA_CONTROL_AE_STATE                       = ACAMERA_CONTROL_START + 31,  // result: AE_STATE_*
     ACAMERA_CONTROL_ZOOM_RATIO                     = ACAMERA_CONTROL_START + 47,
 
     ACAMERA_FLASH_MODE                             = ACAMERA_FLASH_START + 2,

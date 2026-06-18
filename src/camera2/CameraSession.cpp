@@ -396,6 +396,9 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
     sessionCb_.onActive = &CameraSession::onSessionActive;
     sessionCb_.onReady  = &CameraSession::onSessionReady;
     sessionCb_.onClosed = &CameraSession::onSessionClosed;
+    resultCb_           = ACameraCaptureSession_captureCallbacks{};
+    resultCb_.context   = this;
+    resultCb_.onCaptureCompleted = &CameraSession::onCaptureResult;
     cs = ACameraDevice_createCaptureSession(device_, outputContainer_, &sessionCb_, &captureSession_);
     if (cs != ACAMERA_OK || !captureSession_) {
         lastError_ = fmt("ACameraDevice_createCaptureSession failed (status %d)", (int)cs);
@@ -430,7 +433,7 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
     activeRequest_ = previewRequest_;
     applyControls(previewRequest_);
 
-    cs = ACameraCaptureSession_setRepeatingRequest(captureSession_, nullptr, 1, &previewRequest_, nullptr);
+    cs = ACameraCaptureSession_setRepeatingRequest(captureSession_, &resultCb_, 1, &previewRequest_, nullptr);
     if (cs != ACAMERA_OK) {
         lastError_ = fmt("ACameraCaptureSession_setRepeatingRequest failed (status %d)", (int)cs);
         stopPreview();
@@ -593,6 +596,9 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
     sessionCb_.onActive = &CameraSession::onSessionActive;
     sessionCb_.onReady  = &CameraSession::onSessionReady;
     sessionCb_.onClosed = &CameraSession::onSessionClosed;
+    resultCb_           = ACameraCaptureSession_captureCallbacks{};
+    resultCb_.context   = this;
+    resultCb_.onCaptureCompleted = &CameraSession::onCaptureResult;
     cs = ACameraDevice_createCaptureSession(device_, outputContainer_, &sessionCb_, &captureSession_);
     if (cs != ACAMERA_OK || !captureSession_) {
         lastError_ = fmt("createCaptureSession failed (status %d)", (int)cs);
@@ -635,7 +641,7 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         applyControls(recordRequest_);
     }
 
-    cs = ACameraCaptureSession_setRepeatingRequest(captureSession_, nullptr, 1, &previewRequest_, nullptr);
+    cs = ACameraCaptureSession_setRepeatingRequest(captureSession_, &resultCb_, 1, &previewRequest_, nullptr);
     if (cs != ACAMERA_OK) {
         lastError_ = fmt("setRepeatingRequest(preview) failed (status %d)", (int)cs);
         return false;
@@ -793,6 +799,22 @@ void CameraSession::onSessionClosed(void* ctx, ACameraCaptureSession* /*session*
 {
     if (auto* self = static_cast<CameraSession*>(ctx))
         self->log("capture session closed");
+}
+
+// Each completed result carries the AE state; cache it so the bridge can wait for
+// an AE precapture to settle (FLASH_REQUIRED/CONVERGED) before an auto-flash shot.
+void CameraSession::onCaptureResult(void* ctx, ACameraCaptureSession* /*session*/,
+                                    ACaptureRequest* /*request*/, const ACameraMetadata* result)
+{
+    auto* self = static_cast<CameraSession*>(ctx);
+    if (!self || !result)
+        return;
+    ACameraMetadata_const_entry e{};
+    if (ACameraMetadata_getConstEntry(result, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK && e.count >= 1) {
+        const int st = e.data.u8[0];
+        if (self->lastAeState_.exchange(st) != st)
+            self->log(fmt("AE state -> %d (0=inact 1=search 2=converged 3=locked 4=flash_req 5=precap)", st));
+    }
 }
 
 bool CameraSession::maxJpegSize(int* w, int* h) const
@@ -1306,7 +1328,7 @@ void CameraSession::setFocusPoint(float x, float y)
     ACameraCaptureSession_capture(activeSession_, nullptr, 1, &activeRequest_, &seq);
     uint8_t idle = ACAMERA_CONTROL_AF_TRIGGER_IDLE;
     ACaptureRequest_setEntry_u8(activeRequest_, ACAMERA_CONTROL_AF_TRIGGER, 1, &idle);
-    ACameraCaptureSession_setRepeatingRequest(activeSession_, nullptr, 1, &activeRequest_, nullptr);
+    ACameraCaptureSession_setRepeatingRequest(activeSession_, &resultCb_, 1, &activeRequest_, nullptr);
 }
 
 void CameraSession::onDeviceDisconnected(void* ctx, ACameraDevice* /*device*/)

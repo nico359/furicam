@@ -580,14 +580,32 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
         captureNextHdrFrame();
         return;
     }
-    // Auto flash: run an AE precapture (pre-flash metering) first, then shoot once
-    // the HAL has decided whether to fire.  On/Off need no precapture.
+    // Auto flash: kick an AE precapture, then shoot the moment the HAL settles the
+    // metering (FLASH_REQUIRED → fire, CONVERGED → don't).  On/Off need no precapture.
     if (flashMode_ == 2) {
         session_->triggerPrecapture();
-        QTimer::singleShot(700, this, [this, outputPath] { doSingleCapture(outputPath); });
+        beginAutoFlashCapture(outputPath, 0);
         return;
     }
     doSingleCapture(outputPath);
+}
+
+// Poll the cached AE state until the precapture settles, then take the shot.
+// ACAMERA_CONTROL_AE_STATE: 2=CONVERGED 3=LOCKED 4=FLASH_REQUIRED.
+void Camera2Bridge::beginAutoFlashCapture(const QString& outputPath, int attempt)
+{
+    if (!session_) return;
+    const int s = session_->aeState();
+    const int elapsedMs = attempt * 50;
+    const bool fire    = (s == 4);                          // dark → fire now
+    const bool settled = (elapsedMs >= 350 && (s == 2 || s == 3));  // bright → no fire
+    if (fire || settled || elapsedMs >= 1200) {
+        doSingleCapture(outputPath);
+        return;
+    }
+    QTimer::singleShot(50, this, [this, outputPath, attempt] {
+        beginAutoFlashCapture(outputPath, attempt + 1);
+    });
 }
 
 void Camera2Bridge::doSingleCapture(const QString& outputPath)
