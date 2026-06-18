@@ -289,44 +289,70 @@ void Camera2Bridge::setDeviceRotation(int degrees)
     update();
 }
 
+// Map iio-sensor-proxy's orientation string to degrees clockwise from natural
+// portrait (0/90/180/270).  Flip left-up/right-up here if landscape comes out
+// upside down.
+static int orientationToDegrees(const QString& o)
+{
+    return (o == QLatin1String("left-up"))   ? 90
+         : (o == QLatin1String("bottom-up")) ? 180
+         : (o == QLatin1String("right-up"))  ? 270
+         :                                     0;   // "normal" / unknown
+}
+
 void Camera2Bridge::claimAccelerometer()
 {
     // Claim iio-sensor-proxy (the auto-rotate service) once so it keeps the
-    // AccelerometerOrientation property live.  We do NOT poll/feed the preview —
-    // the preview is portrait-locked — we just read it on demand at capture time
-    // (queryDeviceRotation) to tag photos/videos with the device tilt.
+    // AccelerometerOrientation property live, then SUBSCRIBE to its changes and
+    // cache the value.  This keeps the GUI thread off a blocking D-Bus round-trip
+    // at capture time (queryDeviceRotation just reads the cache).  The preview is
+    // portrait-locked; this only tags photos/videos with the device tilt.
     if (orientationMonitorStarted_)
         return;
     orientationMonitorStarted_ = true;
 
+    QDBusConnection sys = QDBusConnection::systemBus();
+
     QDBusInterface sensor(QStringLiteral("net.hadess.SensorProxy"),
                           QStringLiteral("/net/hadess/SensorProxy"),
-                          QStringLiteral("net.hadess.SensorProxy"),
-                          QDBusConnection::systemBus());
+                          QStringLiteral("net.hadess.SensorProxy"), sys);
     if (sensor.isValid())
         sensor.call(QStringLiteral("ClaimAccelerometer"));
-}
 
-// Read the current device orientation from iio-sensor-proxy and map it to degrees
-// clockwise from natural portrait (0/90/180/270).  Defaults to 0 (portrait) when
-// the sensor is unavailable.  Calibrated against the saved-file orientation — flip
-// the left-up/right-up mapping here if landscape shots come out upside down.
-int Camera2Bridge::queryDeviceRotation()
-{
+    // Live updates: cache AccelerometerOrientation whenever it changes.
+    sys.connect(QStringLiteral("net.hadess.SensorProxy"),
+                QStringLiteral("/net/hadess/SensorProxy"),
+                QStringLiteral("org.freedesktop.DBus.Properties"),
+                QStringLiteral("PropertiesChanged"),
+                this, SLOT(onSensorPropertiesChanged(QString, QVariantMap, QStringList)));
+
+    // Seed the cache once now (synchronous, but at setup — never on the shutter path).
     QDBusInterface props(QStringLiteral("net.hadess.SensorProxy"),
                          QStringLiteral("/net/hadess/SensorProxy"),
-                         QStringLiteral("org.freedesktop.DBus.Properties"),
-                         QDBusConnection::systemBus());
+                         QStringLiteral("org.freedesktop.DBus.Properties"), sys);
     QDBusReply<QDBusVariant> r = props.call(QStringLiteral("Get"),
                                             QStringLiteral("net.hadess.SensorProxy"),
                                             QStringLiteral("AccelerometerOrientation"));
-    if (!r.isValid())
-        return 0;
-    const QString o = r.value().variant().toString();
-    return (o == QLatin1String("left-up"))  ? 90
-         : (o == QLatin1String("bottom-up")) ? 180
-         : (o == QLatin1String("right-up"))  ? 270
-         :                                     0;   // "normal" / unknown
+    if (r.isValid())
+        cachedDeviceRotation_.store(orientationToDegrees(r.value().variant().toString()));
+}
+
+// PropertiesChanged handler: refresh the cached device orientation off the signal
+// so capture-time tagging never blocks the GUI thread on a D-Bus round-trip.
+void Camera2Bridge::onSensorPropertiesChanged(const QString& /*iface*/,
+                                              const QVariantMap& changed,
+                                              const QStringList& /*invalidated*/)
+{
+    auto it = changed.find(QStringLiteral("AccelerometerOrientation"));
+    if (it != changed.end())
+        cachedDeviceRotation_.store(orientationToDegrees(it.value().toString()));
+}
+
+// Cached device orientation (degrees CW from portrait), kept current by the
+// PropertiesChanged subscription set up in claimAccelerometer.  No D-Bus here.
+int Camera2Bridge::queryDeviceRotation()
+{
+    return cachedDeviceRotation_.load();
 }
 
 void Camera2Bridge::updateDisplayRotation()
@@ -599,6 +625,9 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
         emit cameraError(QStringLiteral("capturePhoto: camera not streaming"));
         return;
     }
+    // Shutter-lag instrumentation: timestamp the tap; onPhotoCaptured logs the delta.
+    shutterT0Ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now().time_since_epoch()).count();
     // Tag this shot with how the phone is currently held (preview stays portrait).
     session_->setDeviceRotation(queryDeviceRotation());
     // HDR: capture a short burst of frames to a temp dir, then fuse them
@@ -684,6 +713,10 @@ void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
         return;
     }
     if (ok) {
+        const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (shutterT0Ms_ > 0)
+            std::fprintf(stderr, "[shutter] tap->saved %lld ms\n", (long long)(now - shutterT0Ms_));
         setLastPhotoPath(path);
         emit photoSaved(path);
     } else {

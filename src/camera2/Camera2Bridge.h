@@ -19,6 +19,7 @@
 #include <QQuickFramebufferObject>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 #include <QMutex>
 #include <atomic>
 #include <memory>
@@ -254,6 +255,11 @@ signals:
     // (topLeft, topRight, bottomRight, bottomLeft) as {x,y} normalized to [0,1].
     void qrDetected(const QString& text, const QVariantList& points);
 
+private slots:
+    // iio-sensor-proxy PropertiesChanged → refresh the cached device orientation.
+    void onSensorPropertiesChanged(const QString& iface, const QVariantMap& changed,
+                                   const QStringList& invalidated);
+
 private:
     // Helpers used by the implementation; not part of the QML surface.
     void initCamera();
@@ -309,6 +315,8 @@ private:
     std::atomic<int>     sensorOrientation_  {90};
     std::atomic<int>     deviceRotation_     {0};
     std::atomic<int>     displayRotation_    {90};
+    std::atomic<int>     cachedDeviceRotation_ {0};  // orientation cache (D-Bus signal-fed)
+    int64_t              shutterT0Ms_        = 0;    // tap timestamp, for shutter-lag log
 
     // HDR burst state (GUI thread).  kHdrFrames matches the original 3-frame burst.
     static constexpr int kHdrFrames = 3;
