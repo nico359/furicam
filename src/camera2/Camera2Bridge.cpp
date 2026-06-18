@@ -590,17 +590,24 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
     doSingleCapture(outputPath);
 }
 
-// Poll the cached AE state until the precapture settles, then take the shot.
+// Poll the cached AE state until the metering settles, then shoot.  This HAL's
+// ON_AUTO_FLASH still never fires even at FLASH_REQUIRED, but ON_ALWAYS_FLASH does
+// — so we read the AE decision ourselves and force always-flash when it's dark.
 // ACAMERA_CONTROL_AE_STATE: 2=CONVERGED 3=LOCKED 4=FLASH_REQUIRED.
 void Camera2Bridge::beginAutoFlashCapture(const QString& outputPath, int attempt)
 {
     if (!session_) return;
     const int s = session_->aeState();
     const int elapsedMs = attempt * 50;
-    const bool fire    = (s == 4);                          // dark → fire now
-    const bool settled = (elapsedMs >= 350 && (s == 2 || s == 3));  // bright → no fire
-    if (fire || settled || elapsedMs >= 1200) {
-        doSingleCapture(outputPath);
+    const bool settled = (s == 2 || s == 3 || s == 4);
+    if ((settled && elapsedMs >= 200) || elapsedMs >= 1200) {
+        if (s == 4) {                       // dark → force the flash to actually fire
+            session_->setFlashMode(1);      // ON_ALWAYS_FLASH for this shot
+            doSingleCapture(outputPath);
+            session_->setFlashMode(2);      // restore Auto for the preview/next shot
+        } else {                            // bright → no flash
+            doSingleCapture(outputPath);
+        }
         return;
     }
     QTimer::singleShot(50, this, [this, outputPath, attempt] {
