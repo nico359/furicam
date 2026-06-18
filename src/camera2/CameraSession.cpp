@@ -1176,6 +1176,11 @@ void CameraSession::applyControls(ACaptureRequest* req) const
     ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_MODE, 1, &ctlMode);
 
     uint8_t ae = (uint8_t)ctlAeMode_;
+    // For AUTO flash, keep the preview AE in auto-flash so the HAL meters and can
+    // decide to fire on the still capture.  (Always-flash is applied only on the
+    // still request — on the preview it would behave like a torch.)
+    if (ctlAeMode_ != ACAMERA_CONTROL_AE_MODE_OFF && flashMode_ == 2)
+        ae = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
     ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &ae);
     if (ctlAeMode_ == ACAMERA_CONTROL_AE_MODE_OFF) {
         int64_t exp = ctlExposureNs_;
@@ -1238,6 +1243,7 @@ void CameraSession::setAwbLock(bool lock) { ctlAwbLock_ = lock ? 1 : 0; applyCon
 void CameraSession::setAwbMode(int awbMode) { ctlAwbMode_ = awbMode; applyControlsToActive(); }
 void CameraSession::setAfMode(int afMode)   { ctlAfMode_  = afMode;  applyControlsToActive(); }
 void CameraSession::setTorch(bool on)       { ctlTorch_   = on ? 1 : 0; applyControlsToActive(); }
+void CameraSession::setFlashMode(int mode)  { flashMode_  = mode;       applyControlsToActive(); }
 
 void CameraSession::setZoomRatio(float ratio)
 {
