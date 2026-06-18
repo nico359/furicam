@@ -116,6 +116,9 @@ public:
     // opens a specific one by index (e.g. the secondary back/macro camera).
     Q_INVOKABLE QVariantList availableCameras();
     Q_INVOKABLE void selectCamera(int index);
+    // Facing of the currently-OPENED camera (0=front, 1=back) — ground truth for
+    // syncing the GUI's camera-position state.
+    Q_INVOKABLE int  currentFacing() const { return lensFacingPref_.load(); }
 
     // Begin recording to outputPath (a writable filesystem path with .mp4
     // extension).  If outputPath is empty, uses defaultOutputPath().  Emits
