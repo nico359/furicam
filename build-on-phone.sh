@@ -76,6 +76,7 @@ echo "=== configuring (Camera2 ON) ==="
 rm -rf build; mkdir build; cd build
 cmake .. \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr \
   -DFURICAM2_CAMERA2=ON \
   -DQt5Multimedia_DIR="$QTMM_CMAKE_DIR/Qt5Multimedia" \
   -DQt5MultimediaWidgets_DIR="$QTMM_CMAKE_DIR/Qt5MultimediaWidgets" \
@@ -89,6 +90,9 @@ make -j"$(nproc)"
 echo
 echo "=== installing to system ==="
 sudo make install
+# furicam2 now links the separate libcamera2ndk-hybris.so; refresh the linker
+# cache so the app finds it at /usr/lib/<triplet> at runtime.
+sudo ldconfig
 sudo update-desktop-database /usr/share/applications/ 2>/dev/null || true
 
 echo

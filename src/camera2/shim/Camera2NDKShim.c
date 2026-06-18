@@ -1,28 +1,32 @@
-/* SPDX-License-Identifier: GPL-2.0-only
+/* SPDX-License-Identifier: Apache-2.0
  * Copyright (C) 2026 Sean Pollard <spollard08@gmail.com>
  *
  * Camera2NDKShim.c — libhybris forwarding shim for the Android Camera2 /
- * MediaNDK C application programming interface (API).
+ * Media NDK C application programming interface (API).  This is the whole of
+ * libcamera2ndk-hybris: each line below turns one Bionic-linked Android NDK
+ * symbol into one a glibc-linked Linux process can call directly.
  *
- * Each HYBRIS_IMPLEMENT_FUNCTION_* line below expands (via
- * <hybris/common/binding.h>) into a real function with the exact NDK symbol
- * name.  On first call it android_dlopen()s the backing Android shared object
- * and android_dlsym()s the symbol, caching the resolved pointer in a function-
- * local static, then forwards.  The rest of FuriCam2 (CameraSession.cpp,
- * VideoEncoder.cpp) calls these as if they were the genuine NDK symbols.
+ * Each HYBRIS_IMPLEMENT_FUNCTION_* line expands (via <hybris/common/binding.h>)
+ * into a real function with the exact NDK symbol name.  On first call it
+ * android_dlopen()s the backing Android shared object and android_dlsym()s the
+ * symbol, caching the resolved pointer in a function-local static, then
+ * forwards.  Callers link -lcamera2ndk-hybris -lhybris-common and call
+ * ACameraManager_create() (etc.) exactly as the Android NDK documents — with no
+ * awareness of libhybris, except for the one-time threadpool init in
+ * <camera2ndk_hybris.h>.
  *
  * Why this is C, not C++:
  *   HYBRIS_DLSYSM() resolves symbols with `*(fptr) = (void *) android_dlsym(..)`
  *   — an implicit void*-to-function-pointer assignment that is valid C but
  *   ill-formed C++.  libhybris's own wrappers (egl.c, glesv2.c, ...) are C for
- *   the same reason.  Camera2NDK.h guards its prototypes with extern "C", so
- *   the C++ side links against these C-linkage definitions cleanly.
+ *   the same reason.  The NDK headers guard their prototypes with extern "C", so
+ *   C++ callers link against these C-linkage definitions cleanly.
  *
- * The backing libraries live under /android/system/lib64 on the FuriPhone
- * FLX1s and are reached through libhybris's android linker namespace; we never
+ * The backing libraries live under /android/system/lib64 (e.g. on the FuriPhone
+ * FLX1s) and are reached through libhybris's android linker namespace; we never
  * link them directly (see CMakeLists.txt: only libhybris-common is linked).
  *
- * Keep this file in lock-step with the prototype list in Camera2NDK.h.
+ * Keep this file in lock-step with the prototype list in the NDK headers.
  */
 
 #include <dlfcn.h>      /* RTLD_LAZY, referenced by HYBRIS_LIBRARY_INITIALIZE */

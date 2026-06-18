@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=@PKGCONFIG_LIBDIR@
+includedir=@PKGCONFIG_INCLUDEDIR@
+
+Name: camera2ndk-hybris
+Description: Android Camera2 / Media NDK over libhybris for glibc Linux
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lcamera2ndk-hybris -lhybris-common
+Cflags: -I${includedir}/camera2ndk-hybris

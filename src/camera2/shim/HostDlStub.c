@@ -1,19 +1,18 @@
-/* SPDX-License-Identifier: GPL-2.0-only
+/* SPDX-License-Identifier: Apache-2.0
  * Copyright (C) 2026 Sean Pollard <spollard08@gmail.com>
  *
  * HostDlStub.c — non-Halium stand-in for libhybris's Android dynamic linker.
  *
- * On a Halium device (the FuriPhone FLX1s) the symbols android_dlopen /
+ * On a Halium device (e.g. the FuriPhone FLX1s) the symbols android_dlopen /
  * android_dlsym that Camera2NDKShim.c calls are provided by libhybris-common.
- * On a normal host (the Debian desktop used for fast build iteration) libhybris
- * does not exist, so these stubs let FuriCam2 still compile, link and run with
- * the Camera2 path simply inert: every Android-library lookup fails cleanly and
- * the higher-level CameraSession reports "Camera2 unavailable" rather than the
- * app failing to link.
+ * On a normal host (a Debian desktop used for fast build iteration / CI) there
+ * is no libhybris, so these stubs let the library still compile, link and load
+ * with the Camera2 path simply inert: every Android-library lookup fails
+ * cleanly and callers see "Camera2 unavailable" rather than a link failure.
  *
  * CMake compiles this file ONLY when find_library(hybris-common) fails (see
- * CMakeLists.txt); on the phone the real libhybris-common is linked instead, so
- * there is never a duplicate definition.
+ * CMakeLists.txt); on a Halium device the real libhybris-common is linked
+ * instead, so there is never a duplicate definition.
  *
  * Signatures mirror the declarations in <hybris/common/binding.h>.
  */

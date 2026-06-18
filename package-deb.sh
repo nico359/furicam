@@ -25,6 +25,19 @@ install -m755 build/furicam2 "$STAGE/usr/bin/furicam2"
 strip --strip-unneeded "$STAGE/usr/bin/furicam2" 2>/dev/null || true
 install -m644 furicam2.desktop "$STAGE/usr/share/applications/furicam2.desktop"
 
+# furicam2 now links the separate libcamera2ndk-hybris.so (the Camera2/Media NDK
+# -> libhybris shim) at runtime; bundle it here so the package is self-contained.
+# (Eventually this becomes its own libcamera2ndk-hybris .deb + a Depends:, once
+# the shim is extracted to its own repo.)
+echo "=== bundling libcamera2ndk-hybris.so ==="
+SHIM_SO="$(ls build/src/camera2/shim/libcamera2ndk-hybris.so.*.* 2>/dev/null | head -1)"
+SHIM_SONAME="$(objdump -p "$SHIM_SO" | awk '/SONAME/{print $2}')"
+install -d "$STAGE/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+LIBDIR="$STAGE/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+install -m644 "$SHIM_SO" "$LIBDIR/$(basename "$SHIM_SO")"
+strip --strip-unneeded "$LIBDIR/$(basename "$SHIM_SO")" 2>/dev/null || true
+ln -sf "$(basename "$SHIM_SO")" "$LIBDIR/$SHIM_SONAME"
+
 echo "=== computing library dependencies (dpkg-shlibdeps) ==="
 SHLIBS="$(dpkg-shlibdeps -O "$STAGE/usr/bin/furicam2" 2>/dev/null | sed -n 's/^shlibs:Depends=//p' || true)"
 # Not auto-detectable: QML modules (loaded at runtime), the shared furicam data
@@ -56,6 +69,7 @@ cat > "$STAGE/DEBIAN/postinst" <<'POST'
 #!/bin/sh
 set -e
 if [ "$1" = "configure" ]; then
+    ldconfig                                                  # register libcamera2ndk-hybris.so
     update-desktop-database /usr/share/applications 2>/dev/null || true
 fi
 exit 0
