@@ -18,6 +18,7 @@
 
 #include <QQuickFramebufferObject>
 #include <QString>
+#include <QStringList>
 #include <QMutex>
 #include <atomic>
 #include <memory>
@@ -73,6 +74,10 @@ class Camera2Bridge
     // Path of the most recent saved photo (for the gallery thumbnail).
     Q_PROPERTY(QString lastPhotoPath       READ lastPhotoPath         NOTIFY lastPhotoPathChanged)
 
+    // HDR mode — bind to the GUI's HDR toggle.  When on, capturePhoto() takes a
+    // short burst and fuses it (HdrProcessor); the GUI stays a one-line binding.
+    Q_PROPERTY(bool    hdrEnabled          READ hdrEnabled WRITE setHdrEnabled NOTIFY hdrEnabledChanged)
+
 public:
     explicit Camera2Bridge(QQuickItem* parent = nullptr);
     ~Camera2Bridge() override;
@@ -90,6 +95,8 @@ public:
     int     isoValue()            const { return lastIso_.load(); }
     qint64  shutterNs()           const { return lastExposureNs_.load(); }
     qreal   previewAspectRatio()  const { return previewAspectRatio_.load(); }
+    bool    hdrEnabled()          const { return hdrEnabled_.load(); }
+    void    setHdrEnabled(bool on);
     QString lastPhotoPath()       const { QMutexLocker lk(&lastPhotoMutex_); return lastPhotoPath_; }
 
     // Accessed by the renderer on the render thread.  The renderer reads from
@@ -224,6 +231,7 @@ signals:
     void lastPhotoPathChanged();
     void videoModeChanged();
     void videoSizeChanged();
+    void hdrEnabledChanged();
 
     // One-shot signals for outcomes.
     void cameraError(const QString& message);
@@ -242,6 +250,9 @@ private:
     void pickPreviewStreamSize();     // set previewStream{W,H}_ (4:3 full FOV)
     void recomputePreviewAspect();    // previewAspectRatio_ + cropScale from still aspect
     void effectiveCaptureSize(int& w, int& h);   // chosen still size, else sensor max
+    void onPhotoCaptured(const QString& path, bool ok);   // single + HDR-burst routing
+    void captureNextHdrFrame();
+    void finishHdrBurst();            // fuse the burst on a worker thread
     void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
     void rebuildVideoIfActive();      // re-enter video mode at a new size if active
@@ -281,6 +292,13 @@ private:
     std::atomic<int>     sensorOrientation_  {90};
     std::atomic<int>     deviceRotation_     {0};
     std::atomic<int>     displayRotation_    {90};
+
+    // HDR burst state (GUI thread).  kHdrFrames matches the original 3-frame burst.
+    static constexpr int kHdrFrames = 3;
+    std::atomic<bool> hdrEnabled_     {false};
+    bool              hdrBurstActive_ = false;
+    QStringList       hdrPaths_;
+    QString           hdrFinalPath_;
 
     // Photo / video bookkeeping.
     QString        lastPhotoPath_;

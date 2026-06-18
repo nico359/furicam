@@ -22,11 +22,13 @@
 #include "CameraSession.h"
 #include "VideoEncoder.h"
 #include "Camera2NDK.h"
+#include "../hdrprocessor.h"
 
 #include <QDateTime>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <thread>
 
 #include <ReadBarcode.h>
 #include <BarcodeFormat.h>
@@ -34,6 +36,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QVariant>
 #include <QOpenGLFramebufferObject>
@@ -184,12 +187,7 @@ void Camera2Bridge::startCamera()
     session_->setPhotoCallback([this](const std::string& path, bool ok) {
         const QString p = QString::fromStdString(path);
         QMetaObject::invokeMethod(this, [this, p, ok] {
-            if (ok) {
-                setLastPhotoPath(p);
-                emit photoSaved(p);
-            } else {
-                emit cameraError(QStringLiteral("photo capture failed"));
-            }
+            onPhotoCaptured(p, ok);
         }, Qt::QueuedConnection);
     });
 
@@ -573,10 +571,86 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
         emit cameraError(QStringLiteral("capturePhoto: camera not streaming"));
         return;
     }
+    // HDR: capture a short burst of frames to a temp dir, then fuse them
+    // (HdrProcessor: align + average + synthetic ±1-stop brackets + Mertens).
+    if (hdrEnabled_.load() && !hdrBurstActive_) {
+        hdrBurstActive_ = true;
+        hdrFinalPath_   = outputPath;   // honoured by finishHdrBurst (else default)
+        hdrPaths_.clear();
+        captureNextHdrFrame();
+        return;
+    }
     const QString path = outputPath.isEmpty() ? defaultPhotoPath() : outputPath;
     QDir().mkpath(QFileInfo(path).absolutePath());
     if (!session_->capturePhoto(path.toStdString()))
         emit cameraError(QString::fromStdString(session_->lastError()));
+}
+
+// One frame of the HDR burst, to a temp file.
+void Camera2Bridge::captureNextHdrFrame()
+{
+    const QString p = QDir::tempPath() + QStringLiteral("/furicam2_hdr_%1.jpg").arg(hdrPaths_.size());
+    if (!session_->capturePhoto(p.toStdString())) {
+        hdrBurstActive_ = false;
+        emit cameraError(QString::fromStdString(session_->lastError()));
+    }
+}
+
+// Photo completion on the GUI thread; routes HDR-burst frames vs single shots.
+void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
+{
+    if (hdrBurstActive_) {
+        if (!ok) {
+            hdrBurstActive_ = false;
+            for (const QString& p : hdrPaths_) QFile::remove(p);
+            hdrPaths_.clear();
+            emit cameraError(QStringLiteral("HDR capture failed"));
+            return;
+        }
+        hdrPaths_ << path;
+        if (hdrPaths_.size() < kHdrFrames)
+            captureNextHdrFrame();
+        else
+            finishHdrBurst();
+        return;
+    }
+    if (ok) {
+        setLastPhotoPath(path);
+        emit photoSaved(path);
+    } else {
+        emit cameraError(QStringLiteral("photo capture failed"));
+    }
+}
+
+// Fuse the burst on a worker thread (OpenCV is heavy), then emit photoSaved.
+void Camera2Bridge::finishHdrBurst()
+{
+    const QStringList paths = hdrPaths_;
+    const QString outDir = QFileInfo(hdrFinalPath_.isEmpty() ? defaultPhotoPath()
+                                                             : hdrFinalPath_).absolutePath();
+    hdrBurstActive_ = false;
+    hdrPaths_.clear();
+    QDir().mkpath(outDir);
+    std::thread([this, paths, outDir] {
+        HdrProcessor proc;
+        const QString out = proc.processHdrBurst(paths, outDir);
+        for (const QString& p : paths) QFile::remove(p);
+        QMetaObject::invokeMethod(this, [this, out] {
+            if (!out.isEmpty()) {
+                setLastPhotoPath(out);
+                emit photoSaved(out);
+            } else {
+                emit cameraError(QStringLiteral("HDR merge failed"));
+            }
+        }, Qt::QueuedConnection);
+    }).detach();
+}
+
+void Camera2Bridge::setHdrEnabled(bool on)
+{
+    if (on == hdrEnabled_.exchange(on))
+        return;
+    emit hdrEnabledChanged();
 }
 
 void Camera2Bridge::setAutoExposure()

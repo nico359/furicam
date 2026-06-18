@@ -299,6 +299,7 @@ Item {
         width: Math.min(parent.width, parent.height * dispAspect)
         height: width / dispAspect
         anchors.centerIn: parent
+        hdrEnabled: settings.hdrEnabled   // HDR burst+fuse handled in the bridge
 
         // Video mode + recording size are applied atomically at discrete moments
         // (entering video mode, starting a recording) via applyVideoMode() /
