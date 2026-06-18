@@ -1939,15 +1939,8 @@ ApplicationWindow {
                     color: (settings.videoResWidth === model.resWidth && settings.videoResHeight === model.resHeight) ? "#444" : "transparent"
                     radius: 4 * window.scalingRatio
 
-                    // Aspect ratio computed from the size (handles future entries).
-                    property string aspectStr: {
-                        function g(a, b) { return b === 0 ? a : g(b, a % b) }
-                        var d = g(model.resWidth, model.resHeight)
-                        return (model.resWidth / d) + ":" + (model.resHeight / d)
-                    }
-
                     Text {
-                        text: model.label + "  " + aspectStr
+                        text: model.label
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
                         anchors.verticalCenter: parent.verticalCenter
