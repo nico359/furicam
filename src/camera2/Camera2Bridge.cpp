@@ -673,6 +673,40 @@ QVariantList Camera2Bridge::availableResolutions()
     return list;
 }
 
+QVariantList Camera2Bridge::availableVideoResolutions()
+{
+    QVariantList list;
+    if (!session_)
+        return list;
+    auto sizes = session_->privateSizes();
+    // The H.264 encoder here rejects anything outside the 4K box (verified
+    // on-device: width>3840 or height>2160 → AMediaCodec_configure fails).  Keep
+    // clean-aspect, sensibly-sized entries.
+    const double aspects[] = { 16.0 / 9.0, 4.0 / 3.0, 1.0, 3.0 / 2.0 };
+    std::vector<CameraSession::StreamConfig> keep;
+    for (const auto& s : sizes) {
+        if (s.isInput || s.width < 640 || s.width > 3840 || s.height > 2160)
+            continue;
+        const double r = (double)s.width / s.height;
+        bool clean = false;
+        for (double a : aspects)
+            if (std::abs(r - a) < 0.03) { clean = true; break; }
+        if (clean)
+            keep.push_back(s);
+    }
+    std::sort(keep.begin(), keep.end(),
+              [](const CameraSession::StreamConfig& a, const CameraSession::StreamConfig& b) {
+                  return (long)a.width * a.height > (long)b.width * b.height;
+              });
+    for (const auto& s : keep) {
+        QVariantMap m;
+        m["width"]  = s.width;
+        m["height"] = s.height;
+        list.append(m);
+    }
+    return list;
+}
+
 void Camera2Bridge::setResolution(int width, int height)
 {
     if (!session_)

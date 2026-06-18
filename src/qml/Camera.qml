@@ -30,6 +30,7 @@ Item {
     property int lockedVideoRotation: 0
 
     property alias resolutionModel: resModel
+    property alias videoResolutionModel: videoResModel
     property int currentResWidth: 0
     property int currentResHeight: 0
 
@@ -51,6 +52,7 @@ Item {
     MeteringController { id: meteringController }
 
     ListModel { id: resModel }
+    ListModel { id: videoResModel }
 
     function setColorTemperature(temp) { colorTemperature = temp }
 
@@ -77,6 +79,22 @@ Item {
         if (res.length > 0 && currentResWidth === 0) {
             currentResWidth = res[0].width
             currentResHeight = res[0].height
+        }
+    }
+
+    // Populate the video-resolution picker from the engine's encoder-capable sizes
+    // (HAL PRIVATE sizes the H.264 encoder accepts).  The delegate appends aspect.
+    function fnVideoResolutions() {
+        videoResModel.clear()
+        var res = cam2.availableVideoResolutions()
+        for (var i = 0; i < res.length; i++) {
+            var w = res[i].width
+            var h = res[i].height
+            var mp = Math.round((w * h) / 100000) / 10
+            videoResModel.append({
+                "resWidth": w, "resHeight": h,
+                "label": mp + " MP (" + w + "×" + h + ")"
+            })
         }
     }
 
@@ -310,6 +328,7 @@ Item {
             if (ready) {
                 focusState.state = "Default"
                 cameraItem.fnAspectRatio()
+                cameraItem.fnVideoResolutions()
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
                 // Sync GUI position state to the camera that actually opened (bridge
                 // ground truth) — the flash button and other UI gate on
