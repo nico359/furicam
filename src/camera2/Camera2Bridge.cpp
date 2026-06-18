@@ -366,7 +366,9 @@ void Camera2Bridge::pickPreviewStreamSize()
 void Camera2Bridge::recomputePreviewAspect()
 {
     int cw, ch;
-    effectiveCaptureSize(cw, ch);
+    if (videoModeDesired_) { cw = videoW_; ch = videoH_; }   // video mode: match the clip
+    else                     effectiveCaptureSize(cw, ch);    // photo mode: match the still
+    if (cw <= 0 || ch <= 0) { cw = 4; ch = 3; }
     const float ca = (float)cw / (float)ch;                                   // still aspect
     const float sa = (float)previewStreamW_ / (float)previewStreamH_;         // stream aspect (~4:3)
 
@@ -519,6 +521,8 @@ void Camera2Bridge::setVideoResolution(int width, int height)
     if (changed) {
         emit videoSizeChanged();
         rebuildVideoIfActive();
+        if (videoModeDesired_)
+            recomputePreviewAspect();   // a different video aspect re-letterboxes the preview
     }
 }
 
@@ -528,6 +532,7 @@ void Camera2Bridge::setVideoMode(bool on)
         return;
     videoModeDesired_ = on;
     applyVideoMode();
+    recomputePreviewAspect();   // letterbox/crop follows the photo vs video aspect
     emit videoModeChanged();
 }
 
