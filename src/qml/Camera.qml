@@ -175,6 +175,13 @@ Item {
         cam2.setZoom(ratio)
     }
 
+    // Brightness via exposure compensation; ev in [0,1] (0.5 = neutral).  The
+    // engine maps it onto the camera's real AE-compensation range and applies it
+    // to the active request — so it brightens the live video while recording.
+    function handleSetBrightness(ev) {
+        cam2.setExposureCompensation(ev)
+    }
+
     // Populate the camera selector from the engine's full list (incl. the
     // secondary back/macro camera), keyed by camera index.
     function initializeCameraList() {
@@ -330,6 +337,7 @@ Item {
                 focusState.state = "Default"
                 cameraItem.fnAspectRatio()
                 cameraItem.fnVideoResolutions()
+                cam2.setExposureCompensation(settings.brightnessEv)   // restore brightness after (re)start
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
                 // Sync GUI position state to the camera that actually opened (bridge
                 // ground truth) — the flash button and other UI gate on

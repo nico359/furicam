@@ -179,6 +179,8 @@ ApplicationWindow {
         property real colorCorrectionBlue:  1.00
         property real colorCorrectionSaturation: 1.20
         property bool hdrEnabled: false
+        // Brightness (exposure-compensation) slider position in [0,1]; 0.5 = neutral.
+        property real brightnessEv: 0.5
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
@@ -576,6 +578,93 @@ ApplicationWindow {
                 height: 20 * window.scalingRatio
                 radius: width / 2
                 color: wbSlider.pressed ? "#e0e0e0" : "white"
+                border.color: "#40000000"
+                border.width: 1
+            }
+        }
+    }
+
+    // Brightness (exposure compensation) slider — left edge, available in BOTH
+    // photo and video mode (incl. while recording, unlike zoom/WB).  Maps [0,1]
+    // onto the open camera's real AE-compensation range; applies live to the
+    // active request, so it brightens video as you drag.  Sits to the right of the
+    // WB selector on the rare occasion both are shown.
+    Item {
+        id: brightnessSliderContainer
+        anchors.left: parent.left
+        anchors.leftMargin: (wbSliderContainer.visible ? 76 : 16) * window.scalingRatio
+        anchors.bottom: mainBar.top
+        anchors.bottomMargin: 20 * window.scalingRatio
+        width: 50 * window.scalingRatio
+        height: parent.height * 0.35
+        visible: !mediaView.visible && cameraLoader.item !== null
+        opacity: brightnessSlider.pressed ? 1.0 : 0.7
+
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+
+        // Brightness icon badge
+        Rectangle {
+            id: brightnessLabel
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: brightnessSlider.top
+            anchors.bottomMargin: 6 * window.scalingRatio
+            width: 48 * window.scalingRatio
+            height: 24 * window.scalingRatio
+            radius: 12 * window.scalingRatio
+            color: "#99000000"
+
+            Text {
+                anchors.centerIn: parent
+                text: "🔆"
+                color: "white"
+                font.pixelSize: 13 * window.scalingRatio
+                font.bold: true
+            }
+        }
+
+        Slider {
+            id: brightnessSlider
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: brightnessLabel.bottom
+            anchors.topMargin: 6 * window.scalingRatio
+            anchors.bottom: parent.bottom
+            orientation: Qt.Vertical
+            from: 0.0
+            to: 1.0
+            value: settings.brightnessEv
+            stepSize: 0.02
+            live: true
+
+            // Drag up = brighter (higher EV).  Persist + apply live.
+            onMoved: {
+                settings.brightnessEv = value;
+                if (cameraLoader.item)
+                    cameraLoader.item.handleSetBrightness(value);
+            }
+
+            background: Rectangle {
+                x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
+                y: brightnessSlider.topPadding
+                width: 4 * window.scalingRatio
+                height: brightnessSlider.availableHeight
+                radius: 2 * window.scalingRatio
+                color: "#66ffffff"
+
+                Rectangle {
+                    width: parent.width
+                    height: brightnessSlider.visualPosition * parent.height
+                    radius: parent.radius
+                    color: "#ffd24d"   // warm tint to read as brightness
+                }
+            }
+
+            handle: Rectangle {
+                x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
+                y: brightnessSlider.topPadding + brightnessSlider.visualPosition * (brightnessSlider.availableHeight - height)
+                width: 20 * window.scalingRatio
+                height: 20 * window.scalingRatio
+                radius: width / 2
+                color: brightnessSlider.pressed ? "#e0e0e0" : "white"
                 border.color: "#40000000"
                 border.width: 1
             }
