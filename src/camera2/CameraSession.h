@@ -184,6 +184,17 @@ public:
     void exitVideoMode();
     bool isVideoMode() const { return videoMode_; }
 
+    // Target frame-rate range for VIDEO mode (preview + record).  [30,30] pins a
+    // steady 30 fps; a wider range like [5,30] lets auto-exposure drop the rate in
+    // low light to expose each frame longer (brighter, less ISO noise — at the
+    // cost of motion smoothness).  Applied on the next enterVideoMode / session
+    // rebuild.  Photo-mode preview is unaffected.  Defaults to a pinned 30.
+    void setVideoFpsRange(int minFps, int maxFps)
+    {
+        videoFpsMin_ = minFps > 0 ? minFps : 30;
+        videoFpsMax_ = maxFps > 0 ? maxFps : 30;
+    }
+
     // ── Manual controls (Milestone 7) ────────────────────────────────────────
     // Update control state and re-submit the active repeating request (preview
     // or recording).  Safe to call before streaming — the state is applied when
@@ -301,6 +312,8 @@ private:
     std::atomic<int>                     lastAeState_{0};
     bool                                 streaming_ = false;
     int                                  previewFps_ = 30;
+    int                                  videoFpsMin_ = 30;  // VIDEO-mode AE target-fps range
+    int                                  videoFpsMax_ = 30;  // (see setVideoFpsRange)
 
     // Simultaneous preview+record: the same captureSession_ also carries the
     // encoder surface output, with a second (record) request that targets both

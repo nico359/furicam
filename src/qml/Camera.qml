@@ -183,6 +183,13 @@ Item {
         cam2.setExposureCompensation(ev)
     }
 
+    // Video frame-rate mode: 0 = steady 30 fps; 1 = auto (5–30), which lets
+    // auto-exposure drop the rate in low light for a brighter, lower-noise frame.
+    function handleSetVideoFps(mode) {
+        if (mode === 1) cam2.setVideoFps(5, 30)
+        else            cam2.setVideoFps(30, 30)
+    }
+
     // Populate the camera selector from the engine's full list (incl. the
     // secondary back/macro camera), keyed by camera index.
     function initializeCameraList() {
@@ -339,6 +346,7 @@ Item {
                 cameraItem.fnAspectRatio()
                 cameraItem.fnVideoResolutions()
                 cam2.setExposureCompensation(settings.brightnessEv)   // restore brightness after (re)start
+                cameraItem.handleSetVideoFps(settings.videoFpsMode)   // restore fps mode before video mode
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
                 // Sync GUI position state to the camera that actually opened (bridge
                 // ground truth) — the flash button and other UI gate on

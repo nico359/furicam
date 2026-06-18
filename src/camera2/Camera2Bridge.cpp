@@ -485,7 +485,24 @@ void Camera2Bridge::enterVideoMode()
         return;
     // Scale bitrate roughly with resolution so 4K isn't starved.
     const int bitrate = (videoW_ >= 3000) ? 40000000 : 20000000;
-    session_->enterVideoMode(videoW_, videoH_, 30, bitrate);
+    session_->setVideoFpsRange(videoFpsMin_, videoFpsMax_);
+    session_->enterVideoMode(videoW_, videoH_, videoFpsMax_, bitrate);
+}
+
+// Set the video target-fps range: [30,30] = steady 30; [5,30] = allow the rate
+// to drop in low light for a brighter exposure.  Rebuilds the video session if
+// it's already up (and not recording) so the change applies immediately.
+void Camera2Bridge::setVideoFps(int minFps, int maxFps)
+{
+    if (minFps <= 0 || maxFps <= 0)
+        return;
+    if (minFps == videoFpsMin_ && maxFps == videoFpsMax_)
+        return;
+    videoFpsMin_ = minFps;
+    videoFpsMax_ = maxFps;
+    if (session_)
+        session_->setVideoFpsRange(minFps, maxFps);
+    rebuildVideoIfActive();
 }
 
 void Camera2Bridge::exitVideoMode()

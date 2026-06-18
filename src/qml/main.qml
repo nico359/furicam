@@ -181,6 +181,8 @@ ApplicationWindow {
         property bool hdrEnabled: false
         // Brightness (exposure-compensation) slider position in [0,1]; 0.5 = neutral.
         property real brightnessEv: 0.5
+        // Video frame-rate mode: 0 = steady 30 fps, 1 = auto (5–30, low-light).
+        property int videoFpsMode: 0
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
@@ -2033,6 +2035,56 @@ ApplicationWindow {
                         onClicked: {
                             settings.videoResWidth  = model.resWidth;
                             settings.videoResHeight = model.resHeight;
+                        }
+                    }
+                }
+            }
+
+            // Frame-rate toggle: steady 30 vs auto 5–30 (lets auto-exposure drop
+            // the rate in low light for a brighter, lower-noise frame).  Applies
+            // to video mode live (rebuilds the session when not recording).
+            Text {
+                text: "Frame Rate"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "30 fps",           mode: 0 },
+                        { label: "Auto (low light)", mode: 1 }
+                    ]
+                    delegate: Rectangle {
+                        width: fpsPillText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.videoFpsMode === modelData.mode ? "#444" : "#222"
+                        border.color: settings.videoFpsMode === modelData.mode ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: fpsPillText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.videoFpsMode === modelData.mode
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                settings.videoFpsMode = modelData.mode;
+                                if (cameraLoader.item)
+                                    cameraLoader.item.handleSetVideoFps(modelData.mode);
+                            }
                         }
                     }
                 }

@@ -643,9 +643,15 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
     if (!withEncoder && analysisWindow_
         && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
         ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
-    if (targetFps > 0) {
-        int32_t r[2] = { targetFps, targetFps };
-        ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
+    {
+        // Video mode honours the chosen target-fps range (e.g. 5–30 for low-light
+        // auto); photo-mode preview stays pinned at targetFps for smooth motion.
+        const int loFps = withEncoder ? videoFpsMin_ : targetFps;
+        const int hiFps = withEncoder ? videoFpsMax_ : targetFps;
+        if (loFps > 0 && hiFps > 0) {
+            int32_t r[2] = { loFps, hiFps };
+            ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
+        }
     }
     applyControls(previewRequest_);
     // In video mode, stabilize the idle (not-yet-recording) preview too, so its
@@ -667,8 +673,8 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
             lastError_ = fmt("record request setup failed (status %d)", (int)cs);
             return false;
         }
-        if (targetFps > 0) {
-            int32_t r[2] = { targetFps, targetFps };
+        if (videoFpsMin_ > 0 && videoFpsMax_ > 0) {
+            int32_t r[2] = { videoFpsMin_, videoFpsMax_ };
             ACaptureRequest_setEntry_i32(recordRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
         }
         applyControls(recordRequest_);
@@ -1120,7 +1126,7 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
         return false;
     }
 
-    int32_t fpsRange[2] = { fps, fps };
+    int32_t fpsRange[2] = { videoFpsMin_, videoFpsMax_ };
     ACaptureRequest_setEntry_i32(recordRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, fpsRange);
 
     activeSession_ = recordSession_;

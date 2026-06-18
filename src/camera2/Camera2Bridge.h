@@ -225,6 +225,8 @@ public:
     // if already in video mode (and not recording) the session is rebuilt at the
     // new size.  Bind to the app's video-resolution setting.
     Q_INVOKABLE void setVideoResolution(int width, int height);
+    // Video target-fps range: (30,30) steady 30; (5,30) allow low-light drop.
+    Q_INVOKABLE void setVideoFps(int minFps, int maxFps);
     int  videoWidth()  const { return videoW_; }
     int  videoHeight() const { return videoH_; }
     void setVideoWidth(int width);
@@ -291,6 +293,8 @@ private:
     bool                 videoModeDesired_   = false;   // GUI's photo/video toggle
     int                  videoW_             = 1920;     // recording size
     int                  videoH_             = 1080;
+    int                  videoFpsMin_        = 30;       // video target-fps range
+    int                  videoFpsMax_        = 30;
     int                  captureW_           = 0;        // chosen still size (0 = sensor max)
     int                  captureH_           = 0;
     int                  previewStreamW_     = 1280;     // preview stream size; its aspect
