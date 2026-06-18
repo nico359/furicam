@@ -205,10 +205,6 @@ public:
     Q_INVOKABLE QVariantList availableResolutions();
     Q_INVOKABLE void setResolution(int width, int height);
 
-    // Encoder-capable video sizes (PRIVATE sizes the H.264 encoder accepts: this
-    // device caps at the 4K box ≤3840×2160), clean aspects, largest first.
-    Q_INVOKABLE QVariantList availableVideoResolutions();
-
     // Video recording size (e.g. 3840x2160, 1920x1080).  Applied to the encoder;
     // if already in video mode (and not recording) the session is rebuilt at the
     // new size.  Bind to the app's video-resolution setting.

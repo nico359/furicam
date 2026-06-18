@@ -17,7 +17,6 @@
 
 #include "CameraSession.h"
 
-#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <chrono>
@@ -123,24 +122,6 @@ int main(int argc, char** argv)
         return 1;
     }
     std::printf("opened camera %s OK\n", openId.c_str());
-
-    // Full list of PRIVATE (preview/recording-capable) sizes — what video could
-    // record at, any aspect (incl. squares).
-    {
-        auto privs = session.privateSizes();
-        std::sort(privs.begin(), privs.end(),
-                  [](const CameraSession::StreamConfig& a, const CameraSession::StreamConfig& b) {
-                      return (long)a.width * a.height > (long)b.width * b.height;
-                  });
-        auto gcd = [](int a, int b) { while (b) { int t = a % b; a = b; b = t; } return a ? a : 1; };
-        std::printf("\nPRIVATE (video-recordable) sizes: %zu\n", privs.size());
-        for (const auto& s : privs) {
-            const int g = gcd(s.width, s.height);
-            const double mp = s.width * (double)s.height / 1e6;
-            std::printf("  %4dx%-4d  %2d:%-2d  %.1f MP\n", s.width, s.height, s.width / g, s.height / g, mp);
-        }
-        std::printf("\n");
-    }
 
     if (photoMode) {
         if (photoPath.empty())
