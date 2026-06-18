@@ -82,6 +82,17 @@ Item {
         }
     }
 
+    // Short consumer name for the common 16:9 video sizes; 4:3 / 1:1 sizes have no
+    // standard short name, so they get none.
+    function videoResShortName(w, h) {
+        if (Math.abs(w / h - 16 / 9) > 0.05) return ""
+        if (h >= 2160) return "4K"
+        if (h >= 1440) return "1440p"
+        if (h >= 1080) return "1080p"
+        if (h >= 720)  return "HD"
+        return "SD"
+    }
+
     // Populate the video-resolution picker from the engine's encoder-capable sizes
     // (HAL PRIVATE sizes the H.264 encoder accepts), largest first.
     function fnVideoResolutions() {
@@ -92,9 +103,10 @@ Item {
             var h = res[i].height
             var g = gcd(w, h)
             var mp = Math.round((w * h) / 100000) / 10
+            var sn = videoResShortName(w, h)
             videoResModel.append({
                 "resWidth": w, "resHeight": h,
-                "label": mp + " MP (" + w + "×" + h + ")  " + (w / g) + ":" + (h / g)
+                "label": mp + " MP (" + w + "×" + h + ")  " + (w / g) + ":" + (h / g) + (sn ? "  " + sn : "")
             })
         }
     }
@@ -188,6 +200,13 @@ Item {
     function handleSetVideoFps(mode) {
         if (mode === 1) cam2.setVideoFps(5, 30)
         else            cam2.setVideoFps(30, 30)
+    }
+
+    // Apply a chosen video resolution now (atomic w+h, avoiding split-binding
+    // churn): re-letterboxes the preview to the new aspect immediately and rebuilds
+    // the video session at the new size when in video mode (not while recording).
+    function handleSetVideoResolution(w, h) {
+        cam2.setVideoResolution(w, h)
     }
 
     // Populate the camera selector from the engine's full list (incl. the

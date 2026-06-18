@@ -2035,6 +2035,10 @@ ApplicationWindow {
                         onClicked: {
                             settings.videoResWidth  = model.resWidth;
                             settings.videoResHeight = model.resHeight;
+                            // Apply now so the preview re-letterboxes to the new
+                            // aspect immediately (atomic w+h).
+                            if (cameraLoader.item)
+                                cameraLoader.item.handleSetVideoResolution(model.resWidth, model.resHeight);
                         }
                     }
                 }
