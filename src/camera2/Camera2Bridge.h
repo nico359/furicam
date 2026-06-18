@@ -101,6 +101,8 @@ public:
     // is cropped to the chosen still aspect (WYSIWYG).  Read on the render thread.
     float         cropScaleX() const { return cropScaleX_.load(); }
     float         cropScaleY() const { return cropScaleY_.load(); }
+    // Mirror the preview left-right for the front (selfie) camera.
+    bool          previewMirrored() const { return lensFacingPref_.load() == 0; }
 
     // ── QML API ─────────────────────────────────────────────────────────────
     // All Q_INVOKABLE methods may be called from the QML/JavaScript thread.

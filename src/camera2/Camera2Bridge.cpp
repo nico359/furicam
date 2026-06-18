@@ -73,12 +73,13 @@ public:
         rotation_ = bridge->displayRotation();
         cropX_    = bridge->cropScaleX();
         cropY_    = bridge->cropScaleY();
+        mirror_   = bridge->previewMirrored();
     }
 
     void render() override
     {
         renderer_.render(reader_, viewSize_.width(), viewSize_.height(), rotation_,
-                         cropX_, cropY_);
+                         cropX_, cropY_, mirror_);
     }
 
 private:
@@ -88,6 +89,7 @@ private:
     int             rotation_ = 90;
     float           cropX_    = 1.0f;
     float           cropY_    = 1.0f;
+    bool            mirror_   = false;
 };
 
 } // namespace
