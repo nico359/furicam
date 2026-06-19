@@ -36,6 +36,15 @@ Licensed under GPL-2.0.
 Important note about building:
 Some of the listed dependencies here do not seem to be available anymore on Debian Forky. To build furios-camera/furicam directly on the Furiphone I had to to so in a Debian Trixie Distrobox container. If you want to take the same approach, you might have to install distrobox, podman and optionally a GUI to manage containers like Distroshelf from Flathub for example.
 
+### Camera2 build notes
+
+* Building in distrobox requires a symlink to host libhybris:
+  ```
+  sudo ln -s /run/host/usr/lib/aarch64-linux-gnu/libhybris-common.so.1 \
+              /usr/lib/aarch64-linux-gnu/libhybris-common.so.1
+  ```
+* The deb is built with `dpkg-buildpackage -d -us -uc -b` (skip build-dep checks — hybris is host-only).
+
 
 * (Optional) Install Distrobox
 ```
