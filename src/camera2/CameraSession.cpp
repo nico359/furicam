@@ -8,8 +8,6 @@
 #include "VideoEncoder.h"
 #include "AudioEncoder.h"   // gst-free header; a stub backs it when audio is off
 
-#include <atomic>
-#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <thread>
@@ -90,16 +88,6 @@ std::string fmt(const char* f, ...)
     std::string s = vfmt(f, ap);
     va_end(ap);
     return s;
-}
-
-// Shutter-lag instrumentation (one still in flight at a time): capturePhoto stamps
-// entry + submit; onJpegImageAvailable logs build / hal / write splits.
-std::atomic<int64_t> g_captureEntryMs{0};
-std::atomic<int64_t> g_submitMs{0};
-int64_t shutterNowMs()
-{
-    using namespace std::chrono;
-    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
 } // namespace
@@ -462,11 +450,12 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
         ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
 
-    // Pin the auto-exposure frame-rate range so the HAL targets a steady fps
-    // (TEMPLATE_PREVIEW otherwise lets AE drop the rate in low light).
+    // Let the preview AE drop the frame rate in low light (range [previewFpsMin_,
+    // targetFps], e.g. 5-30) so the viewfinder brightens toward the photo — at the
+    // cost of a choppier preview when it's dark.
     previewFps_ = targetFps > 0 ? targetFps : previewFps_;
     if (targetFps > 0) {
-        int32_t fpsRange[2] = { targetFps, targetFps };
+        int32_t fpsRange[2] = { previewFpsMin_ > 0 ? previewFpsMin_ : targetFps, targetFps };
         ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, fpsRange);
     }
 
@@ -670,7 +659,7 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
     {
         // Video mode honours the chosen target-fps range (e.g. 5–30 for low-light
         // auto); photo-mode preview stays pinned at targetFps for smooth motion.
-        const int loFps = withEncoder ? videoFpsMin_ : targetFps;
+        const int loFps = withEncoder ? videoFpsMin_ : (previewFpsMin_ > 0 ? previewFpsMin_ : targetFps);
         const int hiFps = withEncoder ? videoFpsMax_ : targetFps;
         if (loFps > 0 && hiFps > 0) {
             int32_t r[2] = { loFps, hiFps };
@@ -965,7 +954,6 @@ bool CameraSession::ensureStillRequest()
 
 bool CameraSession::capturePhoto(const std::string& path)
 {
-    g_captureEntryMs.store(shutterNowMs());
     if (!captureSession_ || !jpegWindow_) {
         lastError_ = "capturePhoto: no JPEG output (start preview with still capture)";
         return false;
@@ -994,7 +982,6 @@ bool CameraSession::capturePhoto(const std::string& path)
 
     int seqId = 0;
     camera_status_t cs = ACameraCaptureSession_capture(captureSession_, nullptr, 1, &stillRequest_, &seqId);
-    g_submitMs.store(shutterNowMs());
     if (cs != ACAMERA_OK) {
         lastError_ = fmt("ACameraCaptureSession_capture failed (status %d)", (int)cs);
         return false;
@@ -1007,7 +994,6 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
     auto* self = static_cast<CameraSession*>(ctx);
     if (!self || !reader)
         return;
-    const int64_t tArrived = shutterNowMs();   // JPEG ready (listener fired)
 
     AImage* img = nullptr;
     if (AImageReader_acquireNextImage(reader, &img) != AMEDIA_OK || !img)
@@ -1039,14 +1025,6 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
         self->log(fmt("photo saved: %s (%d bytes)", path.c_str(), actual));
     }
     AImage_delete(img);
-
-    // Breakdown: our request build, the HAL capture+encode, and our file write.
-    const int64_t t1 = g_captureEntryMs.load(), t2 = g_submitMs.load();
-    const int64_t tWritten = shutterNowMs();
-    if (t1 > 0 && t2 >= t1)
-        std::fprintf(stderr, "[shutter] build %lld, hal %lld, write %lld ms\n",
-                     (long long)(t2 - t1), (long long)(tArrived - t2),
-                     (long long)(tWritten - tArrived));
 
     if (self->photoCallback_)
         self->photoCallback_(path, ok);

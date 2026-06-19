@@ -129,7 +129,8 @@ Item {
 
     function handleCameraTakeShot() {
         pinchArea.enabled = true
-        window.triggerCaptureFlash()   // immediate shutter cue; masks the capture freeze
+        freezeCurrentPreview()         // hold ~what you shot while the still capture stalls preview
+        window.triggerCaptureFlash()   // immediate shutter cue
         if (settings.soundOn === 1)
             sound.play()
         if (mediaView.index < 0)
@@ -139,6 +140,20 @@ Item {
         // Single full-resolution capture; the engine writes the JPEG and emits
         // photoSaved(path), handled in onPhotoSaved below.
         cam2.capturePhoto("")
+    }
+
+    // Grab the current preview frame and hold it over the viewfinder during the
+    // still-capture stall, so the user instantly sees ~what they captured.  It
+    // fades out the moment fresh live frames resume (frozenFrame's Connections).
+    function freezeCurrentPreview() {
+        cam2.grabToImage(function(result) {
+            if (!result)
+                return
+            frozenFrame.source = result.url
+            frozenFrame.baseCount = cam2.frameCount
+            frozenFrame.opacity = 1
+            frozenHideTimer.restart()
+        })
     }
 
     function handleCameraTakeVideo() { handleVideoRecording() }
@@ -676,5 +691,37 @@ Item {
         source: vBlur
         visible: opacity != 0
         Behavior on opacity { NumberAnimation { duration: 300 } }
+    }
+
+    // ── Capture freeze-frame ─────────────────────────────────────────────────
+    // Grabbed copy of the preview at shutter time, held over the viewfinder while
+    // the still capture stalls the live preview; fades the instant live resumes.
+    Image {
+        id: frozenFrame
+        anchors.fill: cam2
+        z: 8000
+        fillMode: Image.PreserveAspectCrop
+        cache: false
+        opacity: 0
+        visible: opacity > 0
+        property int baseCount: 0
+        Behavior on opacity { NumberAnimation { duration: 160 } }
+    }
+
+    Timer {
+        id: frozenHideTimer
+        interval: 4000   // safety: never hold the frozen frame indefinitely
+        onTriggered: frozenFrame.opacity = 0
+    }
+
+    Connections {
+        target: cam2
+        // A few fresh live frames after the capture stall ⇒ preview is back; reveal it.
+        function onFrameCountChanged() {
+            if (frozenFrame.opacity > 0 && cam2.frameCount - frozenFrame.baseCount >= 3) {
+                frozenFrame.opacity = 0
+                frozenHideTimer.stop()
+            }
+        }
     }
 }

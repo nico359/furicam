@@ -316,6 +316,7 @@ private:
     std::atomic<int>                     lastAeState_{0};
     bool                                 streaming_ = false;
     int                                  previewFps_ = 30;
+    int                                  previewFpsMin_ = 5;   // preview AE floor: drops in low light → brighter viewfinder
     int                                  videoFpsMin_ = 30;  // VIDEO-mode AE target-fps range
     int                                  videoFpsMax_ = 30;  // (see setVideoFpsRange)
 

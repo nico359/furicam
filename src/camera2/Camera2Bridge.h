@@ -317,7 +317,6 @@ private:
     std::atomic<int>     deviceRotation_     {0};
     std::atomic<int>     displayRotation_    {90};
     std::atomic<int>     cachedDeviceRotation_ {0};  // orientation cache (D-Bus signal-fed)
-    int64_t              shutterT0Ms_        = 0;    // tap timestamp, for shutter-lag log
 
     // HDR burst state (GUI thread).  kHdrFrames matches the original 3-frame burst.
     static constexpr int kHdrFrames = 3;
