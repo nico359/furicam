@@ -5,10 +5,16 @@ build-*/
 *.o
 # packaging / on-phone build artifacts
 *.deb
+*.buildinfo
+*.changes
 deb-stage/
 qtmm-sysroot/
 opencv-mini/
+obj-*/
 debian/furicam/
 debian/.debhelper/
+debian/tmp/
 debian/files
 debian/*.substvars
+debian/*.debhelper.log
+debian/debhelper-build-stamp
