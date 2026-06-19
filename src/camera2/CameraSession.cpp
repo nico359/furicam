@@ -11,6 +11,11 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <future>
 #include <thread>
 #include <utility>
 
@@ -104,8 +109,49 @@ CameraSession::CameraSession(LogFn log)
     }
 }
 
+// ── Background image writer ──────────────────────────────────────────────────
+// Lazily start the writer thread and queue a job.  The thread runs jobs serially;
+// on stop it drains the remaining queue (so pending photos finish) then exits.
+void CameraSession::enqueueWrite(std::function<void()> job)
+{
+    {
+        std::lock_guard<std::mutex> lk(writerMutex_);
+        if (!writerStarted_) {
+            writerStarted_ = true;
+            writerStop_    = false;
+            writerThread_  = std::thread([this]() {
+                for (;;) {
+                    std::function<void()> j;
+                    {
+                        std::unique_lock<std::mutex> lk(writerMutex_);
+                        writerCv_.wait(lk, [this] { return writerStop_ || !writerJobs_.empty(); });
+                        if (writerJobs_.empty()) return;   // woken to stop, nothing left
+                        j = std::move(writerJobs_.front());
+                        writerJobs_.pop_front();
+                    }
+                    j();
+                }
+            });
+        }
+        writerJobs_.push_back(std::move(job));
+    }
+    writerCv_.notify_one();
+}
+
+void CameraSession::stopWriter()
+{
+    if (!writerStarted_)
+        return;
+    { std::lock_guard<std::mutex> lk(writerMutex_); writerStop_ = true; }
+    writerCv_.notify_all();
+    if (writerThread_.joinable())
+        writerThread_.join();
+    writerStarted_ = false;
+}
+
 CameraSession::~CameraSession()
 {
+    stopWriter();   // finish any queued JPEG/DNG writes while members are still alive
     stopRecording();
     close();
     if (manager_) {
@@ -794,6 +840,32 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
     return true;
 }
 
+// Open the HW H.264 encoder on a worker thread, bounded by a timeout, so a wedged
+// codec service (e.g. leaked by a prior force-kill mid-acquire) can't hard-freeze
+// the calling (GUI) thread inside the synchronous binder call in
+// AMediaCodec_createEncoderByType.  Returns 1=ok, 0=init failed, -1=timed out.
+// On -1 the worker is detached and `enc` MUST be leaked by the caller (the thread
+// is stuck in binder and keeps using it); encoderWedged_ latches so we fail fast.
+int CameraSession::runEncoderInitGuarded(VideoEncoder* enc, std::function<bool()> initFn)
+{
+    auto result = std::make_shared<std::promise<bool>>();
+    std::future<bool> fut = result->get_future();
+    std::thread worker([result, initFn]() {
+        bool ok = false;
+        try { ok = initFn(); } catch (...) {}
+        result->set_value(ok);
+    });
+    constexpr int kTimeoutSec = 4;   // a healthy open is well under 1s; wedge = forever
+    if (fut.wait_for(std::chrono::seconds(kTimeoutSec)) != std::future_status::ready) {
+        worker.detach();             // stuck in binder; cannot be cancelled — leak it
+        encoderWedged_ = true;
+        (void)enc;
+        return -1;
+    }
+    worker.join();
+    return fut.get() ? 1 : 0;
+}
+
 bool CameraSession::enterVideoMode(int width, int height, int fps, int bitrate)
 {
     if (videoMode_)
@@ -806,15 +878,30 @@ bool CameraSession::enterVideoMode(int width, int height, int fps, int bitrate)
         lastError_ = "enterVideoMode: preview not running";
         return false;
     }
+    if (encoderWedged_) {
+        lastError_ = "video encoder unavailable: codec service unresponsive (restart the app)";
+        return false;
+    }
 
     startBinderThreadPoolOnce();
 
-    encoder_ = std::make_unique<VideoEncoder>();
-    if (!encoder_->open(width, height, fps, bitrate, captureOrientation())) {
-        lastError_ = "enterVideoMode: encoder open failed: " + encoder_->lastError();
-        encoder_.reset();
+    auto enc = std::make_unique<VideoEncoder>();
+    VideoEncoder* encRaw = enc.get();
+    const int orient = captureOrientation();
+    int rc = runEncoderInitGuarded(encRaw, [encRaw, width, height, fps, bitrate, orient]() {
+        return encRaw->open(width, height, fps, bitrate, orient);
+    });
+    if (rc < 0) {
+        (void)enc.release();   // leaked: the detached worker is still using it
+        lastError_ = "enterVideoMode: encoder open timed out — codec service unresponsive";
+        log("enterVideoMode: encoder open TIMED OUT (codec stuck); staying in photo mode");
         return false;
     }
+    if (rc == 0) {
+        lastError_ = "enterVideoMode: encoder open failed: " + enc->lastError();
+        return false;   // enc destroyed here (open failed; no drain thread running)
+    }
+    encoder_ = std::move(enc);
 
     const int sessFps = fps > 0 ? fps : previewFps_;
     if (!buildSessionFromReaders(/*withEncoder*/ true, sessFps)) {
@@ -1136,29 +1223,36 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
         path = self->pendingPhotoPath_;
     }
 
-    bool ok = false;
+    // Copy the trimmed JPEG bytes out so the camera buffer can be released NOW; the
+    // actual disk write happens on the background writer thread (fast shot-to-shot).
+    std::vector<uint8_t> bytes;
     uint8_t* data = nullptr;
     int len = 0;
     if (!path.empty()
         && AImage_getPlaneData(img, 0, &data, &len) == AMEDIA_OK && data && len > 0) {
-        // The buffer is sized to the max JPEG; trim to the End-Of-Image marker.
-        int actual = len;
+        int actual = len;   // buffer is sized to the max JPEG; trim to End-Of-Image.
         for (int i = len - 2; i >= 0; --i) {
-            if (data[i] == 0xFF && data[i + 1] == 0xD9) {
-                actual = i + 2;
-                break;
-            }
+            if (data[i] == 0xFF && data[i + 1] == 0xD9) { actual = i + 2; break; }
         }
-        if (FILE* f = std::fopen(path.c_str(), "wb")) {
-            ok = std::fwrite(data, 1, (size_t)actual, f) == (size_t)actual;
-            std::fclose(f);
-        }
-        self->log(fmt("photo saved: %s (%d bytes)", path.c_str(), actual));
+        bytes.assign(data, data + actual);
     }
     AImage_delete(img);
 
-    if (self->photoCallback_)
-        self->photoCallback_(path, ok);
+    if (path.empty() || bytes.empty()) {
+        if (self->photoCallback_)
+            self->photoCallback_(path, false);
+        return;
+    }
+    self->enqueueWrite([self, path, bytes = std::move(bytes)]() {
+        bool ok = false;
+        if (FILE* f = std::fopen(path.c_str(), "wb")) {
+            ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+            std::fclose(f);
+        }
+        self->log(fmt("photo saved: %s (%d bytes)", path.c_str(), (int)bytes.size()));
+        if (self->photoCallback_)
+            self->photoCallback_(path, ok);
+    });
 }
 
 // RAW16 frame ready → write a color-accurate .dng next to the JPEG.  Runs on a
@@ -1186,12 +1280,24 @@ void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
     AImage_getPlaneRowStride(img, 0, &stride);
     bool got = (AImage_getPlaneData(img, 0, &data, &len) == AMEDIA_OK && data && len > 0);
 
-    bool ok = false;
+    // Copy the RAW16 plane into a tight (stride == w*2) buffer so the camera buffer
+    // can be released NOW; the DNG is serialised on the background writer thread.
+    std::vector<uint16_t> pixels;
     if (!path.empty() && got && w > 0 && h > 0) {
+        const size_t rowBytes = (size_t)w * 2;
+        const size_t srcStride = stride > 0 ? (size_t)stride : rowBytes;
+        pixels.resize((size_t)w * h);
+        for (int y = 0; y < h; ++y)
+            std::memcpy(reinterpret_cast<uint8_t*>(pixels.data()) + (size_t)y * rowBytes,
+                        data + (size_t)y * srcStride, rowBytes);
+    }
+    AImage_delete(img);
+
+    if (!path.empty() && !pixels.empty() && w > 0 && h > 0) {
         const CameraInfo* ci = self->activeInfo();
         DngParams p;
         p.width = w; p.height = h;
-        p.rowStrideBytes = stride > 0 ? stride : w * 2;
+        p.rowStrideBytes = w * 2;   // tightly packed above
         p.orientationDeg = self->captureOrientation();
         if (ci) {
             p.whiteLevel     = ci->whiteLevel;
@@ -1234,12 +1340,13 @@ void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
             p.iso        = self->resultIso_;
             p.exposureNs = self->resultExposureNs_;
         }
-        std::string e2;
-        ok = writeDng(path, reinterpret_cast<const uint16_t*>(data), p, &e2);
-        self->log(ok ? fmt("DNG saved: %s (%dx%d)", path.c_str(), w, h)
-                     : fmt("DNG write failed: %s — %s", path.c_str(), e2.c_str()));
+        self->enqueueWrite([self, path, p, pixels = std::move(pixels)]() {
+            std::string e2;
+            bool ok = writeDng(path, pixels.data(), p, &e2);
+            self->log(ok ? fmt("DNG saved: %s (%dx%d)", path.c_str(), p.width, p.height)
+                         : fmt("DNG write failed: %s — %s", path.c_str(), e2.c_str()));
+        });
     }
-    AImage_delete(img);
 }
 
 bool CameraSession::startRecording(const std::string& path, int width, int height,
@@ -1317,15 +1424,31 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
     if (streaming_)
         stopPreview();
 
-    encoder_ = std::make_unique<VideoEncoder>();
-    encoder_->expectAudio(audioActive);   // gate muxer start on the audio track
-    if (!encoder_->start(path, width, height, fps, bitrate, captureOrientation())) {
-        lastError_ = "encoder start failed: " + encoder_->lastError();
-        encoder_.reset();
+    if (encoderWedged_) {
+        lastError_ = "video encoder unavailable: codec service unresponsive (restart the app)";
+        if (audioEnc_ && !audioPrewarmed_) audioEnc_.reset();
+        return false;
+    }
+    auto enc = std::make_unique<VideoEncoder>();
+    enc->expectAudio(audioActive);   // gate muxer start on the audio track
+    VideoEncoder* encRaw = enc.get();
+    const int orient = captureOrientation();
+    int rc = runEncoderInitGuarded(encRaw, [encRaw, path, width, height, fps, bitrate, orient]() {
+        return encRaw->start(path, width, height, fps, bitrate, orient);
+    });
+    if (rc < 0) {
+        (void)enc.release();   // leaked: the detached worker is still using it
+        lastError_ = "encoder start timed out — codec service unresponsive";
+        if (audioEnc_ && !audioPrewarmed_) audioEnc_.reset();
+        return false;
+    }
+    if (rc == 0) {
+        lastError_ = "encoder start failed: " + enc->lastError();
         if (audioEnc_ && !audioPrewarmed_)
             audioEnc_.reset();   // tear down a cold-started mic; keep a warm one
         return false;
     }
+    encoder_ = std::move(enc);
     attachAudio();
     ANativeWindow* ew = encoder_->inputWindow();
 

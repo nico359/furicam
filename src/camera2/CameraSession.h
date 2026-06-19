@@ -16,11 +16,14 @@
 #define FURICAM2_CAMERA_SESSION_H
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "Camera2NDK.h"
@@ -302,6 +305,16 @@ private:
     void freeStreamResources();   // free readers/windows/outputs/request
     void freeSessionKeepReaders();          // free session/outputs/requests, keep readers
     bool buildSessionFromReaders(bool withEncoder, int targetFps);  // (re)build the session
+    // Run a blocking encoder-init callable (open/start) on a worker thread with a
+    // bounded wait, so a wedged codec service can't hard-freeze the GUI thread in
+    // the synchronous binder call inside AMediaCodec_createEncoderByType.
+    // Returns 1=ok, 0=init returned false, -1=timed out (caller must leak `enc`).
+    int  runEncoderInitGuarded(VideoEncoder* enc, std::function<bool()> initFn);
+    // Background writer: capture callbacks copy the image bytes out and hand the
+    // slow JPEG/DNG disk write here, then return immediately so the camera buffer
+    // frees fast (quicker shot-to-shot).  Jobs run serially on writerThread_.
+    void enqueueWrite(std::function<void()> job);
+    void stopWriter();   // drain queued writes + join (called from the destructor)
     bool maxJpegSize(int* w, int* h) const;  // largest JPEG output of the open camera
     bool ensureStillRequest();               // build the cached still request + JPEG target once
     bool ensureRawReader();                  // create the RAW16 reader/window (lazily)
@@ -400,6 +413,14 @@ private:
     std::string                pendingPhotoPath_;
     std::function<void(const std::string&, bool)> photoCallback_;
 
+    // Background image-writer thread (lazily started on first enqueueWrite).
+    std::thread                       writerThread_;
+    std::mutex                        writerMutex_;
+    std::condition_variable           writerCv_;
+    std::deque<std::function<void()>> writerJobs_;
+    bool                              writerStop_    = false;
+    bool                              writerStarted_ = false;
+
     // Analysis YUV output (CPU-readable luma) for QR/barcode scanning — added to
     // the preview-only session (not video mode).  The listener hands the Y plane
     // to analysisCallback_ (set by the bridge), which decodes off the GUI thread.
@@ -435,6 +456,7 @@ private:
     std::unique_ptr<VideoEncoder>        encoder_;
     std::unique_ptr<AudioEncoder>        audioEnc_;   // optional AAC audio track (M6)
     bool                                 audioPrewarmed_ = false;  // warm-kept across records
+    bool                                 encoderWedged_  = false;  // codec service timed out; fail fast
     ACameraCaptureSession*               recordSession_   = nullptr;
     ACaptureSessionOutputContainer*      recordContainer_ = nullptr;
     ACaptureSessionOutput*               recordOutput_    = nullptr;

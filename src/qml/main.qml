@@ -1972,6 +1972,7 @@ ApplicationWindow {
             }
 
             Text {
+                visible: cslate.state === "PhotoCapture"
                 text: "Photo Resolution"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
@@ -1982,6 +1983,7 @@ ApplicationWindow {
 
             ListView {
                 id: resolutionList
+                visible: cslate.state === "PhotoCapture"
                 width: parent.width
                 height: settingsDrawer.height * 0.5
                 clip: true
@@ -2019,6 +2021,7 @@ ApplicationWindow {
             }
 
             Rectangle {
+                visible: cslate.state === "PhotoCapture"
                 width: parent.width - 32 * window.scalingRatio
                 height: 1
                 color: "#444"
@@ -2026,6 +2029,7 @@ ApplicationWindow {
             }
 
             Text {
+                visible: cslate.state === "VideoCapture"
                 text: "Video Resolution"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
@@ -2036,6 +2040,7 @@ ApplicationWindow {
 
             ListView {
                 id: videoResolutionList
+                visible: cslate.state === "VideoCapture"
                 width: parent.width
                 height: settingsDrawer.height * 0.5
                 clip: true
@@ -2074,6 +2079,7 @@ ApplicationWindow {
             // the rate in low light for a brighter, lower-noise frame).  Applies
             // to video mode live (rebuilds the session when not recording).
             Text {
+                visible: cslate.state === "VideoCapture"
                 text: "Frame Rate"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
@@ -2083,6 +2089,7 @@ ApplicationWindow {
             }
 
             Row {
+                visible: cslate.state === "VideoCapture"
                 leftPadding: 16 * window.scalingRatio
                 spacing: 8 * window.scalingRatio
 
@@ -2123,6 +2130,7 @@ ApplicationWindow {
             // Capture mode: ACTION scene mode freezes fast motion (short shutter,
             // higher ISO) — affects photos and the live preview.
             Text {
+                visible: cslate.state === "PhotoCapture"
                 text: "Capture Mode"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
@@ -2132,6 +2140,7 @@ ApplicationWindow {
             }
 
             Row {
+                visible: cslate.state === "PhotoCapture"
                 leftPadding: 16 * window.scalingRatio
                 spacing: 8 * window.scalingRatio
 
@@ -2173,6 +2182,7 @@ ApplicationWindow {
             // latitude in low light / heavy editing.  Larger files + slightly slower
             // shot-to-shot; live QR is disabled while on (stream-slot limit).
             Text {
+                visible: cslate.state === "PhotoCapture"
                 text: "RAW (DNG)"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
@@ -2182,6 +2192,7 @@ ApplicationWindow {
             }
 
             Row {
+                visible: cslate.state === "PhotoCapture"
                 leftPadding: 16 * window.scalingRatio
                 spacing: 8 * window.scalingRatio
 
@@ -2325,6 +2336,7 @@ ApplicationWindow {
             }
 
             Text {
+                visible: cslate.state === "PhotoCapture"
                 text: settings.jpegQuality >= 100 ? "JPEG Quality: Original" : "JPEG Quality: " + settings.jpegQuality + "%"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
@@ -2334,6 +2346,7 @@ ApplicationWindow {
 
             Slider {
                 id: qualitySlider
+                visible: cslate.state === "PhotoCapture"
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
                 from: 50
@@ -2374,6 +2387,7 @@ ApplicationWindow {
             }
 
             Rectangle {
+                visible: cslate.state === "PhotoCapture"
                 width: parent.width - 32 * window.scalingRatio
                 height: 1
                 color: "#444"
@@ -2381,6 +2395,7 @@ ApplicationWindow {
             }
 
             Text {
+                visible: cslate.state === "VideoCapture"
                 text: "Video Bitrate: " + (settings.videoBitrate / 1000).toFixed(0) + " Mbps"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
@@ -2390,6 +2405,7 @@ ApplicationWindow {
 
             Slider {
                 id: bitrateSlider
+                visible: cslate.state === "VideoCapture"
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
                 from: 8000
@@ -2432,6 +2448,7 @@ ApplicationWindow {
             }
 
             Rectangle {
+                visible: cslate.state === "VideoCapture"
                 width: parent.width - 32 * window.scalingRatio
                 height: 1
                 color: "#444"

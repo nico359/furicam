@@ -519,7 +519,11 @@ void Camera2Bridge::enterVideoMode()
     const int bitrate = videoBitrate_ > 0 ? videoBitrate_ * 1000
                                           : ((videoW_ >= 3000) ? 40000000 : 20000000);
     session_->setVideoFpsRange(videoFpsMin_, videoFpsMax_);
-    session_->enterVideoMode(videoW_, videoH_, videoFpsMax_, bitrate);
+    if (!session_->enterVideoMode(videoW_, videoH_, videoFpsMax_, bitrate)) {
+        // The preview-only session is untouched (still live), so the app stays
+        // usable for photos — surface why video didn't start instead of looking stuck.
+        emit cameraError(QString::fromStdString(session_->lastError()));
+    }
 }
 
 // Set the H.264 video bitrate (kbps).  Rebuilds the video session if it's up (and
@@ -864,14 +868,41 @@ QVariantList Camera2Bridge::availableResolutions()
     if (!session_)
         return list;
     auto sizes = session_->jpegSizes();
-    std::sort(sizes.begin(), sizes.end(),
-              [](const CameraSession::StreamConfig& a, const CameraSession::StreamConfig& b) {
-                  return (long)a.width * a.height > (long)b.width * b.height;
-              });
+    // Keep only clean photo aspects (4:3 native, plus 3:2 / 16:9 / 1:1) and drop the
+    // HAL's odd-aspect JPEG sizes the user doesn't want; collapse near-duplicates
+    // (same width + same canonical aspect) to the entry closest to the exact ratio.
+    const double aspects[] = { 4.0 / 3.0, 3.0 / 2.0, 16.0 / 9.0, 1.0 };
+    struct Pick { CameraSession::StreamConfig s; int ai; double diff; };
+    std::vector<Pick> keep;
     for (const auto& s : sizes) {
+        if (s.isInput || s.width < 640 || s.height < 480)
+            continue;
+        const double r = (double)s.width / s.height;
+        int ai = -1; double best = 0.03;   // clean-aspect threshold
+        for (int i = 0; i < (int)(sizeof(aspects) / sizeof(aspects[0])); ++i) {
+            const double d = std::abs(r - aspects[i]);
+            if (d < best) { best = d; ai = i; }
+        }
+        if (ai < 0)
+            continue;   // not within 0.03 of any clean aspect → strange, drop it
+        bool dup = false;
+        for (auto& p : keep)
+            if (p.s.width == s.width && p.ai == ai) {
+                if (best < p.diff) { p.s = s; p.diff = best; }
+                dup = true;
+                break;
+            }
+        if (!dup)
+            keep.push_back({ s, ai, best });
+    }
+    std::sort(keep.begin(), keep.end(),
+              [](const Pick& a, const Pick& b) {
+                  return (long)a.s.width * a.s.height > (long)b.s.width * b.s.height;
+              });
+    for (const auto& p : keep) {
         QVariantMap m;
-        m["width"]  = s.width;
-        m["height"] = s.height;
+        m["width"]  = p.s.width;
+        m["height"] = p.s.height;
         list.append(m);
     }
     return list;
