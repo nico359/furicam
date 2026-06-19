@@ -294,7 +294,9 @@ Item {
         property real dispAspect: previewAspectRatio > 0 ? previewAspectRatio : (9.0 / 16.0)
         width: Math.min(parent.width, parent.height * dispAspect)
         height: width / dispAspect
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        // Centre vertically in the area above the bottom control bar
+        y: Math.max(0, (parent.height - height) / 2 - window.controlBarReservedHeight / 2)
         hdrEnabled: settings.hdrEnabled   // HDR burst+fuse handled in the bridge
         // Flash mode tracks the GUI setting reactively (applied on startup + every
         // change), mapping the QtMultimedia enum to the engine's 0=off/1=on/2=auto.

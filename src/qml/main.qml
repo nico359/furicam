@@ -34,6 +34,10 @@ ApplicationWindow {
 
     property real scalingRatio: Math.max(Screen.width / refWidth, Screen.height / refHeight)
 
+    // Height reserved by the bottom control bar (mainBar + margin), exposed so
+    // Camera.qml can centre the viewfinder in the remaining space.
+    property real controlBarReservedHeight: 0
+
     property bool videoCaptured: false
 
     property var countDown: 0
@@ -689,6 +693,8 @@ ApplicationWindow {
         height: 150 * window.scalingRatio
         width: parent.width
         visible: !mediaView.visible
+        // Expose total height so Camera.qml can offset the viewfinder
+        Component.onCompleted: window.controlBarReservedHeight = height + anchors.bottomMargin
 
         ToolTip {
             id: copiedTip

@@ -110,7 +110,7 @@ public:
     // asynchronous: when the JPEG arrives it is written to disk and the photo
     // callback (if set) fires.  Returns false if the request could not be
     // submitted.
-    bool capturePhoto(const std::string& path);
+    bool capturePhoto(const std::string& path, int deviceRotation = 0);
     void setPhotoCallback(std::function<void(const std::string& path, bool ok)> cb)
     {
         photoCallback_ = std::move(cb);
@@ -140,7 +140,8 @@ public:
     // track into the MP4 (Milestone 6); if audio fails to start, recording
     // continues video-only.
     bool startRecording(const std::string& path, int width = 1920, int height = 1080,
-                        int fps = 30, int bitrate = 20000000, bool withAudio = true);
+                        int fps = 30, int bitrate = 20000000, bool withAudio = true,
+                        int deviceRotation = 0);
     void stopRecording();
     bool isRecording() const { return recording_; }
 

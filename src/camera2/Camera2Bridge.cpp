@@ -73,7 +73,7 @@ public:
     {
         auto* bridge = static_cast<Camera2Bridge*>(item);
         reader_   = bridge->previewReader();
-        rotation_ = bridge->displayRotation();
+        rotation_ = bridge->previewRotation();
         cropX_    = bridge->cropScaleX();
         cropY_    = bridge->cropScaleY();
         mirror_   = bridge->previewMirrored();
@@ -378,7 +378,9 @@ void Camera2Bridge::recomputePreviewAspect()
     cropScaleX_.store(sx);
     cropScaleY_.store(sy);
 
-    const int rot = displayRotation_.load();
+    // Use sensor-only rotation for preview aspect so the viewport doesn't flip
+    // when device rotates — only the JPEG orientation uses displayRotation_.
+    const int rot = previewRotation();
     const bool portrait = (rot == 90 || rot == 270);
     const float a = portrait ? (float)ch / (float)cw : (float)cw / (float)ch;
     if (previewAspectRatio_.exchange(a) != a)
@@ -445,7 +447,9 @@ void Camera2Bridge::startRecording(const QString& outputPath)
     // that displaces the preview, so its reader becomes stale.
     if (!session_->isVideoMode())
         previewReader_ = nullptr;
-    if (!session_->startRecording(recordingPath_.toStdString())) {
+    if (!session_->startRecording(recordingPath_.toStdString(), 1920, 1080,
+                                    30, 20000000, true,
+                                    deviceRotation_.load())) {
         emit cameraError(QString::fromStdString(session_->lastError()));
         return;
     }
@@ -621,7 +625,7 @@ void Camera2Bridge::doSingleCapture(const QString& outputPath)
         return;
     const QString path = outputPath.isEmpty() ? defaultPhotoPath() : outputPath;
     QDir().mkpath(QFileInfo(path).absolutePath());
-    if (!session_->capturePhoto(path.toStdString()))
+    if (!session_->capturePhoto(path.toStdString(), deviceRotation_.load()))
         emit cameraError(QString::fromStdString(session_->lastError()));
 }
 
@@ -629,7 +633,7 @@ void Camera2Bridge::doSingleCapture(const QString& outputPath)
 void Camera2Bridge::captureNextHdrFrame()
 {
     const QString p = QDir::tempPath() + QStringLiteral("/furicam_hdr_%1.jpg").arg(hdrPaths_.size());
-    if (!session_->capturePhoto(p.toStdString())) {
+    if (!session_->capturePhoto(p.toStdString(), deviceRotation_.load())) {
         hdrBurstActive_ = false;
         emit cameraError(QString::fromStdString(session_->lastError()));
     }
@@ -831,9 +835,9 @@ void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
 
     const QString text = QString::fromStdString(bc.text());
     // Map sensor-normalized corners to viewfinder-normalized: inverse of the
-    // renderer's texcoord rotation (Rot(displayRotation) about centre), then the
+    // renderer's texcoord rotation (sensor-only, no device rotation), then the
     // FBO vertical mirror.  Emits {x,y} in [0,1] of the preview item.
-    const double rad = -displayRotation_.load() * 3.14159265358979 / 180.0;
+    const double rad = -previewRotation() * 3.14159265358979 / 180.0;
     const double cc = std::cos(rad), ss = std::sin(rad);
     // The analysis stream is the full 4:3 FOV but the preview is cropped to the
     // still aspect; expand the sensor-normalized point by the inverse crop so the

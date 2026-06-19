@@ -109,6 +109,7 @@ public:
     // texture each frame.
     AImageReader* previewReader() const { return previewReader_; }
     int           displayRotation() const { return displayRotation_.load(); }
+    int           previewRotation() const { return ((sensorOrientation_.load() + 180) % 360 + 360) % 360; }
     // Centred sub-rect of the (4:3 full-FOV) preview stream to show, so the preview
     // is cropped to the chosen still aspect (WYSIWYG).  Read on the render thread.
     float         cropScaleX() const { return cropScaleX_.load(); }

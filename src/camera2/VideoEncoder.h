@@ -67,6 +67,9 @@ public:
     // an IDR so this clip starts on a keyframe.  Returns false on failure.
     bool beginClip(const std::string& path);
 
+    // Update the MP4 rotation hint for subsequent clips (call before beginClip()).
+    void setOrientation(int orientationDeg) { orientation_ = ((orientationDeg % 360) + 360) % 360; }
+
     // Finalize the current clip.  The caller must FIRST stop the camera feeding
     // the input surface (switch the repeating request to preview-only / close the
     // record session); endClip() then drains the codec's tail and finalizes the

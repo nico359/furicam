@@ -854,7 +854,7 @@ std::vector<CameraSession::StreamConfig> CameraSession::jpegSizes() const
     return out;
 }
 
-bool CameraSession::capturePhoto(const std::string& path)
+bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
 {
     if (!captureSession_ || !jpegWindow_) {
         lastError_ = "capturePhoto: no JPEG output (start preview with still capture)";
@@ -884,9 +884,12 @@ bool CameraSession::capturePhoto(const std::string& path)
         return false;
     }
 
-    // Orientation tag so the saved JPEG is upright (device assumed in natural
-    // orientation; refined when the bridge feeds device rotation in).
-    int32_t orientation = ((openSensorOrientation_ % 360) + 360) % 360;
+    // Orientation tag — sensor orientation adjusted by device rotation so the
+    // JPEG is upright regardless of how the phone was held at capture time.
+    // For back camera (sensor=90), this yields: portrait: 90, landscape-left: 180,
+    // reverse-portrait: 270, landscape-right: 0 — matching the iio-sensor-proxy
+    // rotation convention on this device.
+    int32_t orientation = ((openSensorOrientation_ + deviceRotation) % 360);
     ACaptureRequest_setEntry_i32(req, ACAMERA_JPEG_ORIENTATION, 1, &orientation);
     uint8_t quality = 95;
     ACaptureRequest_setEntry_u8(req, ACAMERA_JPEG_QUALITY, 1, &quality);
@@ -951,7 +954,8 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
 }
 
 bool CameraSession::startRecording(const std::string& path, int width, int height,
-                                   int fps, int bitrate, bool withAudio)
+                                   int fps, int bitrate, bool withAudio,
+                                   int deviceRotation)
 {
     if (!ensureManager())
         return false;
@@ -996,6 +1000,7 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
             return false;
         }
         encoder_->expectAudio(audioActive);
+        encoder_->setOrientation((openSensorOrientation_ + deviceRotation) % 360);
         if (!encoder_->beginClip(path)) {
             lastError_ = "beginClip failed: " + encoder_->lastError();
             if (audioEnc_ && !audioPrewarmed_)
@@ -1026,7 +1031,8 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
 
     encoder_ = std::make_unique<VideoEncoder>();
     encoder_->expectAudio(audioActive);   // gate muxer start on the audio track
-    if (!encoder_->start(path, width, height, fps, bitrate, openSensorOrientation_)) {
+    if (!encoder_->start(path, width, height, fps, bitrate,
+                          (openSensorOrientation_ + deviceRotation) % 360)) {
         lastError_ = "encoder start failed: " + encoder_->lastError();
         encoder_.reset();
         if (audioEnc_ && !audioPrewarmed_)
