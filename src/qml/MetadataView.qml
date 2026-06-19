@@ -27,7 +27,7 @@ Item {
     function updateMetadata(url) {
         metadataModel.clear();
         if (url !== "") {
-            if (url.endsWith(".mkv")) {
+            if (url.endsWith(".mkv") || url.endsWith(".mp4")) {
                 metadataModel.append({title: "File Type", value: fileManager.getDocumentType(url), dataHeight: avgMetadataContainerHeight});
                 metadataModel.append({title: "File Size", value: fileManager.getFileSize(url), dataHeight: avgMetadataContainerHeight});
                 metadataModel.append({title: "Video Dimensions", value: fileManager.getVideoDimensions(url), dataHeight: avgMetadataContainerHeight});
