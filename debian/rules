@@ -7,3 +7,5 @@
 # maps its SONAME → libhybris-common1 so shlibdeps resolves correctly.
 override_dh_shlibdeps:
 	dh_shlibdeps
+	# Device doesn't provide ABI virtual packages, drop them
+	sed -i 's/qtbase-abi-5-15-15, //g; s/, qtdeclarative-abi-5-15-15//g' debian/furicam.substvars
