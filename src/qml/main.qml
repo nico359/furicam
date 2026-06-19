@@ -623,7 +623,7 @@ ApplicationWindow {
         anchors.leftMargin: (wbSliderContainer.visible ? 76 : 16) * window.scalingRatio
         anchors.bottom: mainBar.top
         anchors.bottomMargin: 20 * window.scalingRatio
-        width: 50 * window.scalingRatio
+        width: 125 * window.scalingRatio   // wide invisible touch zone (2.5× the old 50)
         height: parent.height * 0.35
         visible: !mediaView.visible && cameraLoader.item !== null
         opacity: brightnessSlider.pressed ? 1.0 : 0.7
@@ -656,6 +656,7 @@ ApplicationWindow {
             anchors.top: brightnessLabel.bottom
             anchors.topMargin: 6 * window.scalingRatio
             anchors.bottom: parent.bottom
+            width: parent.width            // fill the wide container so the whole column is touchable
             orientation: Qt.Vertical
             from: 0.0
             to: 1.0
@@ -689,8 +690,8 @@ ApplicationWindow {
             handle: Rectangle {
                 x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
                 y: brightnessSlider.topPadding + brightnessSlider.visualPosition * (brightnessSlider.availableHeight - height)
-                width: 20 * window.scalingRatio
-                height: 20 * window.scalingRatio
+                width: 30 * window.scalingRatio   // bigger, easier-to-grab ball
+                height: 30 * window.scalingRatio
                 radius: width / 2
                 color: brightnessSlider.pressed ? "#e0e0e0" : "white"
                 border.color: "#40000000"
