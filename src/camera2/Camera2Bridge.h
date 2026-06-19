@@ -217,6 +217,7 @@ public:
     // the camera to recreate the still output at that size.
     Q_INVOKABLE QVariantList availableResolutions();
     Q_INVOKABLE void setResolution(int width, int height);
+    Q_INVOKABLE void setJpegQuality(int quality);   // 1..100; HAL encodes at this directly
 
     // Encoder-capable video sizes (PRIVATE sizes the H.264 encoder accepts: this
     // device caps at the 4K box ≤3840×2160), clean aspects, largest first.

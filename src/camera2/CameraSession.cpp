@@ -8,6 +8,8 @@
 #include "VideoEncoder.h"
 #include "AudioEncoder.h"   // gst-free header; a stub backs it when audio is off
 
+#include <atomic>
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <thread>
@@ -88,6 +90,16 @@ std::string fmt(const char* f, ...)
     std::string s = vfmt(f, ap);
     va_end(ap);
     return s;
+}
+
+// Shutter-lag instrumentation (one still in flight at a time): capturePhoto stamps
+// entry + submit; onJpegImageAvailable logs build / hal / write splits.
+std::atomic<int64_t> g_captureEntryMs{0};
+std::atomic<int64_t> g_submitMs{0};
+int64_t shutterNowMs()
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
 } // namespace
@@ -513,6 +525,16 @@ void CameraSession::freeStreamResources()
         AImageReader_delete(reader_);
         reader_ = nullptr;
     }
+    // Cached still request + its JPEG target (they reference jpegWindow_; rebuilt
+    // lazily on the next capture).  Free before releasing the window.
+    if (stillTarget_) {
+        ACameraOutputTarget_free(stillTarget_);
+        stillTarget_ = nullptr;
+    }
+    if (stillRequest_) {
+        ACaptureRequest_free(stillRequest_);
+        stillRequest_ = nullptr;
+    }
     if (jpegOutput_) {
         ACaptureSessionOutput_free(jpegOutput_);
         jpegOutput_ = nullptr;
@@ -908,55 +930,69 @@ std::vector<CameraSession::StreamConfig> CameraSession::privateSizes() const
     return out;
 }
 
+// Build the still-capture request + its JPEG output target once, lazily.  The
+// request is device-scoped and targets jpegWindow_ (a stable session output that
+// survives video-mode rebuilds), so it can be reused for every shot — capturePhoto
+// only updates per-shot fields, avoiding a template fetch + target alloc round-trip
+// on the shutter path.  Freed with jpegWindow_ in freeStreamResources().
+bool CameraSession::ensureStillRequest()
+{
+    if (stillRequest_)
+        return true;
+    if (!device_ || !jpegWindow_) {
+        lastError_ = "ensureStillRequest: no device / JPEG window";
+        return false;
+    }
+    camera_status_t cs = ACameraDevice_createCaptureRequest(device_, TEMPLATE_STILL_CAPTURE, &stillRequest_);
+    if (cs != ACAMERA_OK || !stillRequest_) {
+        stillRequest_ = nullptr;
+        lastError_ = fmt("createCaptureRequest(STILL) failed (status %d)", (int)cs);
+        return false;
+    }
+    cs = ACameraOutputTarget_create(jpegWindow_, &stillTarget_);
+    if (cs == ACAMERA_OK)
+        cs = ACaptureRequest_addTarget(stillRequest_, stillTarget_);
+    if (cs != ACAMERA_OK) {
+        if (stillTarget_) { ACameraOutputTarget_free(stillTarget_); stillTarget_ = nullptr; }
+        ACaptureRequest_free(stillRequest_); stillRequest_ = nullptr;
+        lastError_ = fmt("still request target failed (status %d)", (int)cs);
+        return false;
+    }
+    return true;
+}
+
 bool CameraSession::capturePhoto(const std::string& path)
 {
+    g_captureEntryMs.store(shutterNowMs());
     if (!captureSession_ || !jpegWindow_) {
         lastError_ = "capturePhoto: no JPEG output (start preview with still capture)";
         return false;
     }
+    if (!ensureStillRequest())
+        return false;
     {
         std::lock_guard<std::mutex> lk(photoMutex_);
         pendingPhotoPath_ = path;
     }
 
-    ACaptureRequest* req = nullptr;
-    camera_status_t cs = ACameraDevice_createCaptureRequest(device_, TEMPLATE_STILL_CAPTURE, &req);
-    if (cs != ACAMERA_OK || !req) {
-        lastError_ = fmt("createCaptureRequest(STILL) failed (status %d)", (int)cs);
-        return false;
-    }
-
-    ACameraOutputTarget* target = nullptr;
-    cs = ACameraOutputTarget_create(jpegWindow_, &target);
-    if (cs == ACAMERA_OK)
-        cs = ACaptureRequest_addTarget(req, target);
-    if (cs != ACAMERA_OK) {
-        if (target)
-            ACameraOutputTarget_free(target);
-        ACaptureRequest_free(req);
-        lastError_ = fmt("still request target failed (status %d)", (int)cs);
-        return false;
-    }
-
-    // Orientation tag so the saved JPEG is upright relative to how the device is
-    // held: sensor mount angle combined with the current device rotation
-    // (setDeviceRotation), per Android's getJpegOrientation.
+    // Update only the per-shot fields on the cached request (local metadata writes,
+    // no IPC until the submit below).
+    //  - JPEG_ORIENTATION: sensor mount + device tilt (Android's getJpegOrientation)
+    //  - JPEG_QUALITY: the user's chosen quality, captured directly (no re-encode)
     int32_t orientation = captureOrientation();
-    ACaptureRequest_setEntry_i32(req, ACAMERA_JPEG_ORIENTATION, 1, &orientation);
-    uint8_t quality = 95;
-    ACaptureRequest_setEntry_u8(req, ACAMERA_JPEG_QUALITY, 1, &quality);
+    ACaptureRequest_setEntry_i32(stillRequest_, ACAMERA_JPEG_ORIENTATION, 1, &orientation);
+    uint8_t quality = (uint8_t)jpegQuality_;
+    ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_JPEG_QUALITY, 1, &quality);
 
     // Per-shot flash via the AE mode on this still capture.
     uint8_t aeMode = ACAMERA_CONTROL_AE_MODE_ON;                 // off: normal AE, no flash
     if (flashMode_ == 1)      aeMode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
     else if (flashMode_ == 2) aeMode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
-    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &aeMode);
+    ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_AE_MODE, 1, &aeMode);
 
     int seqId = 0;
-    cs = ACameraCaptureSession_capture(captureSession_, nullptr, 1, &req, &seqId);
-    // The NDK copies the request on submit, so the request/target can be freed now.
-    ACameraOutputTarget_free(target);
-    ACaptureRequest_free(req);
+    camera_status_t cs = ACameraCaptureSession_capture(captureSession_, nullptr, 1, &stillRequest_, &seqId);
+    g_submitMs.store(shutterNowMs());
     if (cs != ACAMERA_OK) {
         lastError_ = fmt("ACameraCaptureSession_capture failed (status %d)", (int)cs);
         return false;
@@ -969,6 +1005,7 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
     auto* self = static_cast<CameraSession*>(ctx);
     if (!self || !reader)
         return;
+    const int64_t tArrived = shutterNowMs();   // JPEG ready (listener fired)
 
     AImage* img = nullptr;
     if (AImageReader_acquireNextImage(reader, &img) != AMEDIA_OK || !img)
@@ -1000,6 +1037,14 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
         self->log(fmt("photo saved: %s (%d bytes)", path.c_str(), actual));
     }
     AImage_delete(img);
+
+    // Breakdown: our request build, the HAL capture+encode, and our file write.
+    const int64_t t1 = g_captureEntryMs.load(), t2 = g_submitMs.load();
+    const int64_t tWritten = shutterNowMs();
+    if (t1 > 0 && t2 >= t1)
+        std::fprintf(stderr, "[shutter] build %lld, hal %lld, write %lld ms\n",
+                     (long long)(t2 - t1), (long long)(tArrived - t2),
+                     (long long)(tWritten - tArrived));
 
     if (self->photoCallback_)
         self->photoCallback_(path, ok);

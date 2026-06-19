@@ -145,6 +145,9 @@ public:
     // the next startPreview (the caller restarts the camera to take effect).
     void setJpegSize(int width, int height) { reqJpegW_ = width; reqJpegH_ = height; }
     void jpegSize(int* width, int* height) const { *width = jpegW_; *height = jpegH_; }
+    // Still JPEG quality [1,100] (default 95).  Set from the app's quality setting
+    // so the HAL encodes at the chosen quality directly (no on-disk re-encode).
+    void setJpegQuality(int q) { jpegQuality_ = q < 1 ? 1 : (q > 100 ? 100 : q); }
 
     // ── Video recording (Milestone 5) ────────────────────────────────────────
     // Record hardware H.264 to an MP4 at `path`.  Reconfigures the camera into a
@@ -271,6 +274,7 @@ private:
     void freeSessionKeepReaders();          // free session/outputs/requests, keep readers
     bool buildSessionFromReaders(bool withEncoder, int targetFps);  // (re)build the session
     bool maxJpegSize(int* w, int* h) const;  // largest JPEG output of the open camera
+    bool ensureStillRequest();               // build the cached still request + JPEG target once
     void applyControls(ACaptureRequest* req) const;  // write control state into a request
     bool applyControlsToActive();                    // re-submit the active repeating request
     void applyVideoStabilization(ACaptureRequest* req) const;  // EIS on/off for a record request
@@ -327,6 +331,9 @@ private:
     ANativeWindow*             jpegWindow_   = nullptr;
     ACaptureSessionOutput*     jpegOutput_   = nullptr;
     AImageReader_ImageListener jpegListener_{};
+    ACaptureRequest*           stillRequest_ = nullptr;  // cached still-capture request (reused per shot)
+    ACameraOutputTarget*       stillTarget_  = nullptr;  // its JPEG output target
+    int                        jpegQuality_  = 95;       // still JPEG quality [1,100]
     int                        jpegW_        = 0;   // actual JPEG reader size
     int                        jpegH_        = 0;
     int                        reqJpegW_     = 0;   // requested capture size (0 = max)

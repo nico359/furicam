@@ -129,10 +129,13 @@ Item {
 
     function handleCameraTakeShot() {
         pinchArea.enabled = true
+        window.triggerCaptureFlash()   // immediate shutter cue; masks the capture freeze
         if (settings.soundOn === 1)
             sound.play()
         if (mediaView.index < 0)
             mediaView.folder = StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam2"
+        // Capture directly at the chosen quality (no on-disk re-encode afterward).
+        cam2.setJpegQuality(settings.jpegQuality)
         // Single full-resolution capture; the engine writes the JPEG and emits
         // photoSaved(path), handled in onPhotoSaved below.
         cam2.capturePhoto("")
@@ -266,12 +269,14 @@ Item {
     // Post-process + announce a saved photo (fires on the GUI thread).
     function onCam2PhotoSaved(path) {
         if (settings.colorCorrectionEnabled) {
+            // Color correction re-encodes; save directly at the chosen quality so
+            // there's no separate re-encode pass (the shot was already captured at
+            // this quality when correction is off).
             fileManager.applyColorCorrection(path,
                 settings.colorCorrectionRed, settings.colorCorrectionGreen,
-                settings.colorCorrectionBlue, settings.colorCorrectionSaturation)
+                settings.colorCorrectionBlue, settings.colorCorrectionSaturation,
+                settings.jpegQuality)
         }
-        if (settings.jpegQuality < 100)
-            fileManager.reencodeJpeg(path, settings.jpegQuality)
         if (window.locationAvailable === 1)
             fileManager.appendGPSMetadata(path)
         photoSaved()

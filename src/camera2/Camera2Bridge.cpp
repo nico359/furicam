@@ -926,6 +926,12 @@ void Camera2Bridge::setResolution(int width, int height)
     }
 }
 
+void Camera2Bridge::setJpegQuality(int quality)
+{
+    if (session_)
+        session_->setJpegQuality(quality);
+}
+
 void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
 {
     if (!y || w <= 0 || h <= 0)

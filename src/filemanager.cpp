@@ -724,7 +724,7 @@ void FileManager::reencodeJpeg(const QString &filePath, int quality) {
     }
 }
 
-void FileManager::applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation)
+void FileManager::applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation, int quality)
 {
     if (qFuzzyCompare(redScale, 1.0) && qFuzzyCompare(greenScale, 1.0) && qFuzzyCompare(blueScale, 1.0) && qFuzzyCompare(saturation, 1.0))
         return;
@@ -766,7 +766,7 @@ void FileManager::applyColorCorrection(const QString &filePath, double redScale,
         }
     }
 
-    if (!image.save(path, "JPEG", 100)) {
+    if (!image.save(path, "JPEG", quality)) {
         qDebug() << "Error: Could not save color-corrected image:" << path;
         return;
     }

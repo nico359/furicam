@@ -69,6 +69,10 @@ ApplicationWindow {
     signal setCameraAspWide(int aspWide)
     signal setDeviceID(int deviceIdToSet)
 
+    // Shutter feedback: a quick viewfinder blackout that masks the ~400 ms HAL
+    // capture (the preview freezes during a still capture) and signals the shot.
+    function triggerCaptureFlash() { captureFlashAnim.restart() }
+
     onActiveChanged:{
         if (!window.active) {
             cameraLoader.disconnectSignals();
@@ -198,6 +202,24 @@ ApplicationWindow {
 
     background: Rectangle {
         color: "black"
+    }
+
+    // Shutter blackout overlay (above everything).  triggerCaptureFlash() blinks
+    // it on each capture: a fast darken, then a fade that reveals the resumed
+    // preview — hiding the still-capture freeze and giving a shutter cue.
+    Rectangle {
+        id: captureFlash
+        anchors.fill: parent
+        color: "black"
+        opacity: 0
+        z: 100000
+        visible: opacity > 0
+
+        SequentialAnimation {
+            id: captureFlashAnim
+            NumberAnimation { target: captureFlash; property: "opacity"; to: 0.85; duration: 55;  easing.type: Easing.OutQuad }
+            NumberAnimation { target: captureFlash; property: "opacity"; to: 0.0;  duration: 320; easing.type: Easing.InQuad }
+        }
     }
 
     Item {
