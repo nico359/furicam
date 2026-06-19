@@ -408,8 +408,10 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
     }
 
     // Analysis YUV output (CPU-readable luma) for live QR/barcode scanning.
-    // Present only while previewing (photo mode); excluded in video mode.
-    if (withStill) {
+    // Present only while previewing (photo mode); excluded in video mode and when
+    // the preview is full-res (the 3-stream combo exceeds HAL limits, and QR off a
+    // 20MP preview is pointless).
+    if (withStill && width <= 1920) {
         // Match the analysis aspect to the preview so QR overlay coords align with
         // the on-screen preview; cap width at 1280 to bound CPU decode cost.
         int aw = width, ah = height;

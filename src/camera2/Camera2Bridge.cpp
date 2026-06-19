@@ -177,6 +177,17 @@ void Camera2Bridge::startCamera()
     // Render-pull mode: schedule a repaint per frame; the renderer acquires.
     session_->setFrameCallback([this] {
         frameCount_.fetch_add(1, std::memory_order_relaxed);
+        // Preview-fps instrumentation: log a measured rate every 60 frames.
+        static int s_n = 0;
+        static int64_t s_t0 = 0;
+        const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (s_n == 0) s_t0 = now;
+        if (++s_n >= 60) {
+            const double fps = (now > s_t0) ? 60000.0 / (double)(now - s_t0) : 0.0;
+            std::fprintf(stderr, "[preview] %.1f fps @ %dx%d\n", fps, previewStreamW_, previewStreamH_);
+            s_n = 0;
+        }
         QMetaObject::invokeMethod(this, [this] {
             update();
             emit frameCountChanged();
@@ -389,8 +400,24 @@ void Camera2Bridge::effectiveCaptureSize(int& cw, int& ch)
 // so ANY still ratio (1:1, 3:2, 16:9 …) maps corner-for-corner with the capture.
 void Camera2Bridge::pickPreviewStreamSize()
 {
+    // EXPERIMENT: run the preview at the sensor's full-res 4:3 PRIVATE size so the
+    // sensor stays in full-resolution mode.  A still capture then needs no sensor
+    // mode switch — eliminating the multi-second preview freeze.  The GL renderer
+    // downscales to the viewport.  Trade-off: full readout may run below 30fps and
+    // draws more power.  Falls back to 1280x960 (then 1280x720) if this size fails.
     previewStreamW_ = 1280;
-    previewStreamH_ = 960;   // 4:3 full FOV (fallback to 720 only if this size fails)
+    previewStreamH_ = 960;   // 4:3 full FOV fallback
+    long best = (long)previewStreamW_ * previewStreamH_;
+    if (session_) {
+        for (const auto& s : session_->privateSizes()) {
+            const long area = (long)s.width * s.height;
+            if (area > best && std::abs((double)s.width / s.height - 4.0 / 3.0) < 0.05) {
+                best = area;
+                previewStreamW_ = s.width;
+                previewStreamH_ = s.height;
+            }
+        }
+    }
 }
 
 // previewAspectRatio_ = the on-screen (post-rotation) w/h of the *still* aspect;
