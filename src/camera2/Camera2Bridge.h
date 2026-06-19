@@ -198,6 +198,11 @@ public:
 
     // Torch (continuous flash for video lighting).
     Q_INVOKABLE void setTorch(bool on);
+    Q_INVOKABLE void setSceneMode(int mode);   // 0=off; 2=ACTION (freeze motion)
+    Q_INVOKABLE void setRawEnabled(bool on);   // also save a .dng per shot
+    Q_INVOKABLE bool rawSupported() const;     // open camera advertises RAW capability
+    Q_INVOKABLE void setNoiseReduction(bool on);    // HIGH_QUALITY denoise on stills
+    Q_INVOKABLE void setEdgeEnhancement(bool on);   // HIGH_QUALITY sharpening on stills
     Q_INVOKABLE void setFlashMode(int mode);   // 0=off, 1=on, 2=auto (per-shot)
 
     // Called from QML when device rotation changes (degrees, 0/90/180/270
@@ -229,6 +234,8 @@ public:
     Q_INVOKABLE void setVideoResolution(int width, int height);
     // Video target-fps range: (30,30) steady 30; (5,30) allow low-light drop.
     Q_INVOKABLE void setVideoFps(int minFps, int maxFps);
+    // H.264 bitrate in kbps (from the bitrate slider).
+    Q_INVOKABLE void setVideoBitrate(int kbps);
     int  videoWidth()  const { return videoW_; }
     int  videoHeight() const { return videoH_; }
     void setVideoWidth(int width);
@@ -302,6 +309,7 @@ private:
     int                  videoH_             = 1080;
     int                  videoFpsMin_        = 30;       // video target-fps range
     int                  videoFpsMax_        = 30;
+    int                  videoBitrate_       = 0;        // kbps; 0 = resolution-scaled default
     int                  captureW_           = 0;        // chosen still size (0 = sensor max)
     int                  captureH_           = 0;
     int                  previewStreamW_     = 1280;     // preview stream size; its aspect

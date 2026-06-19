@@ -23,6 +23,7 @@ add_subdirectory(shim)
 
 add_library(furicam2_camera STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/CameraSession.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/DngWriter.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/VideoEncoder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/AudioEncoder.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/PreviewRenderer.cpp

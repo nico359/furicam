@@ -7,6 +7,7 @@
 #include "CameraSession.h"
 #include "VideoEncoder.h"
 #include "AudioEncoder.h"   // gst-free header; a stub backs it when audio is off
+#include "DngWriter.h"      // dependency-free DNG (TIFF/EP) writer for RAW16 capture
 
 #include <cstdarg>
 #include <cstdio>
@@ -241,6 +242,57 @@ bool CameraSession::readInfo(const std::string& id, CameraInfo* out)
         for (uint32_t k = 0; k < e.count; ++k)
             if (e.data.u8[k] == ACAMERA_CONTROL_VIDEO_STABILIZATION_MODE_ON)
                 info.videoStabSupported = true;
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES, &e) == ACAMERA_OK)
+        for (uint32_t k = 0; k < e.count; ++k) info.nrModes.push_back(e.data.u8[k]);
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_EDGE_AVAILABLE_EDGE_MODES, &e) == ACAMERA_OK)
+        for (uint32_t k = 0; k < e.count; ++k) info.edgeModes.push_back(e.data.u8[k]);
+
+    // ── RAW/DNG characteristics (drive a color-accurate DNG; values verified to
+    //    read sane on the FLX1s: white 1023, black 64, RGGB, D65+A dual-illuminant).
+    for (int c : info.capabilities)
+        if (c == ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_RAW) info.rawSupported = true;
+    if (info.rawSupported) {
+        // Largest RAW16 output size.
+        for (const auto& s : info.outputs)
+            if (s.format == AIMAGE_FORMAT_RAW16 && !s.isInput
+                && (long)s.width * s.height > (long)info.raw16W * info.raw16H) {
+                info.raw16W = s.width;
+                info.raw16H = s.height;
+            }
+        info.rawSupported = (info.raw16W > 0 && info.raw16H > 0);
+    }
+    if (info.rawSupported) {
+        if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_INFO_WHITE_LEVEL, &e) == ACAMERA_OK && e.count >= 1)
+            info.whiteLevel = e.data.i32[0];
+        if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_INFO_COLOR_FILTER_ARRANGEMENT, &e) == ACAMERA_OK && e.count >= 1)
+            info.cfaArrangement = e.data.u8[0];
+        if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_BLACK_LEVEL_PATTERN, &e) == ACAMERA_OK && e.count >= 4)
+            for (int k = 0; k < 4; ++k) info.blackLevel[k] = e.data.i32[k];
+        if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_REFERENCE_ILLUMINANT1, &e) == ACAMERA_OK && e.count >= 1)
+            info.refIlluminant1 = e.data.u8[0];
+        if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_REFERENCE_ILLUMINANT2, &e) == ACAMERA_OK && e.count >= 1)
+            info.refIlluminant2 = e.data.u8[0];
+        auto readMat = [&](uint32_t tag, double* m) -> bool {
+            if (ACameraMetadata_getConstEntry(meta, tag, &e) == ACAMERA_OK && e.count >= 9) {
+                for (int k = 0; k < 9; ++k)
+                    m[k] = e.data.r[k].denominator ? (double)e.data.r[k].numerator / e.data.r[k].denominator : 0.0;
+                return true;
+            }
+            return false;
+        };
+        readMat(ACAMERA_SENSOR_COLOR_TRANSFORM1, info.colorMatrix1);
+        info.haveColor2  = readMat(ACAMERA_SENSOR_COLOR_TRANSFORM2, info.colorMatrix2);
+        info.haveForward = readMat(ACAMERA_SENSOR_FORWARD_MATRIX1, info.forwardMatrix1);
+        if (info.haveForward && info.haveColor2)
+            readMat(ACAMERA_SENSOR_FORWARD_MATRIX2, info.forwardMatrix2);
+        if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_NEUTRAL_COLOR_POINT, &e) == ACAMERA_OK && e.count >= 3)
+            for (int k = 0; k < 3; ++k)
+                info.neutralColorPoint[k] = e.data.r[k].denominator ? (double)e.data.r[k].numerator / e.data.r[k].denominator : 1.0;
+        log(fmt("[camera] RAW/DNG[cam %s]: RAW16 %dx%d white=%d black=%d cfa=%d illum=%d/%d color2=%d fwd=%d",
+                id.c_str(), info.raw16W, info.raw16H, info.whiteLevel, info.blackLevel[0],
+                info.cfaArrangement, info.refIlluminant1, info.refIlluminant2,
+                (int)info.haveColor2, (int)info.haveForward));
+    }
 
     ACameraMetadata_free(meta);
     *out = std::move(info);
@@ -395,11 +447,17 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         }
     }
 
+    // RAW16 output for DNG capture — takes the third stream slot when raw is on,
+    // displacing the live-QR stream (preview + JPEG + RAW = the 3-stream limit).
+    if (withStill && rawEnabled_ && ensureRawReader() && rawWindow_) {
+        if (ACaptureSessionOutput_create(rawWindow_, &rawOutput_) == ACAMERA_OK)
+            ACaptureSessionOutputContainer_add(outputContainer_, rawOutput_);
+    }
     // Analysis YUV output (CPU-readable luma) for live QR/barcode scanning.
-    // Present only while previewing (photo mode); excluded in video mode and when
-    // the preview is full-res (the 3-stream combo exceeds HAL limits, and QR off a
-    // 20MP preview is pointless).
-    if (withStill && width <= 1920) {
+    // Present only while previewing (photo mode); excluded in video mode, when raw
+    // is on (no free stream slot), and when the preview is full-res (the 3-stream
+    // combo exceeds HAL limits, and QR off a 20MP preview is pointless).
+    if (withStill && !rawEnabled_ && width <= 1920) {
         // Match the analysis aspect to the preview so QR overlay coords align with
         // the on-screen preview; cap width at 1280 to bound CPU decode cost.
         int aw = width, ah = height;
@@ -555,6 +613,24 @@ void CameraSession::freeStreamResources()
         AImageReader_delete(analysisReader_);
         analysisReader_ = nullptr;
     }
+    // RAW16 capture stream (still target on the cached request, output, window, reader).
+    if (rawStillTarget_) {
+        ACameraOutputTarget_free(rawStillTarget_);
+        rawStillTarget_ = nullptr;
+    }
+    if (rawOutput_) {
+        ACaptureSessionOutput_free(rawOutput_);
+        rawOutput_ = nullptr;
+    }
+    if (rawWindow_) {
+        ANativeWindow_release(rawWindow_);
+        rawWindow_ = nullptr;
+    }
+    if (rawReader_) {
+        AImageReader_setImageListener(rawReader_, nullptr);
+        AImageReader_delete(rawReader_);
+        rawReader_ = nullptr;
+    }
     // Recording sets its own active request *after* startRecording()'s
     // stopPreview() call, so clearing here can never drop a live record request.
     activeSession_ = nullptr;
@@ -586,6 +662,7 @@ void CameraSession::freeSessionKeepReaders()
     if (sessionOutput_)       { ACaptureSessionOutput_free(sessionOutput_);       sessionOutput_ = nullptr; }
     if (jpegOutput_)          { ACaptureSessionOutput_free(jpegOutput_);          jpegOutput_ = nullptr; }
     if (analysisOutput_)      { ACaptureSessionOutput_free(analysisOutput_);      analysisOutput_ = nullptr; }
+    if (rawOutput_)           { ACaptureSessionOutput_free(rawOutput_);           rawOutput_ = nullptr; }
     if (recordOutput_)        { ACaptureSessionOutput_free(recordOutput_);        recordOutput_ = nullptr; }
     if (outputContainer_)     { ACaptureSessionOutputContainer_free(outputContainer_); outputContainer_ = nullptr; }
     activeSession_ = nullptr;
@@ -617,8 +694,12 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         cs = ACaptureSessionOutput_create(jpegWindow_, &jpegOutput_);
         if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, jpegOutput_);
     }
-    // QR analysis stream only in preview mode (not while recording video).
-    if (cs == ACAMERA_OK && !withEncoder && analysisWindow_) {
+    // Third slot in preview mode: RAW16 (for DNG) when raw is on, else the QR
+    // analysis stream.  Neither is present while recording video (encoder takes it).
+    if (cs == ACAMERA_OK && !withEncoder && rawEnabled_ && rawWindow_) {
+        cs = ACaptureSessionOutput_create(rawWindow_, &rawOutput_);
+        if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, rawOutput_);
+    } else if (cs == ACAMERA_OK && !withEncoder && !rawEnabled_ && analysisWindow_) {
         cs = ACaptureSessionOutput_create(analysisWindow_, &analysisOutput_);
         if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, analysisOutput_);
     }
@@ -653,7 +734,9 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         lastError_ = fmt("preview request setup failed (status %d)", (int)cs);
         return false;
     }
-    if (!withEncoder && analysisWindow_
+    // Target the QR analysis stream only when it's the one in the session (raw off);
+    // when raw is on the RAW16 stream took its slot and is targeted by the still only.
+    if (!withEncoder && !rawEnabled_ && analysisWindow_
         && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
         ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
     {
@@ -667,12 +750,16 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         }
     }
     applyControls(previewRequest_);
-    // In video mode, stabilize the idle (not-yet-recording) preview too, so its
-    // framing matches the EIS-cropped recording (WYSIWYG).  Photo mode keeps the
-    // full sensor FOV (no EIS).  During recording the preview rides recordRequest_,
-    // which already carries EIS.
-    if (withEncoder)
+    if (withEncoder) {
+        // Scene modes (e.g. ACTION) are photo-only and conflict with an encoder-
+        // bearing session on this HAL — USE_SCENE_MODE here stalls video-mode entry.
+        // Force plain AUTO control mode across the whole video session.
+        uint8_t autoMode = (uint8_t)ACAMERA_CONTROL_MODE_AUTO;
+        ACaptureRequest_setEntry_u8(previewRequest_, ACAMERA_CONTROL_MODE, 1, &autoMode);
+        // Stabilize the idle (not-yet-recording) preview too, so its framing matches
+        // the EIS-cropped recording (WYSIWYG); during recording it rides recordRequest_.
         applyVideoStabilization(previewRequest_);
+    }
 
     // Record request (targets the preview reader AND the encoder surface) so the
     // preview keeps updating while the encoder records.
@@ -691,6 +778,8 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
             ACaptureRequest_setEntry_i32(recordRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
         }
         applyControls(recordRequest_);
+        uint8_t recAutoMode = (uint8_t)ACAMERA_CONTROL_MODE_AUTO;   // scene modes are photo-only
+        ACaptureRequest_setEntry_u8(recordRequest_, ACAMERA_CONTROL_MODE, 1, &recAutoMode);
         applyVideoStabilization(recordRequest_);   // EIS while recording (if supported)
     }
 
@@ -865,6 +954,16 @@ void CameraSession::onCaptureResult(void* ctx, ACameraCaptureSession* /*session*
     ACameraMetadata_const_entry e{};
     if (ACameraMetadata_getConstEntry(result, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK && e.count >= 1)
         self->lastAeState_.store(e.data.u8[0]);
+    // Cache WB gains / ISO / exposure for DNG metadata (cheap; only used on capture).
+    std::lock_guard<std::mutex> lk(self->resultMutex_);
+    if (ACameraMetadata_getConstEntry(result, ACAMERA_COLOR_CORRECTION_GAINS, &e) == ACAMERA_OK && e.count >= 4) {
+        for (int k = 0; k < 4; ++k) self->resultGains_[k] = e.data.f[k];
+        self->haveResultGains_ = true;
+    }
+    if (ACameraMetadata_getConstEntry(result, ACAMERA_SENSOR_SENSITIVITY, &e) == ACAMERA_OK && e.count >= 1)
+        self->resultIso_ = e.data.i32[0];
+    if (ACameraMetadata_getConstEntry(result, ACAMERA_SENSOR_EXPOSURE_TIME, &e) == ACAMERA_OK && e.count >= 1)
+        self->resultExposureNs_ = e.data.i64[0];
 }
 
 bool CameraSession::maxJpegSize(int* w, int* h) const
@@ -949,6 +1048,10 @@ bool CameraSession::ensureStillRequest()
         lastError_ = fmt("still request target failed (status %d)", (int)cs);
         return false;
     }
+    // Also target the RAW16 stream so each shot produces a DNG alongside the JPEG.
+    if (rawEnabled_ && rawWindow_
+        && ACameraOutputTarget_create(rawWindow_, &rawStillTarget_) == ACAMERA_OK)
+        ACaptureRequest_addTarget(stillRequest_, rawStillTarget_);
     return true;
 }
 
@@ -963,6 +1066,18 @@ bool CameraSession::capturePhoto(const std::string& path)
     {
         std::lock_guard<std::mutex> lk(photoMutex_);
         pendingPhotoPath_ = path;
+        // DNG sibling: swap a .jpg/.jpeg extension for .dng (else append .dng).
+        if (rawEnabled_) {
+            std::string dng = path;
+            size_t dot = dng.find_last_of('.');
+            size_t slash = dng.find_last_of('/');
+            if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+                dng.resize(dot);
+            dng += ".dng";
+            pendingRawPath_ = dng;
+        } else {
+            pendingRawPath_.clear();
+        }
     }
 
     // Update only the per-shot fields on the cached request (local metadata writes,
@@ -979,6 +1094,22 @@ bool CameraSession::capturePhoto(const std::string& path)
     if (flashMode_ == 1)      aeMode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
     else if (flashMode_ == 2) aeMode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
     ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_AE_MODE, 1, &aeMode);
+
+    // HIGH_QUALITY noise reduction + edge enhancement for the still (no fps cost on
+    // a one-shot); falls back to FAST/skips when unsupported.
+    int stillNr = bestNrMode(/*preferHighQuality*/ true);
+    if (stillNr >= 0) { uint8_t v = (uint8_t)stillNr; ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_NOISE_REDUCTION_MODE, 1, &v); }
+    int stillEdge = bestEdgeMode(/*preferHighQuality*/ true);
+    if (stillEdge >= 0) { uint8_t v = (uint8_t)stillEdge; ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_EDGE_MODE, 1, &v); }
+
+    // Mirror the scene mode onto the still so the photo itself freezes motion.
+    uint8_t stillCtlMode = (ctlSceneMode_ > 0) ? (uint8_t)ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                                               : (uint8_t)ACAMERA_CONTROL_MODE_AUTO;
+    ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_MODE, 1, &stillCtlMode);
+    if (ctlSceneMode_ > 0) {
+        uint8_t sm = (uint8_t)ctlSceneMode_;
+        ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_SCENE_MODE, 1, &sm);
+    }
 
     int seqId = 0;
     camera_status_t cs = ACameraCaptureSession_capture(captureSession_, nullptr, 1, &stillRequest_, &seqId);
@@ -1028,6 +1159,87 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
 
     if (self->photoCallback_)
         self->photoCallback_(path, ok);
+}
+
+// RAW16 frame ready → write a color-accurate .dng next to the JPEG.  Runs on a
+// camera thread (off the GUI thread); the DngWriter is dependency-free.
+void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
+{
+    auto* self = static_cast<CameraSession*>(ctx);
+    if (!self || !reader)
+        return;
+
+    AImage* img = nullptr;
+    if (AImageReader_acquireNextImage(reader, &img) != AMEDIA_OK || !img)
+        return;
+
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lk(self->photoMutex_);
+        path = self->pendingRawPath_;
+    }
+
+    uint8_t* data = nullptr;
+    int len = 0, stride = 0, w = 0, h = 0;
+    AImage_getWidth(img, &w);
+    AImage_getHeight(img, &h);
+    AImage_getPlaneRowStride(img, 0, &stride);
+    bool got = (AImage_getPlaneData(img, 0, &data, &len) == AMEDIA_OK && data && len > 0);
+
+    bool ok = false;
+    if (!path.empty() && got && w > 0 && h > 0) {
+        const CameraInfo* ci = self->activeInfo();
+        DngParams p;
+        p.width = w; p.height = h;
+        p.rowStrideBytes = stride > 0 ? stride : w * 2;
+        p.orientationDeg = self->captureOrientation();
+        if (ci) {
+            p.whiteLevel     = ci->whiteLevel;
+            for (int k = 0; k < 4; ++k) p.blackLevel[k] = ci->blackLevel[k];
+            p.cfaArrangement = ci->cfaArrangement;
+            p.illuminant1    = ci->refIlluminant1;
+            p.illuminant2    = ci->refIlluminant2;
+            p.haveColor2     = ci->haveColor2;
+            p.haveForward    = ci->haveForward;
+            for (int k = 0; k < 9; ++k) {
+                p.colorMatrix1[k]   = ci->colorMatrix1[k];
+                p.colorMatrix2[k]   = ci->colorMatrix2[k];
+                p.forwardMatrix1[k] = ci->forwardMatrix1[k];
+                p.forwardMatrix2[k] = ci->forwardMatrix2[k];
+            }
+            // ActiveArea: the valid region within the full pixel array.
+            if (ci->activeArray[2] > 0 && ci->activeArray[3] > 0) {
+                p.activeLeft   = ci->activeArray[0];
+                p.activeTop    = ci->activeArray[1];
+                p.activeRight  = ci->activeArray[0] + ci->activeArray[2];
+                p.activeBottom = ci->activeArray[1] + ci->activeArray[3];
+            }
+        }
+        // AsShotNeutral from the latest preview WB gains (still inherits preview AE),
+        // else the sensor's neutral color point.
+        {
+            std::lock_guard<std::mutex> lk(self->resultMutex_);
+            if (self->haveResultGains_) {
+                float gr = self->resultGains_[0];
+                float gg = 0.5f * (self->resultGains_[1] + self->resultGains_[2]);
+                float gb = self->resultGains_[3];
+                if (gr > 0 && gg > 0 && gb > 0) {
+                    p.asShotNeutral[0] = gg / gr;   // normalize so green = 1
+                    p.asShotNeutral[1] = 1.0;
+                    p.asShotNeutral[2] = gg / gb;
+                }
+            } else if (ci) {
+                for (int k = 0; k < 3; ++k) p.asShotNeutral[k] = ci->neutralColorPoint[k];
+            }
+            p.iso        = self->resultIso_;
+            p.exposureNs = self->resultExposureNs_;
+        }
+        std::string e2;
+        ok = writeDng(path, reinterpret_cast<const uint16_t*>(data), p, &e2);
+        self->log(ok ? fmt("DNG saved: %s (%dx%d)", path.c_str(), w, h)
+                     : fmt("DNG write failed: %s — %s", path.c_str(), e2.c_str()));
+    }
+    AImage_delete(img);
 }
 
 bool CameraSession::startRecording(const std::string& path, int width, int height,
@@ -1157,6 +1369,8 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
     activeSession_ = recordSession_;
     activeRequest_ = recordRequest_;
     applyControls(recordRequest_);
+    uint8_t recAutoMode = (uint8_t)ACAMERA_CONTROL_MODE_AUTO;   // scene modes are photo-only
+    ACaptureRequest_setEntry_u8(recordRequest_, ACAMERA_CONTROL_MODE, 1, &recAutoMode);
     applyVideoStabilization(recordRequest_);   // EIS while recording (if supported)
 
     cs = ACameraCaptureSession_setRepeatingRequest(recordSession_, nullptr, 1, &recordRequest_, nullptr);
@@ -1278,8 +1492,15 @@ void CameraSession::applyControls(ACaptureRequest* req) const
 {
     if (!req)
         return;
-    uint8_t ctlMode = ACAMERA_CONTROL_MODE_AUTO;
+    // Scene mode (e.g. ACTION = freeze motion) overrides plain AUTO when set; the
+    // HAL then biases AE toward a short shutter + higher ISO.
+    uint8_t ctlMode = (ctlSceneMode_ > 0) ? (uint8_t)ACAMERA_CONTROL_MODE_USE_SCENE_MODE
+                                          : (uint8_t)ACAMERA_CONTROL_MODE_AUTO;
     ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_MODE, 1, &ctlMode);
+    if (ctlSceneMode_ > 0) {
+        uint8_t sm = (uint8_t)ctlSceneMode_;
+        ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_SCENE_MODE, 1, &sm);
+    }
 
     uint8_t ae = (uint8_t)ctlAeMode_;
     // For AUTO flash, keep the preview AE in auto-flash so the HAL meters and can
@@ -1311,6 +1532,14 @@ void CameraSession::applyControls(ACaptureRequest* req) const
 
     float zoom = ctlZoom_;
     ACaptureRequest_setEntry_float(req, ACAMERA_CONTROL_ZOOM_RATIO, 1, &zoom);
+
+    // Noise reduction + edge enhancement: FAST on the live (repeating) stream so
+    // it stays smooth; capturePhoto() bumps the still to HIGH_QUALITY.  Skips the
+    // tag when no supported mode is advertised (leaves the HAL default).
+    int nr = bestNrMode(/*preferHighQuality*/ false);
+    if (nr >= 0) { uint8_t v = (uint8_t)nr; ACaptureRequest_setEntry_u8(req, ACAMERA_NOISE_REDUCTION_MODE, 1, &v); }
+    int edge = bestEdgeMode(/*preferHighQuality*/ false);
+    if (edge >= 0) { uint8_t v = (uint8_t)edge; ACaptureRequest_setEntry_u8(req, ACAMERA_EDGE_MODE, 1, &v); }
 }
 
 // Electronic video stabilization for a recording request.  ON only when the open
@@ -1363,6 +1592,116 @@ void CameraSession::setAwbMode(int awbMode) { ctlAwbMode_ = awbMode; applyContro
 void CameraSession::setAfMode(int afMode)   { ctlAfMode_  = afMode;  applyControlsToActive(); }
 void CameraSession::setTorch(bool on)       { ctlTorch_   = on ? 1 : 0; applyControlsToActive(); }
 void CameraSession::setFlashMode(int mode)  { flashMode_  = mode;       applyControlsToActive(); }
+void CameraSession::setSceneMode(int mode)  { ctlSceneMode_ = mode;     applyControlsToActive(); }
+
+const CameraSession::CameraInfo* CameraSession::activeInfo() const
+{
+    for (const auto& c : cameras_)
+        if (c.id == openId_)
+            return &c;
+    return nullptr;
+}
+
+bool CameraSession::rawSupported() const
+{
+    const CameraInfo* ci = activeInfo();
+    return ci && ci->rawSupported;
+}
+
+namespace {
+// First of `prefs` present in `avail`, else -1.
+int firstSupported(const std::vector<int>& avail, std::initializer_list<int> prefs)
+{
+    for (int p : prefs)
+        for (int a : avail)
+            if (a == p) return p;
+    return -1;
+}
+}  // namespace
+
+// NR mode for a request: On => HIGH_QUALITY (still) / FAST (preview); Off => OFF.
+// Returns -1 when no usable mode is advertised (leave the HAL default).
+int CameraSession::bestNrMode(bool preferHighQuality) const
+{
+    const CameraInfo* ci = activeInfo();
+    if (!ci) return -1;
+    if (!ctlNrOn_)
+        return firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_OFF});
+    return preferHighQuality
+        ? firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY,
+                                       ACAMERA_NOISE_REDUCTION_MODE_FAST})
+        : firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_FAST,
+                                       ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY});
+}
+
+int CameraSession::bestEdgeMode(bool preferHighQuality) const
+{
+    const CameraInfo* ci = activeInfo();
+    if (!ci) return -1;
+    if (!ctlEdgeOn_)
+        return firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_OFF});
+    return preferHighQuality
+        ? firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_HIGH_QUALITY, ACAMERA_EDGE_MODE_FAST})
+        : firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_FAST, ACAMERA_EDGE_MODE_HIGH_QUALITY});
+}
+
+void CameraSession::setNoiseReduction(bool on)   { ctlNrOn_   = on; applyControlsToActive(); }
+void CameraSession::setEdgeEnhancement(bool on)  { ctlEdgeOn_ = on; applyControlsToActive(); }
+
+// Create the RAW16 reader/window once (largest RAW16 size for the open camera).
+// The session output + still target are wired up later (build / ensureStillRequest).
+bool CameraSession::ensureRawReader()
+{
+    if (rawReader_)
+        return true;
+    const CameraInfo* ci = activeInfo();
+    if (!ci || !ci->rawSupported) {
+        lastError_ = "ensureRawReader: open camera has no RAW capability";
+        return false;
+    }
+    rawW_ = ci->raw16W;
+    rawH_ = ci->raw16H;
+    media_status_t ms = AImageReader_new(rawW_, rawH_, AIMAGE_FORMAT_RAW16, /*maxImages*/ 2, &rawReader_);
+    if (ms != AMEDIA_OK || !rawReader_) {
+        rawReader_ = nullptr;
+        lastError_ = fmt("AImageReader_new(RAW16 %dx%d) failed (status %d)", rawW_, rawH_, (int)ms);
+        return false;
+    }
+    rawListener_.context          = this;
+    rawListener_.onImageAvailable = &CameraSession::onRawImageAvailable;
+    AImageReader_setImageListener(rawReader_, &rawListener_);
+    if (AImageReader_getWindow(rawReader_, &rawWindow_) != AMEDIA_OK || !rawWindow_) {
+        lastError_ = "ensureRawReader: getWindow failed";
+        AImageReader_delete(rawReader_); rawReader_ = nullptr; rawWindow_ = nullptr;
+        return false;
+    }
+    ANativeWindow_acquire(rawWindow_);
+    log(fmt("RAW capture enabled: RAW16 %dx%d", rawW_, rawH_));
+    return true;
+}
+
+// Toggle RAW (DNG) capture.  Rebuilds the preview session so the RAW16 stream
+// swaps in for the live-QR stream (3-stream HAL limit), and drops the cached still
+// request so it's rebuilt with/without the RAW target.
+void CameraSession::setRawEnabled(bool on)
+{
+    if (on == rawEnabled_)
+        return;
+    if (on && !rawSupported()) {
+        log("setRawEnabled: open camera has no RAW capability — ignoring");
+        return;
+    }
+    rawEnabled_ = on;
+    if (on)
+        ensureRawReader();
+    // Drop the cached still request so it picks up / releases the RAW target.
+    if (stillTarget_)     { ACameraOutputTarget_free(stillTarget_);     stillTarget_ = nullptr; }
+    if (rawStillTarget_)  { ACameraOutputTarget_free(rawStillTarget_);  rawStillTarget_ = nullptr; }
+    if (stillRequest_)    { ACaptureRequest_free(stillRequest_);        stillRequest_ = nullptr; }
+    // Rebuild the live session to add/remove the RAW stream (skip mid-record/video).
+    if (streaming_ && !videoMode_ && !recording_)
+        buildSessionFromReaders(/*withEncoder*/ false, previewFps_);
+}
 
 // Kick an AE precapture metering pass on the active repeating request (a pre-flash
 // to decide whether AUTO flash should fire on the upcoming still).  One-shot:

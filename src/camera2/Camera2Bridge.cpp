@@ -514,10 +514,23 @@ void Camera2Bridge::enterVideoMode()
 {
     if (!session_)
         return;
-    // Scale bitrate roughly with resolution so 4K isn't starved.
-    const int bitrate = (videoW_ >= 3000) ? 40000000 : 20000000;
+    // Use the user's bitrate (kbps from the slider) if set; else a sane default
+    // scaled with resolution so 4K isn't starved.
+    const int bitrate = videoBitrate_ > 0 ? videoBitrate_ * 1000
+                                          : ((videoW_ >= 3000) ? 40000000 : 20000000);
     session_->setVideoFpsRange(videoFpsMin_, videoFpsMax_);
     session_->enterVideoMode(videoW_, videoH_, videoFpsMax_, bitrate);
+}
+
+// Set the H.264 video bitrate (kbps).  Rebuilds the video session if it's up (and
+// not recording) so the new bitrate takes effect (the codec bitrate is fixed at
+// configure time).
+void Camera2Bridge::setVideoBitrate(int kbps)
+{
+    if (kbps <= 0 || kbps == videoBitrate_)
+        return;
+    videoBitrate_ = kbps;
+    rebuildVideoIfActive();
 }
 
 // Set the video target-fps range: [30,30] = steady 30; [5,30] = allow the rate
@@ -803,6 +816,11 @@ void Camera2Bridge::setFocusPoint(float x, float y)
 }
 
 void Camera2Bridge::setTorch(bool on) { if (session_) session_->setTorch(on); }
+void Camera2Bridge::setSceneMode(int mode) { if (session_) session_->setSceneMode(mode); }
+void Camera2Bridge::setRawEnabled(bool on) { if (session_) session_->setRawEnabled(on); }
+bool Camera2Bridge::rawSupported() const   { return session_ && session_->rawSupported(); }
+void Camera2Bridge::setNoiseReduction(bool on)  { if (session_) session_->setNoiseReduction(on); }
+void Camera2Bridge::setEdgeEnhancement(bool on) { if (session_) session_->setEdgeEnhancement(on); }
 void Camera2Bridge::setFlashMode(int mode)
 {
     if (mode == flashMode_)

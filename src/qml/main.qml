@@ -173,7 +173,11 @@ ApplicationWindow {
         property int jpegQuality: 100
         property int gridEnabled: 0
         property int levelEnabled: 0
-        property int videoBitrate: 8000
+        property int videoBitrate: 50000          // kbps; wired to the H.264 encoder
+        property bool actionMode: false           // ACTION scene mode: freeze fast motion
+        property bool rawEnabled: false            // also save a .dng (raw) per shot
+        property bool noiseReductionEnabled: true  // HIGH_QUALITY denoise on stills
+        property bool edgeEnhancementEnabled: true // HIGH_QUALITY sharpening on stills
         property int videoResWidth: 1920
         property int videoResHeight: 1080
         property int whiteBalanceMode: 0
@@ -2116,6 +2120,203 @@ ApplicationWindow {
                 }
             }
 
+            // Capture mode: ACTION scene mode freezes fast motion (short shutter,
+            // higher ISO) — affects photos and the live preview.
+            Text {
+                text: "Capture Mode"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "Normal",                 on: false },
+                        { label: "Action (freeze motion)", on: true  }
+                    ]
+                    delegate: Rectangle {
+                        width: actText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.actionMode === modelData.on ? "#444" : "#222"
+                        border.color: settings.actionMode === modelData.on ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: actText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.actionMode === modelData.on
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                settings.actionMode = modelData.on;
+                                if (cameraLoader.item)
+                                    cameraLoader.item.handleSetSceneMode(modelData.on);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // RAW (DNG): saves a color-accurate raw next to each JPEG for maximum
+            // latitude in low light / heavy editing.  Larger files + slightly slower
+            // shot-to-shot; live QR is disabled while on (stream-slot limit).
+            Text {
+                text: "RAW (DNG)"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "JPEG only",  on: false },
+                        { label: "JPEG + RAW", on: true  }
+                    ]
+                    delegate: Rectangle {
+                        width: rawText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.rawEnabled === modelData.on ? "#444" : "#222"
+                        border.color: settings.rawEnabled === modelData.on ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: rawText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.rawEnabled === modelData.on
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                settings.rawEnabled = modelData.on;
+                                if (cameraLoader.item)
+                                    cameraLoader.item.handleSetRaw(modelData.on);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Noise reduction: HIGH_QUALITY denoise on stills (cleaner low light;
+            // off = no denoise, for comparison).
+            Text {
+                text: "Noise Reduction"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "Off", on: false },
+                        { label: "On",  on: true  }
+                    ]
+                    delegate: Rectangle {
+                        width: nrText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.noiseReductionEnabled === modelData.on ? "#444" : "#222"
+                        border.color: settings.noiseReductionEnabled === modelData.on ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: nrText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.noiseReductionEnabled === modelData.on
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                settings.noiseReductionEnabled = modelData.on;
+                                if (cameraLoader.item)
+                                    cameraLoader.item.handleSetNoiseReduction(modelData.on);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Edge enhancement: HIGH_QUALITY sharpening on stills (crisper detail;
+            // off = no sharpening, for comparison).
+            Text {
+                text: "Edge Enhancement"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "Off", on: false },
+                        { label: "On",  on: true  }
+                    ]
+                    delegate: Rectangle {
+                        width: edgeText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.edgeEnhancementEnabled === modelData.on ? "#444" : "#222"
+                        border.color: settings.edgeEnhancementEnabled === modelData.on ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: edgeText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.edgeEnhancementEnabled === modelData.on
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                settings.edgeEnhancementEnabled = modelData.on;
+                                if (cameraLoader.item)
+                                    cameraLoader.item.handleSetEdgeEnhancement(modelData.on);
+                            }
+                        }
+                    }
+                }
+            }
+
             Rectangle {
                 width: parent.width - 32 * window.scalingRatio
                 height: 1
@@ -2191,13 +2392,15 @@ ApplicationWindow {
                 id: bitrateSlider
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
-                from: 2000
-                to: 16000
-                stepSize: 1000
+                from: 8000
+                to: 100000
+                stepSize: 4000
                 value: settings.videoBitrate
 
                 onMoved: {
                     settings.videoBitrate = value;
+                    if (cameraLoader.item)
+                        cameraLoader.item.handleSetVideoBitrate(value);   // apply to the encoder
                 }
 
                 background: Rectangle {

@@ -62,6 +62,23 @@ public:
         int   evCompMax        = 0;      // max==min = range absent
         float evCompStep       = 0.0f;   // CONTROL_AE_COMPENSATION_STEP (EV per index)
         bool  videoStabSupported = false;// CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES has ON
+        std::vector<int> nrModes;        // AVAILABLE_NOISE_REDUCTION_MODES
+        std::vector<int> edgeModes;      // AVAILABLE_EDGE_MODES
+        // ── RAW/DNG characteristics (RAW capability) ───────────────────────────
+        bool  rawSupported  = false;     // RAW capability + a RAW16 output size present
+        int   raw16W        = 0;         // largest RAW16 output size
+        int   raw16H        = 0;
+        int   whiteLevel    = 1023;
+        int   blackLevel[4] = {64, 64, 64, 64};
+        int   cfaArrangement = 0;        // 0=RGGB 1=GRBG 2=GBRG 3=BGGR
+        int   refIlluminant1 = 21, refIlluminant2 = 17;
+        bool  haveColor2  = false;       // dual-illuminant calibration present
+        bool  haveForward = false;       // forward matrices present
+        double colorMatrix1[9]   = {0};  // SENSOR_COLOR_TRANSFORM1 (XYZ->camera)
+        double colorMatrix2[9]   = {0};
+        double forwardMatrix1[9] = {0};  // SENSOR_FORWARD_MATRIX1  (camera->XYZ D50)
+        double forwardMatrix2[9] = {0};
+        double neutralColorPoint[3] = {1, 1, 1};  // AsShotNeutral fallback
         std::vector<int>          capabilities;  // ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_*
         std::vector<StreamConfig> outputs;       // output stream configs only
     };
@@ -212,6 +229,18 @@ public:
     void  setZoomRatio(float ratio);                       // 1.0 .. maxZoomRatio()
     void  setTorch(bool on);
     void  setFlashMode(int mode);                          // 0=off, 1=on, 2=auto (per-shot)
+    void  setSceneMode(int mode);                          // 0=off; ACAMERA_CONTROL_SCENE_MODE_* (e.g. ACTION)
+    // RAW/DNG capture: when enabled, each shot also saves a color-accurate .dng
+    // (the RAW16 stream replaces the live-QR stream — 3-stream HAL limit).  Toggling
+    // rebuilds the preview session.  No-op if the camera lacks RAW capability.
+    void  setRawEnabled(bool on);
+    bool  isRawEnabled() const { return rawEnabled_; }
+    bool  rawSupported() const;                            // open camera advertises RAW
+    // Post-processing: noise reduction + edge enhancement.  On => FAST on the live
+    // preview/video, HIGH_QUALITY on stills (best detail vs. noise); Off => OFF.
+    // Only supported modes are submitted (read from the open camera).
+    void  setNoiseReduction(bool on);
+    void  setEdgeEnhancement(bool on);
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
     int   aeState() const { return lastAeState_.load(); }  // ACAMERA_CONTROL_AE_STATE_* (result)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
@@ -275,6 +304,11 @@ private:
     bool buildSessionFromReaders(bool withEncoder, int targetFps);  // (re)build the session
     bool maxJpegSize(int* w, int* h) const;  // largest JPEG output of the open camera
     bool ensureStillRequest();               // build the cached still request + JPEG target once
+    bool ensureRawReader();                  // create the RAW16 reader/window (lazily)
+    const CameraInfo* activeInfo() const;    // CameraInfo for the currently open camera
+    // Pick the best available NR/edge mode for a request (-1 = none supported, skip).
+    int  bestNrMode(bool preferHighQuality) const;
+    int  bestEdgeMode(bool preferHighQuality) const;
     void applyControls(ACaptureRequest* req) const;  // write control state into a request
     bool applyControlsToActive();                    // re-submit the active repeating request
     void applyVideoStabilization(ACaptureRequest* req) const;  // EIS on/off for a record request
@@ -286,6 +320,7 @@ private:
     // Streaming callbacks (context is the CameraSession*).
     static void onImageAvailable(void* ctx, AImageReader* reader);
     static void onJpegImageAvailable(void* ctx, AImageReader* reader);
+    static void onRawImageAvailable(void* ctx, AImageReader* reader);
     static void onAnalysisImageAvailable(void* ctx, AImageReader* reader);
     static void onSessionActive(void* ctx, ACameraCaptureSession* session);
     static void onSessionReady(void* ctx, ACameraCaptureSession* session);
@@ -375,6 +410,27 @@ private:
     AImageReader_ImageListener analysisListener_{};
     std::function<void(const uint8_t* y, int width, int height, int rowStride)> analysisCallback_;
 
+    // RAW16 output for DNG capture — swaps in for the analysis stream when raw is
+    // on (3-stream HAL limit).  Only the still request targets it (no live frames);
+    // its listener writes a .dng via DngWriter.  rawStillTarget_ lives on the cached
+    // still request when rawEnabled_.
+    bool                       rawEnabled_     = false;
+    AImageReader*              rawReader_      = nullptr;
+    ANativeWindow*             rawWindow_      = nullptr;
+    ACaptureSessionOutput*     rawOutput_      = nullptr;
+    ACameraOutputTarget*       rawStillTarget_ = nullptr;
+    AImageReader_ImageListener rawListener_{};
+    int                        rawW_           = 0;
+    int                        rawH_           = 0;
+    std::string                pendingRawPath_;          // set under photoMutex_
+    // Latest preview capture-result fields, cached for DNG metadata (the still
+    // capture inherits the preview's AE/AWB).  Guarded by resultMutex_.
+    std::mutex                 resultMutex_;
+    bool                       haveResultGains_ = false;
+    float                      resultGains_[4]  = {1, 1, 1, 1};  // COLOR_CORRECTION_GAINS
+    int                        resultIso_       = 0;
+    int64_t                    resultExposureNs_ = 0;
+
     // Video recording (dedicated capture session targeting the encoder surface).
     std::unique_ptr<VideoEncoder>        encoder_;
     std::unique_ptr<AudioEncoder>        audioEnc_;   // optional AAC audio track (M6)
@@ -401,6 +457,9 @@ private:
     float   ctlZoom_       = 1.0f;
     int     ctlTorch_      = 0;
     int     flashMode_     = 0;   // per-shot flash: 0=off, 1=on, 2=auto
+    int     ctlSceneMode_  = 0;   // 0=disabled; ACAMERA_CONTROL_SCENE_MODE_* (ACTION freezes motion)
+    bool    ctlNrOn_       = true;  // noise reduction (FAST preview / HIGH_QUALITY still)
+    bool    ctlEdgeOn_     = true;  // edge enhancement (FAST preview / HIGH_QUALITY still)
     int     openActiveArray_[4] = {0, 0, 0, 0};
 
     std::atomic<int>     frameCount_        {0};

@@ -227,6 +227,30 @@ Item {
         cam2.setVideoResolution(w, h)
     }
 
+    // H.264 video bitrate (kbps from the slider).
+    function handleSetVideoBitrate(kbps) {
+        cam2.setVideoBitrate(kbps)
+    }
+
+    // Action scene mode: freeze fast motion (short shutter, higher ISO).
+    function handleSetSceneMode(on) {
+        cam2.setSceneMode(on ? 2 : 0)   // 2 = ACTION
+    }
+
+    // RAW (DNG): also save a color-accurate raw alongside the JPEG (the RAW16
+    // stream replaces live QR while on).  No-op if the camera lacks RAW capability.
+    function handleSetRaw(on) {
+        cam2.setRawEnabled(on)
+    }
+
+    // Post-processing toggles: HIGH_QUALITY denoise / sharpening on stills.
+    function handleSetNoiseReduction(on) {
+        cam2.setNoiseReduction(on)
+    }
+    function handleSetEdgeEnhancement(on) {
+        cam2.setEdgeEnhancement(on)
+    }
+
     // Populate the camera selector from the engine's full list (incl. the
     // secondary back/macro camera), keyed by camera index.
     function initializeCameraList() {
@@ -386,6 +410,11 @@ Item {
                 cameraItem.fnVideoResolutions()
                 cam2.setExposureCompensation(settings.brightnessEv)   // restore brightness after (re)start
                 cameraItem.handleSetVideoFps(settings.videoFpsMode)   // restore fps mode before video mode
+                cam2.setVideoBitrate(settings.videoBitrate)           // restore chosen video bitrate
+                cam2.setSceneMode(settings.actionMode ? 2 : 0)        // restore action (freeze-motion) mode
+                cam2.setRawEnabled(settings.rawEnabled)               // restore RAW (DNG) capture
+                cam2.setNoiseReduction(settings.noiseReductionEnabled) // restore denoise toggle
+                cam2.setEdgeEnhancement(settings.edgeEnhancementEnabled) // restore sharpening toggle
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
                 // Sync GUI position state to the camera that actually opened (bridge
                 // ground truth) — the flash button and other UI gate on
