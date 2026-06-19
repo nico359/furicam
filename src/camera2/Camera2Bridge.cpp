@@ -789,11 +789,18 @@ void Camera2Bridge::setExposureCompensation(float ev)
     // ev in [0,1] (0=most under, 0.5=neutral, 1=most over) → the open camera's AE
     // compensation index range, read from CONTROL_AE_COMPENSATION_RANGE (no
     // device-specific hardcode).  For a symmetric range 0.5 maps to 0 (neutral).
-    const int mn = session_->evCompMin();
-    const int mx = session_->evCompMax();
-    int steps = mn + (int)std::lround(ev * (mx - mn));
-    if (steps < mn) steps = mn;
-    else if (steps > mx) steps = mx;
+    const int   mn   = session_->evCompMin();
+    const int   mx   = session_->evCompMax();
+    const float step = session_->evCompStep();   // EV per index
+    // Limit the slider to ±2 EV regardless of how wide the HAL index range is, so it
+    // stays a gentle brightness trim instead of a hard AE override that swings the
+    // metering to an extreme.  Symmetric → ev=0.5 maps to index 0 (true neutral).
+    const int limit = (step > 0.0f) ? (int)std::lround(2.0f / step) : (mx > -mn ? mx : -mn);
+    const int lo = std::max(mn, -limit);
+    const int hi = std::min(mx,  limit);
+    int steps = lo + (int)std::lround(ev * (hi - lo));
+    if (steps < lo) steps = lo;
+    else if (steps > hi) steps = hi;
     session_->setExposureCompensation(steps);
 }
 

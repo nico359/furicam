@@ -1683,8 +1683,11 @@ bool CameraSession::applyControlsToActive()
     if (!activeSession_ || !activeRequest_)
         return false;   // not streaming yet — state applies when a session starts
     applyControls(activeRequest_);
+    // Keep the result callback attached (NOT nullptr) so AE-state / WB-gain results
+    // keep flowing after a control change — else lastAeState_ freezes and auto-flash
+    // polls its full 1200ms ceiling on every shot (the "1s to take" stall).
     return ACameraCaptureSession_setRepeatingRequest(
-               activeSession_, nullptr, 1, &activeRequest_, nullptr) == ACAMERA_OK;
+               activeSession_, &resultCb_, 1, &activeRequest_, nullptr) == ACAMERA_OK;
 }
 
 void CameraSession::setAutoExposure()
