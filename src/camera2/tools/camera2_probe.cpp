@@ -28,7 +28,7 @@
 
 int main(int argc, char** argv)
 {
-    using namespace furicam2;
+    using namespace furicam;
 
     bool        dumpAll    = false;
     bool        usePrivate = false;   // PRIVATE format + GPU usage (the HAL-preferred path)

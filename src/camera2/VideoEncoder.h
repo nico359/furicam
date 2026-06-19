@@ -26,8 +26,8 @@
 // are serialized under muxerMutex_, and each track's presentation timestamps are
 // normalized to start at zero so the two streams stay in sync.
 
-#ifndef FURICAM2_VIDEO_ENCODER_H
-#define FURICAM2_VIDEO_ENCODER_H
+#ifndef FURICAM_VIDEO_ENCODER_H
+#define FURICAM_VIDEO_ENCODER_H
 
 #include <atomic>
 #include <cstdint>
@@ -37,7 +37,7 @@
 
 #include "Camera2NDK.h"
 
-namespace furicam2 {
+namespace furicam {
 
 class VideoEncoder {
 public:
@@ -141,6 +141,6 @@ private:
     std::string        lastError_;
 };
 
-} // namespace furicam2
+} // namespace furicam
 
-#endif // FURICAM2_VIDEO_ENCODER_H
+#endif // FURICAM_VIDEO_ENCODER_H

@@ -52,7 +52,7 @@
 
 #include "PreviewRenderer.h"
 
-namespace furicam2 {
+namespace furicam {
 
 namespace {
 
@@ -397,7 +397,7 @@ void Camera2Bridge::setLastPhotoPath(const QString& path)
 }
 
 // Captures go under <media-dir>/<binary name> (the app convention the built-in
-// gallery scans, e.g. ~/Pictures/furicam2 and ~/Videos/furicam2).
+// gallery scans, e.g. ~/Pictures/furicam and ~/Videos/furicam).
 static QString mediaSubdir()
 {
     return QFileInfo(QCoreApplication::applicationFilePath()).fileName();
@@ -628,7 +628,7 @@ void Camera2Bridge::doSingleCapture(const QString& outputPath)
 // One frame of the HDR burst, to a temp file.
 void Camera2Bridge::captureNextHdrFrame()
 {
-    const QString p = QDir::tempPath() + QStringLiteral("/furicam2_hdr_%1.jpg").arg(hdrPaths_.size());
+    const QString p = QDir::tempPath() + QStringLiteral("/furicam_hdr_%1.jpg").arg(hdrPaths_.size());
     if (!session_->capturePhoto(p.toStdString())) {
         hdrBurstActive_ = false;
         emit cameraError(QString::fromStdString(session_->lastError()));
@@ -855,4 +855,4 @@ void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
     }, Qt::QueuedConnection);
 }
 
-} // namespace furicam2
+} // namespace furicam

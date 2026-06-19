@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2026 Sean Pollard <spollard08@gmail.com>
 //
-// furicam2_camera_c.cpp — C API implementation over CameraSession + PreviewRenderer.
+// camera_c.cpp — C API implementation over CameraSession + PreviewRenderer.
 
-#include "furicam2_camera_c.h"
+#include "camera_c.h"
 
 #include "CameraSession.h"
 #include "PreviewRenderer.h"
@@ -11,8 +11,8 @@
 #include <new>
 #include <string>
 
-using furicam2::CameraSession;
-using furicam2::PreviewRenderer;
+using furicam::CameraSession;
+using furicam::PreviewRenderer;
 
 struct fc2_camera {
     CameraSession   session;

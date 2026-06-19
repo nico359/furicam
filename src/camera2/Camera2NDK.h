@@ -19,14 +19,14 @@
 // header is a description of that public interface, not an original work of
 // expression (Apache-2.0 AOSP headers are the canonical source).
 //
-// Only the subset FuriCam2 uses is declared.  Metadata tag value constants
+// Only the subset FuriCam uses is declared.  Metadata tag value constants
 // (ACAMERA_* in NdkCameraMetadataTags.h) are intentionally deferred to M2,
 // where CameraSession needs them and they can be transcribed exactly from the
 // Apache-2.0 AOSP header — getting those values wrong is a latent runtime bug,
 // not a compile error, so they do not belong in the shim milestone.
 
-#ifndef FURICAM2_CAMERA2_NDK_H
-#define FURICAM2_CAMERA2_NDK_H
+#ifndef FURICAM_CAMERA2_NDK_H
+#define FURICAM_CAMERA2_NDK_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -159,7 +159,7 @@ enum {
 // ─────────────────────────────────────────────────────────────────────────────
 // Camera metadata tags + value constants (NdkCameraMetadata*.h).  Values match
 // AOSP exactly: every tag is (section << 16) + index, so the section-start enum
-// below makes each tag self-evidently correct.  Only the subset FuriCam2
+// below makes each tag self-evidently correct.  Only the subset FuriCam
 // reads/writes is declared; extend as later milestones need more.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -536,4 +536,4 @@ void ANativeWindow_release(ANativeWindow* window);
 } // extern "C"
 #endif
 
-#endif // FURICAM2_CAMERA2_NDK_H
+#endif // FURICAM_CAMERA2_NDK_H

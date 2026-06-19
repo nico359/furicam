@@ -101,7 +101,7 @@ Item {
         if (settings.soundOn === 1)
             sound.play()
         if (mediaView.index < 0)
-            mediaView.folder = StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam2"
+            mediaView.folder = StandardPaths.writableLocation(StandardPaths.PicturesLocation) + "/furicam"
         // Single full-resolution capture; the engine writes the JPEG and emits
         // photoSaved(path), handled in onPhotoSaved below.
         cam2.capturePhoto("")

@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 project (furicam LANGUAGES C CXX)
 
+# distrobox: we link host libhybris from /run/host. Container/host ABI mismatches
+# in transitive deps (libpulse, etc.) would fail the link — tolerate them.
+if(EXISTS /run/host)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--allow-shlib-undefined")
+endif()
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(CMAKE_AUTOUIC ON)
@@ -18,9 +24,9 @@ pkg_check_modules(GLIB REQUIRED glib-2.0 gio-2.0)
 # ON by default: the camera path now drives the Camera2 engine (Camera2Bridge).
 # On a non-Halium host (desktop) it links a stub and Camera2 is inert, so the
 # build still works there.  Turn OFF only for the legacy GStreamer-only build.
-option(FURICAM2_CAMERA2 "Build the Camera2 NDK camera engine (Camera2Bridge)" ON)
+option(FURICAM_CAMERA2 "Build the Camera2 NDK camera engine (Camera2Bridge)" ON)
 
-if(FURICAM2_CAMERA2)
+if(FURICAM_CAMERA2)
     # The reusable, Qt-free camera engine is its own static library so the Qt app,
     # the CLI probe, and standalone (GTK/Rust/…) frontends all share one engine.
     # It pulls in libhybris (or a host stub), EGL, the vendored hybris headers and
@@ -52,9 +58,9 @@ set(APP_SOURCES
 		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.cpp
 		${CMAKE_SOURCE_DIR}/src/meteringcontroller.cpp)
 
-if(FURICAM2_CAMERA2 AND EXISTS ${CMAKE_SOURCE_DIR}/src/camera2/Camera2Bridge.cpp)
+if(FURICAM_CAMERA2 AND EXISTS ${CMAKE_SOURCE_DIR}/src/camera2/Camera2Bridge.cpp)
     # Camera2Bridge is the Qt/QML adapter; the rest of the engine lives in the
-    # furicam2_camera library this target links below.
+    # furicam_camera library this target links below.
     list(APPEND APP_SOURCES ${CMAKE_SOURCE_DIR}/src/camera2/Camera2Bridge.cpp)
 endif()
 
@@ -75,7 +81,7 @@ set(APP_HEADERS
 		${CMAKE_SOURCE_DIR}/src/whitebalancecontroller.h
 		${CMAKE_SOURCE_DIR}/src/meteringcontroller.h)
 
-if(FURICAM2_CAMERA2
+if(FURICAM_CAMERA2
    AND EXISTS ${CMAKE_SOURCE_DIR}/src/camera2/Camera2Bridge.h
    AND EXISTS ${CMAKE_SOURCE_DIR}/src/camera2/Camera2Bridge.cpp)
     # Camera2Bridge.h has Q_OBJECT — list it so AUTOMOC processes it (only once
@@ -100,20 +106,20 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_compile_options(${PROJECT_NAME} PUBLIC ${GST_CFLAGS})
 target_link_libraries(${PROJECT_NAME} PUBLIC Qt5::Core Qt5::Widgets Qt5::Quick Qt5::Qml Qt5::Multimedia Qt5::DBus ZXing exiv2 dl ${GST_LIBS} ${GLIB_LIBRARIES} ${OpenCV_LIBS})
 
-if(FURICAM2_CAMERA2)
-    target_compile_definitions(${PROJECT_NAME} PUBLIC FURICAM2_CAMERA2=1)
+if(FURICAM_CAMERA2)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC FURICAM_CAMERA2=1)
     # The engine library brings the camera2 include dirs, the vendored hybris
     # header, the host-stub define, libhybris/EGL and pthreads transitively.
-    target_link_libraries(${PROJECT_NAME} PUBLIC furicam2_camera)
+    target_link_libraries(${PROJECT_NAME} PUBLIC furicam_camera)
 endif()
 
 # ── Standalone Camera2 capability probe (Milestone 2) ────────────────────────
 # A tiny Qt-free CLI that enumerates/opens/dumps cameras through the NDK shim,
 # so we can prove Camera2 reachability on the phone without the whole GUI app.
 # Built only when the Camera2 helper is enabled and the sources exist.
-if(FURICAM2_CAMERA2 AND EXISTS ${CMAKE_SOURCE_DIR}/src/camera2/tools/camera2_probe.cpp)
+if(FURICAM_CAMERA2 AND EXISTS ${CMAKE_SOURCE_DIR}/src/camera2/tools/camera2_probe.cpp)
     add_executable(camera2_probe ${CMAKE_SOURCE_DIR}/src/camera2/tools/camera2_probe.cpp)
-    target_link_libraries(camera2_probe PRIVATE furicam2_camera)
+    target_link_libraries(camera2_probe PRIVATE furicam_camera)
 endif()
 
 install(TARGETS ${PROJECT_NAME} DESTINATION /usr/bin)

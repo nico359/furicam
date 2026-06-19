@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sean Pollard <spollard08@gmail.com>
  *
  * camera2_gtk — a minimal GTK4 live-preview prototype driving the shared
- * furicam2_camera engine through its backend-neutral C API.  A GtkGLArea hosts
+ * furicam_camera engine through its backend-neutral C API.  A GtkGLArea hosts
  * the GLES context; each frame fc2_render_preview() draws the latest camera
  * buffer (zero-copy AHardwareBuffer -> EGLImage -> external-OES texture).
  *
@@ -10,7 +10,7 @@
  * different toolkit.
  */
 
-#include "furicam2_camera_c.h"
+#include "camera_c.h"
 
 #include <gtk/gtk.h>
 

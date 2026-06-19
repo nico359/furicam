@@ -10,7 +10,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-namespace furicam2 {
+namespace furicam {
 
 namespace {
 // AMediaFormat keys (stable strings) and the MediaCodec surface color format.
@@ -313,4 +313,4 @@ void VideoEncoder::writeAudioSample(const uint8_t* data, AMediaCodecBufferInfo i
     audioFramesWritten_.fetch_add(1, std::memory_order_relaxed);
 }
 
-} // namespace furicam2
+} // namespace furicam

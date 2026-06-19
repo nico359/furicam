@@ -8,7 +8,7 @@
  * <hybris/common/binding.h>) into a real function with the exact NDK symbol
  * name.  On first call it android_dlopen()s the backing Android shared object
  * and android_dlsym()s the symbol, caching the resolved pointer in a function-
- * local static, then forwards.  The rest of FuriCam2 (CameraSession.cpp,
+ * local static, then forwards.  The rest of FuriCam (CameraSession.cpp,
  * VideoEncoder.cpp) calls these as if they were the genuine NDK symbols.
  *
  * Why this is C, not C++:

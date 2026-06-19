@@ -8,7 +8,7 @@ build-*/
 deb-stage/
 qtmm-sysroot/
 opencv-mini/
-debian/furicam2/
+debian/furicam/
 debian/.debhelper/
 debian/files
 debian/*.substvars

@@ -21,15 +21,15 @@
 // GStreamer (incl. gstreamer-app) is available; otherwise a stub backs it and
 // recording is video-only.
 
-#ifndef FURICAM2_AUDIO_ENCODER_H
-#define FURICAM2_AUDIO_ENCODER_H
+#ifndef FURICAM_AUDIO_ENCODER_H
+#define FURICAM_AUDIO_ENCODER_H
 
 #include <functional>
 #include <string>
 
 #include "Camera2NDK.h"   // AMediaFormat, AMediaCodecBufferInfo
 
-namespace furicam2 {
+namespace furicam {
 
 class AudioEncoder {
 public:
@@ -78,6 +78,6 @@ private:
     std::string lastError_;
 };
 
-} // namespace furicam2
+} // namespace furicam
 
-#endif // FURICAM2_AUDIO_ENCODER_H
+#endif // FURICAM_AUDIO_ENCODER_H

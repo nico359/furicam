@@ -19,7 +19,7 @@
 extern "C" void* android_dlopen(const char* filename, int flag);
 extern "C" void* android_dlsym(void* handle, const char* symbol);
 
-namespace furicam2 {
+namespace furicam {
 
 namespace {
 
@@ -115,7 +115,7 @@ CameraSession::~CameraSession()
 
 bool CameraSession::isHostStub()
 {
-#ifdef FURICAM2_CAMERA2_HOST_STUB
+#ifdef FURICAM_CAMERA2_HOST_STUB
     return true;
 #else
     return false;
@@ -1487,4 +1487,4 @@ const char* CameraSession::formatName(int format)
     }
 }
 
-} // namespace furicam2
+} // namespace furicam

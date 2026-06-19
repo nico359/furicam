@@ -12,7 +12,7 @@
 #include <cmath>
 #include <cstdio>
 
-namespace furicam2 {
+namespace furicam {
 
 namespace {
 
@@ -329,4 +329,4 @@ bool PreviewRenderer::render(AImageReader* reader, int viewW, int viewH, int rot
     return d.haveFrame;
 }
 
-} // namespace furicam2
+} // namespace furicam

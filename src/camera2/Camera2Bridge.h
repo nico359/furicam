@@ -4,7 +4,7 @@
 // Camera2Bridge — Qt5 widget that exposes Android Camera2 native development
 // kit (NDK) to QML.  Reaches the Android Camera2 NDK via libhybris on Halium-
 // based FuriOS.  See src/camera2/CAMERA2_PLAN.md for architecture and
-// project_furicam2_camera_investigation memory for why this exists.
+// project_furicam_camera_investigation memory for why this exists.
 //
 // Architecturally this mirrors the standard Camera2 NDK + Qt5 integration
 // pattern (preview AImageReader -> AHardwareBuffer -> EGL external OES
@@ -13,8 +13,8 @@
 // reference; that's a property of the application programming interface (API)
 // not of any single implementation.
 
-#ifndef FURICAM2_CAMERA2_BRIDGE_H
-#define FURICAM2_CAMERA2_BRIDGE_H
+#ifndef FURICAM_CAMERA2_BRIDGE_H
+#define FURICAM_CAMERA2_BRIDGE_H
 
 #include <QQuickFramebufferObject>
 #include <QString>
@@ -32,7 +32,7 @@ struct ACaptureRequest;
 struct ACaptureSessionOutputContainer;
 struct AImageReader;
 
-namespace furicam2 {
+namespace furicam {
 
 class CameraSession;
 class VideoEncoder;
@@ -316,6 +316,6 @@ private:
     bool           orientationMonitorStarted_ = false;
 };
 
-} // namespace furicam2
+} // namespace furicam
 
-#endif // FURICAM2_CAMERA2_BRIDGE_H
+#endif // FURICAM_CAMERA2_BRIDGE_H

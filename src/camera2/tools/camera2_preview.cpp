@@ -22,7 +22,7 @@
 
 static const char* kQml = R"QML(
 import QtQuick 2.0
-import FuriCam2 1.0
+import FuriCam 1.0
 
 Rectangle {
     id: root
@@ -86,7 +86,7 @@ Rectangle {
 int main(int argc, char** argv)
 {
     QGuiApplication app(argc, argv);
-    qmlRegisterType<furicam2::Camera2Bridge>("FuriCam2", 1, 0, "Camera2Bridge");
+    qmlRegisterType<furicam::Camera2Bridge>("FuriCam", 1, 0, "Camera2Bridge");
 
     QTemporaryFile qml(QDir::tempPath() + "/camera2_preview_XXXXXX.qml");
     qml.setAutoRemove(true);

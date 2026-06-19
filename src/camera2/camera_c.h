@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  * Copyright (C) 2026 Sean Pollard <spollard08@gmail.com>
  *
- * furicam2_camera_c.h — a backend-neutral C API over the camera engine.
+ * camera_c.h — a backend-neutral C API over the camera engine.
  *
  * This is the seam that lets non-C++/non-Qt frontends (GTK, Rust, Flutter, …)
  * drive the same engine the Qt app uses.  The vocabulary is deliberately
@@ -10,8 +10,8 @@
  * could implement the same API without changing any frontend.
  */
 
-#ifndef FURICAM2_CAMERA_C_H
-#define FURICAM2_CAMERA_C_H
+#ifndef FURICAM_CAMERA_C_H
+#define FURICAM_CAMERA_C_H
 
 #include <stdint.h>
 
@@ -65,4 +65,4 @@ void fc2_stop_recording(fc2_camera* c);
 } /* extern "C" */
 #endif
 
-#endif /* FURICAM2_CAMERA_C_H */
+#endif /* FURICAM_CAMERA_C_H */

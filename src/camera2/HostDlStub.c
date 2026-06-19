@@ -6,7 +6,7 @@
  * On a Halium device (the FuriPhone FLX1s) the symbols android_dlopen /
  * android_dlsym that Camera2NDKShim.c calls are provided by libhybris-common.
  * On a normal host (the Debian desktop used for fast build iteration) libhybris
- * does not exist, so these stubs let FuriCam2 still compile, link and run with
+ * does not exist, so these stubs let FuriCam still compile, link and run with
  * the Camera2 path simply inert: every Android-library lookup fails cleanly and
  * the higher-level CameraSession reports "Camera2 unavailable" rather than the
  * app failing to link.

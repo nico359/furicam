@@ -12,8 +12,8 @@
 // Qt), so it can be exercised by the tiny src/camera2/tools/camera2_probe.cpp
 // command-line harness on the phone without building the whole GUI app.
 
-#ifndef FURICAM2_CAMERA_SESSION_H
-#define FURICAM2_CAMERA_SESSION_H
+#ifndef FURICAM_CAMERA_SESSION_H
+#define FURICAM_CAMERA_SESSION_H
 
 #include <atomic>
 #include <cstdint>
@@ -25,7 +25,7 @@
 
 #include "Camera2NDK.h"
 
-namespace furicam2 {
+namespace furicam {
 
 class VideoEncoder;
 class AudioEncoder;
@@ -343,6 +343,6 @@ private:
     std::atomic<int>     lastAcquireStatus_ {0};
 };
 
-} // namespace furicam2
+} // namespace furicam
 
-#endif // FURICAM2_CAMERA_SESSION_H
+#endif // FURICAM_CAMERA_SESSION_H

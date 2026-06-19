@@ -11,12 +11,12 @@
 // the phone, and is usable from Qt (QQuickFramebufferObject), GTK (GtkGLArea),
 // or the C wrapper alike.
 
-#ifndef FURICAM2_PREVIEW_RENDERER_H
-#define FURICAM2_PREVIEW_RENDERER_H
+#ifndef FURICAM_PREVIEW_RENDERER_H
+#define FURICAM_PREVIEW_RENDERER_H
 
 #include "Camera2NDK.h"   // AImageReader / AImage / AHardwareBuffer
 
-namespace furicam2 {
+namespace furicam {
 
 class PreviewRenderer {
 public:
@@ -44,6 +44,6 @@ private:
     Impl* d_;
 };
 
-} // namespace furicam2
+} // namespace furicam
 
-#endif // FURICAM2_PREVIEW_RENDERER_H
+#endif // FURICAM_PREVIEW_RENDERER_H

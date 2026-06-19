@@ -9,7 +9,7 @@
 
 #include <utility>
 
-#ifdef FURICAM2_HAVE_AUDIO
+#ifdef FURICAM_HAVE_AUDIO
 
 #include <atomic>
 #include <mutex>
@@ -19,7 +19,7 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 
-namespace furicam2 {
+namespace furicam {
 
 namespace {
 std::once_flag g_gstInitOnce;
@@ -272,11 +272,11 @@ void AudioEncoder::stop()
     d_ = nullptr;
 }
 
-} // namespace furicam2
+} // namespace furicam
 
-#else  // !FURICAM2_HAVE_AUDIO — build a stub so the symbols exist (video-only)
+#else  // !FURICAM_HAVE_AUDIO — build a stub so the symbols exist (video-only)
 
-namespace furicam2 {
+namespace furicam {
 
 struct AudioEncoder::Impl {};
 
@@ -297,6 +297,6 @@ void AudioEncoder::detach()  {}
 void AudioEncoder::stop()    {}
 void AudioEncoder::pullLoop() {}
 
-} // namespace furicam2
+} // namespace furicam
 
-#endif // FURICAM2_HAVE_AUDIO
+#endif // FURICAM_HAVE_AUDIO
