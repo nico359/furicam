@@ -318,6 +318,10 @@ private:
     bool maxJpegSize(int* w, int* h) const;  // largest JPEG output of the open camera
     bool ensureStillRequest();               // build the cached still request + JPEG target once
     bool ensureRawReader();                  // create the RAW16 reader/window (lazily)
+    // Log EVERY metadata tag the HAL publishes for a camera (id + section+index +
+    // type + values) — a complete, no-speculation capability record.  Gated on the
+    // FC2_DUMP_CAPS env var (so normal launches stay quiet).
+    void dumpAllTags(const std::string& camId, const ACameraMetadata* meta) const;
     const CameraInfo* activeInfo() const;    // CameraInfo for the currently open camera
     // Pick the best available NR/edge mode for a request (-1 = none supported, skip).
     int  bestNrMode(bool preferHighQuality) const;

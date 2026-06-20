@@ -11,6 +11,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <chrono>
 #include <condition_variable>
@@ -93,6 +94,41 @@ std::string fmt(const char* f, ...)
     va_start(ap, f);
     std::string s = vfmt(f, ap);
     va_end(ap);
+    return s;
+}
+
+// Human-readable Camera2 metadata section name from a tag's high 16 bits.
+const char* metaSectionName(uint32_t section)
+{
+    static const char* kNames[] = {
+        "COLOR_CORRECTION", "CONTROL", "DEMOSAIC", "EDGE", "FLASH", "FLASH_INFO",
+        "HOT_PIXEL", "JPEG", "LENS", "LENS_INFO", "NOISE_REDUCTION", "QUIRKS",
+        "REQUEST", "SCALER", "SENSOR", "SENSOR_INFO", "SHADING", "STATISTICS",
+        "STATISTICS_INFO", "TONEMAP", "LED", "INFO", "BLACK_LEVEL", "SYNC",
+        "REPROCESS", "DEPTH", "LOGICAL_MULTI_CAMERA", "DISTORTION_CORRECTION",
+        "HEIC", "HEIC_INFO", "AUTOMOTIVE", "AUTOMOTIVE_LENS", "EXTENSION", "JPEGR",
+    };
+    if (section < sizeof(kNames) / sizeof(kNames[0])) return kNames[section];
+    return (section >= 0x8000) ? "VENDOR" : "UNKNOWN";
+}
+
+// Format a metadata entry's values by type (capped so huge arrays stay readable).
+std::string metaFormatValues(const ACameraMetadata_const_entry& e)
+{
+    std::string s;
+    const uint32_t cap = e.count > 64 ? 64 : e.count;
+    for (uint32_t k = 0; k < cap; ++k) {
+        switch (e.type) {
+            case ACAMERA_TYPE_BYTE:     s += fmt("%d ", (int)e.data.u8[k]); break;
+            case ACAMERA_TYPE_INT32:    s += fmt("%d ", e.data.i32[k]); break;
+            case ACAMERA_TYPE_INT64:    s += fmt("%lld ", (long long)e.data.i64[k]); break;
+            case ACAMERA_TYPE_FLOAT:    s += fmt("%.5g ", (double)e.data.f[k]); break;
+            case ACAMERA_TYPE_DOUBLE:   s += fmt("%.5g ", e.data.d[k]); break;
+            case ACAMERA_TYPE_RATIONAL: s += fmt("%d/%d ", e.data.r[k].numerator, e.data.r[k].denominator); break;
+            default:                    s += "? "; break;
+        }
+    }
+    if (e.count > cap) s += fmt("...(+%u)", e.count - cap);
     return s;
 }
 
@@ -340,9 +376,34 @@ bool CameraSession::readInfo(const std::string& id, CameraInfo* out)
                 (int)info.haveColor2, (int)info.haveForward));
     }
 
+    if (std::getenv("FC2_DUMP_CAPS"))
+        dumpAllTags(id, meta);   // complete tag dump when explicitly requested
+
     ACameraMetadata_free(meta);
     *out = std::move(info);
     return true;
+}
+
+void CameraSession::dumpAllTags(const std::string& camId, const ACameraMetadata* meta) const
+{
+    int32_t n = 0;
+    const uint32_t* tags = nullptr;
+    if (!meta || ACameraMetadata_getAllTags(meta, &n, &tags) != ACAMERA_OK || !tags) {
+        log(fmt("CAPS[%s]: getAllTags failed", camId.c_str()));
+        return;
+    }
+    static const char* kType[] = { "u8", "i32", "f", "i64", "d", "rat" };
+    log(fmt("CAPS[%s]: %d tags ===", camId.c_str(), n));
+    for (int32_t i = 0; i < n; ++i) {
+        const uint32_t tag = tags[i];
+        ACameraMetadata_const_entry e{};
+        if (ACameraMetadata_getConstEntry(meta, tag, &e) != ACAMERA_OK)
+            continue;
+        const char* tn = (e.type < 6) ? kType[e.type] : "?";
+        log(fmt("CAPS[%s]: %s+%u (0x%08x) %s[%u] = %s", camId.c_str(),
+                metaSectionName(tag >> 16), tag & 0xffff, tag, tn, e.count,
+                metaFormatValues(e).c_str()));
+    }
 }
 
 bool CameraSession::open(const std::string& id)
