@@ -907,9 +907,13 @@ QVariantList Camera2Bridge::availableResolutions()
                   return (long)a.s.width * a.s.height > (long)b.s.width * b.s.height;
               });
     for (const auto& p : keep) {
+        // Present the clean canonical-aspect size (e.g. snap the HAL's 1440×1088 —
+        // a 16-px encoder alignment — to 1440×1080).  setResolution() maps it back
+        // to the real supported JPEG size for the actual capture.
+        const int dispH = (int)std::lround(p.s.width / aspects[p.ai]);
         QVariantMap m;
         m["width"]  = p.s.width;
-        m["height"] = p.s.height;
+        m["height"] = dispH;
         list.append(m);
     }
     return list;
@@ -956,9 +960,13 @@ QVariantList Camera2Bridge::availableVideoResolutions()
                   return (long)a.s.width * a.s.height > (long)b.s.width * b.s.height;
               });
     for (const auto& p : keep) {
+        // Present the clean canonical-aspect size (e.g. snap the HAL's 1440×1088 —
+        // a 16-px encoder alignment — to 1440×1080).  setResolution() maps it back
+        // to the real supported JPEG size for the actual capture.
+        const int dispH = (int)std::lround(p.s.width / aspects[p.ai]);
         QVariantMap m;
         m["width"]  = p.s.width;
-        m["height"] = p.s.height;
+        m["height"] = dispH;
         list.append(m);
     }
     return list;
@@ -968,10 +976,22 @@ void Camera2Bridge::setResolution(int width, int height)
 {
     if (!session_)
         return;
-    captureW_ = width;
+    captureW_ = width;          // user-facing (clean canonical-aspect) size
     captureH_ = height;
     recomputePreviewAspect();   // letterbox + crop follow the new still aspect at once
-    session_->setJpegSize(width, height);
+    // The picker shows clean sizes (e.g. 1440×1080) but the HAL's JPEG list may only
+    // offer the 16-aligned variant (1440×1088).  Snap to the nearest supported JPEG
+    // size so the still stream actually configures; capture differs by ≤8px.
+    int rw = width, rh = height;
+    long bestD = -1;
+    for (const auto& s : session_->jpegSizes()) {
+        if (s.isInput) continue;
+        long dw = (long)s.width - width;   if (dw < 0) dw = -dw;
+        long dh = (long)s.height - height; if (dh < 0) dh = -dh;
+        const long d = dw + dh;
+        if (bestD < 0 || d < bestD) { bestD = d; rw = s.width; rh = s.height; }
+    }
+    session_->setJpegSize(rw, rh);
     // Recreate the still output (JPEG reader) at the new size by restarting the
     // camera (not while recording — that would interrupt the clip).
     if (ready_.load() && !recording_.load()) {
