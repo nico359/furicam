@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -132,6 +133,35 @@ std::string metaFormatValues(const ACameraMetadata_const_entry& e)
     return s;
 }
 
+// sRGB gamma encode (linear [0,1] -> perceptual [0,1]).
+float srgbEncode(float x)
+{
+    if (x <= 0.0f) return 0.0f;
+    if (x >= 1.0f) return 1.0f;
+    return (x <= 0.0031308f) ? 12.92f * x : 1.055f * powf(x, 1.0f / 2.4f) - 0.055f;
+}
+
+// A range-compressing "DRO" tone curve as TONEMAP_CURVE points (interleaved
+// P_IN,P_OUT).  An inverse-S applied in the sRGB-encoded domain lifts shadows and
+// rolls off highlights (k = strength, must stay < 1 for monotonicity).
+std::vector<float> buildToneCurve(float k)
+{
+    const int N = 33;
+    const float TWO_PI = 6.2831853f;
+    std::vector<float> c;
+    c.reserve(N * 2);
+    for (int i = 0; i < N; ++i) {
+        const float x = (float)i / (N - 1);
+        const float g = srgbEncode(x);
+        float y = g + (k / TWO_PI) * sinf(TWO_PI * g);
+        if (y < 0.0f) y = 0.0f;
+        else if (y > 1.0f) y = 1.0f;
+        c.push_back(x);
+        c.push_back(y);
+    }
+    return c;
+}
+
 } // namespace
 
 CameraSession::CameraSession(LogFn log)
@@ -143,6 +173,7 @@ CameraSession::CameraSession(LogFn log)
             std::fputc('\n', stdout);
         };
     }
+    toneCurve_ = buildToneCurve(0.6f);   // DRO strength (tunable)
 }
 
 // ── Background image writer ──────────────────────────────────────────────────
@@ -1250,6 +1281,8 @@ bool CameraSession::capturePhoto(const std::string& path)
     int stillEdge = bestEdgeMode(/*preferHighQuality*/ true);
     if (stillEdge >= 0) { uint8_t v = (uint8_t)stillEdge; ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_EDGE_MODE, 1, &v); }
 
+    applyToneCurve(stillRequest_);   // DRO tone curve on the captured JPEG too (or FAST)
+
     // Mirror the scene mode onto the still so the photo itself freezes motion.
     uint8_t stillCtlMode = (ctlSceneMode_ > 0) ? (uint8_t)ACAMERA_CONTROL_MODE_USE_SCENE_MODE
                                                : (uint8_t)ACAMERA_CONTROL_MODE_AUTO;
@@ -1724,6 +1757,25 @@ void CameraSession::applyControls(ACaptureRequest* req) const
     if (nr >= 0) { uint8_t v = (uint8_t)nr; ACaptureRequest_setEntry_u8(req, ACAMERA_NOISE_REDUCTION_MODE, 1, &v); }
     int edge = bestEdgeMode(/*preferHighQuality*/ false);
     if (edge >= 0) { uint8_t v = (uint8_t)edge; ACaptureRequest_setEntry_u8(req, ACAMERA_EDGE_MODE, 1, &v); }
+
+    // DRO / "HDR" look: a custom in-ISP tone curve (range-compressing) applied live
+    // to preview + capture; otherwise the HAL's normal FAST tonemap.
+    applyToneCurve(req);
+}
+
+void CameraSession::applyToneCurve(ACaptureRequest* req) const
+{
+    if (ctlToneDro_ && toneCurve_.size() >= 4) {
+        uint8_t tm = (uint8_t)ACAMERA_TONEMAP_MODE_CONTRAST_CURVE;
+        ACaptureRequest_setEntry_u8(req, ACAMERA_TONEMAP_MODE, 1, &tm);
+        const uint32_t n = (uint32_t)toneCurve_.size();
+        ACaptureRequest_setEntry_float(req, ACAMERA_TONEMAP_CURVE_RED,   n, toneCurve_.data());
+        ACaptureRequest_setEntry_float(req, ACAMERA_TONEMAP_CURVE_GREEN, n, toneCurve_.data());
+        ACaptureRequest_setEntry_float(req, ACAMERA_TONEMAP_CURVE_BLUE,  n, toneCurve_.data());
+    } else {
+        uint8_t tm = (uint8_t)ACAMERA_TONEMAP_MODE_FAST;
+        ACaptureRequest_setEntry_u8(req, ACAMERA_TONEMAP_MODE, 1, &tm);
+    }
 }
 
 // Electronic video stabilization for a recording request.  ON only when the open
@@ -1779,7 +1831,14 @@ void CameraSession::setAwbMode(int awbMode) { ctlAwbMode_ = awbMode; applyContro
 void CameraSession::setAfMode(int afMode)   { ctlAfMode_  = afMode;  applyControlsToActive(); }
 void CameraSession::setTorch(bool on)       { ctlTorch_   = on ? 1 : 0; applyControlsToActive(); }
 void CameraSession::setFlashMode(int mode)  { flashMode_  = mode;       applyControlsToActive(); }
-void CameraSession::setSceneMode(int mode)  { ctlSceneMode_ = mode;     applyControlsToActive(); }
+void CameraSession::setSceneMode(int mode)
+{
+    // Scene-mode 18 (HDR) is a no-op on this HAL, so repurpose it to drive our own
+    // in-ISP DRO tone curve instead of a (dead) USE_SCENE_MODE request.
+    if (mode == 18) { ctlSceneMode_ = 0; ctlToneDro_ = true; }
+    else            { ctlSceneMode_ = mode; ctlToneDro_ = false; }
+    applyControlsToActive();
+}
 
 const CameraSession::CameraInfo* CameraSession::activeInfo() const
 {
@@ -1830,6 +1889,13 @@ int CameraSession::bestEdgeMode(bool preferHighQuality) const
     return preferHighQuality
         ? firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_HIGH_QUALITY, ACAMERA_EDGE_MODE_FAST})
         : firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_FAST, ACAMERA_EDGE_MODE_HIGH_QUALITY});
+}
+
+void CameraSession::setDroStrength(float k)
+{
+    if (k < 0.0f) k = 0.0f; else if (k > 0.85f) k = 0.85f;   // <1 keeps the curve monotonic
+    toneCurve_ = buildToneCurve(k);
+    if (ctlToneDro_) applyControlsToActive();   // live update when DRO is active
 }
 
 void CameraSession::setNoiseReduction(bool on)   { ctlNrOn_   = on; applyControlsToActive(); }

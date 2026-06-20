@@ -232,9 +232,14 @@ Item {
         cam2.setVideoBitrate(kbps)
     }
 
-    // Action scene mode: freeze fast motion (short shutter, higher ISO).
-    function handleSetSceneMode(on) {
-        cam2.setSceneMode(on ? 2 : 0)   // 2 = ACTION
+    // Scene mode: 0 = normal/auto, 2 = ACTION (freeze motion), 18 = HDR (in-ISP
+    // DRO tone curve — lifts shadows / rolls off highlights on preview + capture).
+    function handleSetSceneMode(mode) {
+        cam2.setSceneMode(mode)
+    }
+    // HDR/DRO tone-curve strength [0..0.85], applied live.
+    function handleSetDroStrength(k) {
+        cam2.setDroStrength(k)
     }
 
     // RAW (DNG): also save a color-accurate raw alongside the JPEG (the RAW16
@@ -411,7 +416,8 @@ Item {
                 cam2.setExposureCompensation(settings.brightnessEv)   // restore brightness after (re)start
                 cameraItem.handleSetVideoFps(settings.videoFpsMode)   // restore fps mode before video mode
                 cam2.setVideoBitrate(settings.videoBitrate)           // restore chosen video bitrate
-                cam2.setSceneMode(settings.actionMode ? 2 : 0)        // restore action (freeze-motion) mode
+                cam2.setDroStrength(settings.droStrength)             // DRO strength before enabling HDR
+                cam2.setSceneMode(settings.sceneMode)                 // restore scene mode (0/2=action/18=HDR)
                 cam2.setRawEnabled(settings.rawEnabled)               // restore RAW (DNG) capture
                 cam2.setNoiseReduction(settings.noiseReductionEnabled) // restore denoise toggle
                 cam2.setEdgeEnhancement(settings.edgeEnhancementEnabled) // restore sharpening toggle

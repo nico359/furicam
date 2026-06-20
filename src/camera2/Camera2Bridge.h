@@ -203,6 +203,7 @@ public:
     Q_INVOKABLE bool rawSupported() const;     // open camera advertises RAW capability
     Q_INVOKABLE void setNoiseReduction(bool on);    // HIGH_QUALITY denoise on stills
     Q_INVOKABLE void setEdgeEnhancement(bool on);   // HIGH_QUALITY sharpening on stills
+    Q_INVOKABLE void setDroStrength(float k);       // DRO/"HDR" tone-curve strength [0..0.85]
     Q_INVOKABLE void setFlashMode(int mode);   // 0=off, 1=on, 2=auto (per-shot)
 
     // Called from QML when device rotation changes (degrees, 0/90/180/270

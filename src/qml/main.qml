@@ -174,7 +174,8 @@ ApplicationWindow {
         property int gridEnabled: 0
         property int levelEnabled: 0
         property int videoBitrate: 50000          // kbps; wired to the H.264 encoder
-        property bool actionMode: false           // ACTION scene mode: freeze fast motion
+        property int sceneMode: 0                  // scene mode: 0=normal, 2=ACTION (freeze), 18=HDR
+        property real droStrength: 0.6             // HDR/DRO tone-curve strength [0..0.85]
         property bool rawEnabled: false            // also save a .dng (raw) per shot
         property bool noiseReductionEnabled: true  // HIGH_QUALITY denoise on stills
         property bool edgeEnhancementEnabled: true // HIGH_QUALITY sharpening on stills
@@ -2147,15 +2148,16 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Normal",                 on: false },
-                        { label: "Action (freeze motion)", on: true  }
+                        { label: "Normal", mode: 0  },
+                        { label: "Action", mode: 2  },
+                        { label: "HDR",    mode: 18 }
                     ]
                     delegate: Rectangle {
                         width: actText.implicitWidth + 28 * window.scalingRatio
                         height: 38 * window.scalingRatio
                         radius: 19 * window.scalingRatio
-                        color: settings.actionMode === modelData.on ? "#444" : "#222"
-                        border.color: settings.actionMode === modelData.on ? "#ffffff" : "#555"
+                        color: settings.sceneMode === modelData.mode ? "#444" : "#222"
+                        border.color: settings.sceneMode === modelData.mode ? "#ffffff" : "#555"
                         border.width: 1
 
                         Text {
@@ -2164,18 +2166,67 @@ ApplicationWindow {
                             text: modelData.label
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
-                            font.bold: settings.actionMode === modelData.on
+                            font.bold: settings.sceneMode === modelData.mode
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                settings.actionMode = modelData.on;
+                                settings.sceneMode = modelData.mode;
                                 if (cameraLoader.item)
-                                    cameraLoader.item.handleSetSceneMode(modelData.on);
+                                    cameraLoader.item.handleSetSceneMode(modelData.mode);
                             }
                         }
                     }
+                }
+            }
+
+            // HDR strength slider — only shown when HDR is the active capture mode.
+            Text {
+                visible: cslate.state === "PhotoCapture" && settings.sceneMode === 18
+                text: "HDR Strength: " + Math.round(settings.droStrength / 0.85 * 100) + "%"
+                color: "white"
+                font.pixelSize: 15 * window.scalingRatio
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Slider {
+                id: droSlider
+                visible: cslate.state === "PhotoCapture" && settings.sceneMode === 18
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                from: 0.0
+                to: 0.85
+                stepSize: 0.05
+                value: settings.droStrength
+                onMoved: {
+                    settings.droStrength = value;
+                    if (cameraLoader.item)
+                        cameraLoader.item.handleSetDroStrength(value);
+                }
+
+                background: Rectangle {
+                    x: droSlider.leftPadding
+                    y: droSlider.topPadding + droSlider.availableHeight / 2 - height / 2
+                    width: droSlider.availableWidth
+                    height: 4 * window.scalingRatio
+                    radius: 2 * window.scalingRatio
+                    color: "#555"
+                    Rectangle {
+                        width: droSlider.visualPosition * parent.width
+                        height: parent.height
+                        color: "#62a0ea"
+                        radius: 2 * window.scalingRatio
+                    }
+                }
+                handle: Rectangle {
+                    x: droSlider.leftPadding + droSlider.visualPosition * (droSlider.availableWidth - width)
+                    y: droSlider.topPadding + droSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 22 * window.scalingRatio
+                    implicitHeight: 22 * window.scalingRatio
+                    radius: 11 * window.scalingRatio
+                    color: droSlider.pressed ? "#ddd" : "white"
                 }
             }
 

@@ -244,6 +244,7 @@ public:
     // Only supported modes are submitted (read from the open camera).
     void  setNoiseReduction(bool on);
     void  setEdgeEnhancement(bool on);
+    void  setDroStrength(float k);   // DRO/"HDR" tone-curve strength [0..0.85]; live
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
     int   aeState() const { return lastAeState_.load(); }  // ACAMERA_CONTROL_AE_STATE_* (result)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
@@ -327,6 +328,7 @@ private:
     int  bestNrMode(bool preferHighQuality) const;
     int  bestEdgeMode(bool preferHighQuality) const;
     void applyControls(ACaptureRequest* req) const;  // write control state into a request
+    void applyToneCurve(ACaptureRequest* req) const; // DRO tone curve (or FAST tonemap) into a request
     bool applyControlsToActive();                    // re-submit the active repeating request
     void applyVideoStabilization(ACaptureRequest* req) const;  // EIS on/off for a record request
 
@@ -486,6 +488,8 @@ private:
     int     ctlSceneMode_  = 0;   // 0=disabled; ACAMERA_CONTROL_SCENE_MODE_* (ACTION freezes motion)
     bool    ctlNrOn_       = true;  // noise reduction (FAST preview / HIGH_QUALITY still)
     bool    ctlEdgeOn_     = true;  // edge enhancement (FAST preview / HIGH_QUALITY still)
+    bool    ctlToneDro_    = false; // custom in-ISP tone curve (DRO/"HDR" look) on preview+still
+    std::vector<float> toneCurve_;  // TONEMAP_CURVE points (P_IN,P_OUT interleaved)
     int     openActiveArray_[4] = {0, 0, 0, 0};
 
     std::atomic<int>     frameCount_        {0};

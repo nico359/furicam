@@ -832,6 +832,7 @@ void Camera2Bridge::setRawEnabled(bool on) { if (session_) session_->setRawEnabl
 bool Camera2Bridge::rawSupported() const   { return session_ && session_->rawSupported(); }
 void Camera2Bridge::setNoiseReduction(bool on)  { if (session_) session_->setNoiseReduction(on); }
 void Camera2Bridge::setEdgeEnhancement(bool on) { if (session_) session_->setEdgeEnhancement(on); }
+void Camera2Bridge::setDroStrength(float k)     { if (session_) session_->setDroStrength(k); }
 void Camera2Bridge::setFlashMode(int mode)
 {
     if (mode == flashMode_)

@@ -31,6 +31,7 @@ typedef enum acamera_metadata_section_start {
     ACAMERA_SCALER_START      = 13u << 16,
     ACAMERA_SENSOR_START      = 14u << 16,
     ACAMERA_SENSOR_INFO_START = 15u << 16,
+    ACAMERA_TONEMAP_START     = 19u << 16,
     ACAMERA_INFO_START        = 21u << 16,
 } acamera_metadata_section_start;
 
@@ -109,6 +110,12 @@ typedef enum acamera_metadata_tag {
     ACAMERA_SENSOR_INFO_PRE_CORRECTION_ACTIVE_ARRAY_SIZE = ACAMERA_SENSOR_INFO_START + 10,
 
     ACAMERA_INFO_SUPPORTED_HARDWARE_LEVEL          = ACAMERA_INFO_START + 0,
+
+    /* TONEMAP — custom per-channel tone curve (for in-ISP DRO / "HDR" look). */
+    ACAMERA_TONEMAP_CURVE_BLUE                     = ACAMERA_TONEMAP_START + 0,
+    ACAMERA_TONEMAP_CURVE_GREEN                    = ACAMERA_TONEMAP_START + 1,
+    ACAMERA_TONEMAP_CURVE_RED                      = ACAMERA_TONEMAP_START + 2,
+    ACAMERA_TONEMAP_MODE                           = ACAMERA_TONEMAP_START + 3,
 } acamera_metadata_tag;
 
 /* ── Enum value constants for the tags above ─────────────────────────────── */
@@ -141,6 +148,11 @@ enum {
     ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY  = 2,
     ACAMERA_NOISE_REDUCTION_MODE_MINIMAL       = 3,
     ACAMERA_NOISE_REDUCTION_MODE_ZERO_SHUTTER_LAG = 4,
+};
+enum {
+    ACAMERA_TONEMAP_MODE_CONTRAST_CURVE = 0,
+    ACAMERA_TONEMAP_MODE_FAST           = 1,
+    ACAMERA_TONEMAP_MODE_HIGH_QUALITY   = 2,
 };
 enum {
     ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE    = 0,
