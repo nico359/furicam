@@ -259,6 +259,7 @@ private:
     void effectiveCaptureSize(int& w, int& h);   // chosen still size, else sensor max
     void onPhotoCaptured(const QString& path, bool ok);   // single + HDR-burst routing
     void doSingleCapture(const QString& outputPath);      // one still (after any precapture)
+    void fixExifDateTime(const QString& path);            // shift UTC EXIF → local time
     void beginAutoFlashCapture(const QString& outputPath, int attempt);  // poll AE then shoot
     void captureNextHdrFrame();
     void finishHdrBurst();            // fuse the burst on a worker thread

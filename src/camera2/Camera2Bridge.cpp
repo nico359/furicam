@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <exiv2/exiv2.hpp>
 #include <thread>
 
 #include <ReadBarcode.h>
@@ -639,6 +640,44 @@ void Camera2Bridge::captureNextHdrFrame()
     }
 }
 
+// Camera2 HAL writes EXIF DateTime in UTC; per EXIF spec it should be local time
+// with no timezone field, so shift it by the system UTC offset.
+void Camera2Bridge::fixExifDateTime(const QString& path)
+{
+    try {
+        auto img = Exiv2::ImageFactory::open(path.toStdString());
+        if (!img) return;
+        img->readMetadata();
+        auto& exif = img->exifData();
+        if (exif.empty()) return;
+
+        int offsetSec = QDateTime::currentDateTime().offsetFromUtc();
+        if (offsetSec == 0) return; // already UTC — nothing to shift
+
+        auto fixTag = [&](const std::string& key) {
+            auto it = exif.findKey(Exiv2::ExifKey(key));
+            if (it == exif.end() || it->count() < 20) return;
+            std::string val = it->toString();
+            // EXIF DateTime format: "2026:06:20 10:16:12" (19 chars)
+            if (val.size() < 19) return;
+            QDateTime dt = QDateTime::fromString(QString::fromStdString(val.substr(0, 19)), "yyyy:MM:dd HH:mm:ss");
+            if (!dt.isValid()) return;
+            dt.setTimeSpec(Qt::UTC);
+            dt = dt.addSecs(offsetSec);
+            // Write back local time in EXIF format
+            it->setValue(dt.toString("yyyy:MM:dd HH:mm:ss").toStdString());
+        };
+
+        fixTag("Exif.Image.DateTime");
+        fixTag("Exif.Photo.DateTimeOriginal");
+        fixTag("Exif.Photo.DateTimeDigitized");
+
+        img->writeMetadata();
+    } catch (const Exiv2::Error&) {
+        // non-fatal — the image is still valid
+    }
+}
+
 // Photo completion on the GUI thread; routes HDR-burst frames vs single shots.
 void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
 {
@@ -658,6 +697,7 @@ void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
         return;
     }
     if (ok) {
+        fixExifDateTime(path);
         setLastPhotoPath(path);
         emit photoSaved(path);
     } else {
@@ -680,6 +720,7 @@ void Camera2Bridge::finishHdrBurst()
         for (const QString& p : paths) QFile::remove(p);
         QMetaObject::invokeMethod(this, [this, out] {
             if (!out.isEmpty()) {
+                fixExifDateTime(out);
                 setLastPhotoPath(out);
                 emit photoSaved(out);
             } else {
