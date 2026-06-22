@@ -174,9 +174,11 @@ ApplicationWindow {
         property int gridEnabled: 0
         property int levelEnabled: 0
         property int videoBitrate: 50000          // kbps; wired to the H.264 encoder
-        property int sceneMode: 0                  // scene mode: 0=normal, 2=ACTION (freeze), 18=HDR
-        property real droStrength: 0.6             // HDR/DRO tone-curve strength [0..0.85]
+        property int sceneMode: 0                  // scene mode: 0=normal, 2=ACTION (freeze)
+        property int toneMap: 0                     // tone map: 0=standard, 1=HDR, 2=contrast
+        property real droStrength: 0.6             // HDR/Contrast tone-curve strength [0..0.85]
         property bool rawEnabled: false            // also save a .dng (raw) per shot
+        property bool zebraEnabled: false          // preview clipping overlay (highlights+shadows)
         property bool noiseReductionEnabled: true  // HIGH_QUALITY denoise on stills
         property bool edgeEnhancementEnabled: true // HIGH_QUALITY sharpening on stills
         property int videoResWidth: 1920
@@ -665,11 +667,13 @@ ApplicationWindow {
             stepSize: 0.02
             live: true
 
-            // Drag up = brighter (higher EV).  Persist + apply live.
+            // Drag up = brighter (higher EV).  Snap to neutral (0.5) within ~±0.25 EV
+            // (±0.0625 on the 0–1 scale) so it's easy to return to no bias.  Persist + apply live.
             onMoved: {
-                settings.brightnessEv = value;
+                var v = (Math.abs(value - 0.5) <= 0.0625) ? 0.5 : value;
+                settings.brightnessEv = v;
                 if (cameraLoader.item)
-                    cameraLoader.item.handleSetBrightness(value);
+                    cameraLoader.item.handleSetBrightness(v);
             }
 
             background: Rectangle {
@@ -685,6 +689,17 @@ ApplicationWindow {
                     height: brightnessSlider.visualPosition * parent.height
                     radius: parent.radius
                     color: "#ffd24d"   // warm tint to read as brightness
+                }
+
+                // Neutral (EV 0) marker — a horizontal tick at the slider's centre;
+                // clicking here (or within ±0.25 EV) snaps to 0.
+                Rectangle {
+                    width: 18 * window.scalingRatio
+                    height: 3 * window.scalingRatio
+                    radius: 1.5 * window.scalingRatio
+                    color: "white"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
 
@@ -2148,9 +2163,8 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Normal", mode: 0  },
-                        { label: "Action", mode: 2  },
-                        { label: "HDR",    mode: 18 }
+                        { label: "Normal", mode: 0 },
+                        { label: "Action", mode: 2 }
                     ]
                     delegate: Rectangle {
                         width: actText.implicitWidth + 28 * window.scalingRatio
@@ -2181,10 +2195,62 @@ ApplicationWindow {
                 }
             }
 
-            // HDR strength slider — only shown when HDR is the active capture mode.
+            // Tone Map: in-ISP look.  Standard = the HAL's tuned default; HDR lifts
+            // shadows + rolls off highlights (dynamic-range optimisation); Contrast
+            // is punchier.  HDR/Contrast expose the strength slider below.
             Text {
-                visible: cslate.state === "PhotoCapture" && settings.sceneMode === 18
-                text: "HDR Strength: " + Math.round(settings.droStrength / 0.85 * 100) + "%"
+                visible: cslate.state === "PhotoCapture"
+                text: "Tone Map"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                visible: cslate.state === "PhotoCapture"
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "Standard", type: 0 },
+                        { label: "HDR",      type: 1 },
+                        { label: "Contrast", type: 2 }
+                    ]
+                    delegate: Rectangle {
+                        width: tmText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.toneMap === modelData.type ? "#444" : "#222"
+                        border.color: settings.toneMap === modelData.type ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: tmText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.toneMap === modelData.type
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                settings.toneMap = modelData.type;
+                                if (cameraLoader.item)
+                                    cameraLoader.item.handleSetToneMap(modelData.type);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                visible: cslate.state === "PhotoCapture" && settings.toneMap !== 0
+                text: (settings.toneMap === 2 ? "Contrast" : "HDR") + " Strength: " + Math.round(settings.droStrength / 0.85 * 100) + "%"
                 color: "white"
                 font.pixelSize: 15 * window.scalingRatio
                 leftPadding: 16 * window.scalingRatio
@@ -2193,7 +2259,7 @@ ApplicationWindow {
 
             Slider {
                 id: droSlider
-                visible: cslate.state === "PhotoCapture" && settings.sceneMode === 18
+                visible: cslate.state === "PhotoCapture" && settings.toneMap !== 0
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
                 from: 0.0
@@ -2374,6 +2440,55 @@ ApplicationWindow {
                                 settings.edgeEnhancementEnabled = modelData.on;
                                 if (cameraLoader.item)
                                     cameraLoader.item.handleSetEdgeEnhancement(modelData.on);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Zebra: stripe blown highlights (red) + crushed shadows (blue) on the
+            // live preview — an exposure aid (correct with the brightness slider).
+            Text {
+                text: "Zebra (Clipping)"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "Off", on: false },
+                        { label: "On",  on: true  }
+                    ]
+                    delegate: Rectangle {
+                        width: zebText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.zebraEnabled === modelData.on ? "#444" : "#222"
+                        border.color: settings.zebraEnabled === modelData.on ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: zebText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.zebraEnabled === modelData.on
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                settings.zebraEnabled = modelData.on;
+                                if (cameraLoader.item)
+                                    cameraLoader.item.handleSetZebra(modelData.on);
                             }
                         }
                     }

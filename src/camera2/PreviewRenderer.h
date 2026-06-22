@@ -34,7 +34,7 @@ public:
     // cropX/cropY (0..1) show only the centred sub-rect of the stream texture, so
     // a full-FOV (4:3) stream can be cropped to any capture aspect (WYSIWYG).
     bool render(AImageReader* reader, int viewW, int viewH, int rotationDeg,
-                float cropX = 1.0f, float cropY = 1.0f, bool mirror = false);
+                float cropX = 1.0f, float cropY = 1.0f, bool mirror = false, bool zebra = false);
 
     // Release GL + EGLImage resources.  Must be called with the GL context current.
     void cleanup();

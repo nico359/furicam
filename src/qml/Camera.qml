@@ -232,12 +232,16 @@ Item {
         cam2.setVideoBitrate(kbps)
     }
 
-    // Scene mode: 0 = normal/auto, 2 = ACTION (freeze motion), 18 = HDR (in-ISP
-    // DRO tone curve — lifts shadows / rolls off highlights on preview + capture).
+    // Scene mode: 0 = normal/auto, 2 = ACTION (freeze motion).
     function handleSetSceneMode(mode) {
         cam2.setSceneMode(mode)
     }
-    // HDR/DRO tone-curve strength [0..0.85], applied live.
+    // Tone map: 0 = Standard (HAL default), 1 = HDR (in-ISP DRO — lifts shadows /
+    // rolls off highlights), 2 = Contrast (punchier).  Applied to preview + capture.
+    function handleSetToneMap(type) {
+        cam2.setToneMap(type)
+    }
+    // HDR/Contrast tone-curve strength [0..0.85], applied live.
     function handleSetDroStrength(k) {
         cam2.setDroStrength(k)
     }
@@ -246,6 +250,11 @@ Item {
     // stream replaces live QR while on).  No-op if the camera lacks RAW capability.
     function handleSetRaw(on) {
         cam2.setRawEnabled(on)
+    }
+
+    // Zebra: stripe blown highlights + crushed shadows on the preview (exposure aid).
+    function handleSetZebra(on) {
+        cam2.setZebra(on)
     }
 
     // Post-processing toggles: HIGH_QUALITY denoise / sharpening on stills.
@@ -416,9 +425,11 @@ Item {
                 cam2.setExposureCompensation(settings.brightnessEv)   // restore brightness after (re)start
                 cameraItem.handleSetVideoFps(settings.videoFpsMode)   // restore fps mode before video mode
                 cam2.setVideoBitrate(settings.videoBitrate)           // restore chosen video bitrate
-                cam2.setDroStrength(settings.droStrength)             // DRO strength before enabling HDR
-                cam2.setSceneMode(settings.sceneMode)                 // restore scene mode (0/2=action/18=HDR)
+                cam2.setDroStrength(settings.droStrength)             // tone-curve strength
+                cam2.setToneMap(settings.toneMap)                     // restore tone map (0/1/2)
+                cam2.setSceneMode(settings.sceneMode)                 // restore scene mode (0=normal, 2=action)
                 cam2.setRawEnabled(settings.rawEnabled)               // restore RAW (DNG) capture
+                cam2.setZebra(settings.zebraEnabled)                   // restore clipping overlay
                 cam2.setNoiseReduction(settings.noiseReductionEnabled) // restore denoise toggle
                 cam2.setEdgeEnhancement(settings.edgeEnhancementEnabled) // restore sharpening toggle
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab

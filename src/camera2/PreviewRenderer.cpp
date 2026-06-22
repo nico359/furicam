@@ -69,7 +69,17 @@ const char* kFrag =
     "precision mediump float;\n"
     "varying vec2 vTex;\n"
     "uniform samplerExternalOES uTex;\n"
-    "void main() { gl_FragColor = texture2D(uTex, vTex); }\n";
+    "uniform float uZebra;\n"   // 0=off; 1=mark blown highlights (red) + crushed shadows (blue)
+    "void main() {\n"
+    "    vec4 c = texture2D(uTex, vTex);\n"
+    "    if (uZebra > 0.5) {\n"
+    "        float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));\n"
+    "        float s = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) * 0.0625));\n"  // diagonal stripes
+    "        if (l >= 0.96) c.rgb = mix(c.rgb, vec3(1.0, 0.1, 0.1), s);\n"
+    "        else if (l <= 0.045) c.rgb = mix(c.rgb, vec3(0.2, 0.5, 1.0), s);\n"
+    "    }\n"
+    "    gl_FragColor = c;\n"
+    "}\n";
 
 template <typename T>
 T load(const char* name)
@@ -123,7 +133,7 @@ struct PreviewRenderer::Impl {
     AImage*     held      = nullptr;
     GLuint      program   = 0;
     GLuint      texture   = 0;
-    GLint       aPos = -1, aTex = -1, uTex = -1, uRot = -1, uCrop = -1, uMirror = -1;
+    GLint       aPos = -1, aTex = -1, uTex = -1, uRot = -1, uCrop = -1, uMirror = -1, uZebra = -1;
     bool        inited    = false;
     bool        ok        = false;
     bool        haveFrame = false;
@@ -218,6 +228,7 @@ struct PreviewRenderer::Impl {
         uRot = glGetUniformLocation(program, "uTexRot");
         uCrop = glGetUniformLocation(program, "uCrop");
         uMirror = glGetUniformLocation(program, "uMirror");
+    uZebra = glGetUniformLocation(program, "uZebra");
         glGenTextures(1, &texture);
         ok = true;
         return true;
@@ -256,7 +267,7 @@ void PreviewRenderer::cleanup()
 }
 
 bool PreviewRenderer::render(AImageReader* reader, int viewW, int viewH, int rotationDeg,
-                             float cropX, float cropY, bool mirror)
+                             float cropX, float cropY, bool mirror, bool zebra)
 {
     Impl& d = *d_;
     if (!d.inited)
@@ -311,6 +322,8 @@ bool PreviewRenderer::render(AImageReader* reader, int viewW, int viewH, int rot
             d.glUniform2f(d.uCrop, cropX, cropY);
         if (d.uMirror >= 0)
             d.glUniform1f(d.uMirror, mirror ? -1.0f : 1.0f);
+        if (d.uZebra >= 0)
+            d.glUniform1f(d.uZebra, zebra ? 1.0f : 0.0f);
         d.glActiveTexture(GL_TEXTURE0);
         d.glBindTexture(GL_TEXTURE_EXTERNAL_OES, d.texture);
         d.glUniform1i(d.uTex, 0);

@@ -141,19 +141,24 @@ float srgbEncode(float x)
     return (x <= 0.0031308f) ? 12.92f * x : 1.055f * powf(x, 1.0f / 2.4f) - 0.055f;
 }
 
-// A range-compressing "DRO" tone curve as TONEMAP_CURVE points (interleaved
-// P_IN,P_OUT).  An inverse-S applied in the sRGB-encoded domain lifts shadows and
-// rolls off highlights (k = strength, must stay < 1 for monotonicity).
-std::vector<float> buildToneCurve(float k)
+// Build a TONEMAP_CURVE (interleaved P_IN,P_OUT) as an inverse-S applied in the
+// sRGB-encoded domain.  type 1 = HDR (lift shadows, roll off highlights — range
+// compression); type 2 = Contrast (the negated curve — deepen shadows, lift
+// highlights).  The amplitude is FLOORED so HDR always rolls off highlights (it
+// never blows them more than the default, even at minimum strength), and capped
+// under 1/(2*pi) so the curve stays monotonic.
+std::vector<float> buildToneCurve(int type, float strength)
 {
     const int N = 33;
     const float TWO_PI = 6.2831853f;
+    float amp = 0.08f + 0.07f * (strength / 0.85f);   // 0.08 .. 0.15 (< 0.159)
+    if (type == 2) amp = -amp;
     std::vector<float> c;
     c.reserve(N * 2);
     for (int i = 0; i < N; ++i) {
         const float x = (float)i / (N - 1);
         const float g = srgbEncode(x);
-        float y = g + (k / TWO_PI) * sinf(TWO_PI * g);
+        float y = g + amp * sinf(TWO_PI * g);
         if (y < 0.0f) y = 0.0f;
         else if (y > 1.0f) y = 1.0f;
         c.push_back(x);
@@ -173,7 +178,14 @@ CameraSession::CameraSession(LogFn log)
             std::fputc('\n', stdout);
         };
     }
-    toneCurve_ = buildToneCurve(0.6f);   // DRO strength (tunable)
+    rebuildToneCurve();
+}
+
+void CameraSession::rebuildToneCurve()
+{
+    // Build the curve for the active look (Standard uses the HAL default — no curve —
+    // but we keep a valid HDR curve ready so switching is instant).
+    toneCurve_ = buildToneCurve(ctlToneMap_ == 2 ? 2 : 1, ctlDroStrength_);
 }
 
 // ── Background image writer ──────────────────────────────────────────────────
@@ -1765,7 +1777,9 @@ void CameraSession::applyControls(ACaptureRequest* req) const
 
 void CameraSession::applyToneCurve(ACaptureRequest* req) const
 {
-    if (ctlToneDro_ && toneCurve_.size() >= 4) {
+    // Standard (toneMap 0) leaves the HAL's tuned default tonemap; HDR/Contrast
+    // upload our custom curve.
+    if (ctlToneMap_ != 0 && toneCurve_.size() >= 4) {
         uint8_t tm = (uint8_t)ACAMERA_TONEMAP_MODE_CONTRAST_CURVE;
         ACaptureRequest_setEntry_u8(req, ACAMERA_TONEMAP_MODE, 1, &tm);
         const uint32_t n = (uint32_t)toneCurve_.size();
@@ -1831,14 +1845,7 @@ void CameraSession::setAwbMode(int awbMode) { ctlAwbMode_ = awbMode; applyContro
 void CameraSession::setAfMode(int afMode)   { ctlAfMode_  = afMode;  applyControlsToActive(); }
 void CameraSession::setTorch(bool on)       { ctlTorch_   = on ? 1 : 0; applyControlsToActive(); }
 void CameraSession::setFlashMode(int mode)  { flashMode_  = mode;       applyControlsToActive(); }
-void CameraSession::setSceneMode(int mode)
-{
-    // Scene-mode 18 (HDR) is a no-op on this HAL, so repurpose it to drive our own
-    // in-ISP DRO tone curve instead of a (dead) USE_SCENE_MODE request.
-    if (mode == 18) { ctlSceneMode_ = 0; ctlToneDro_ = true; }
-    else            { ctlSceneMode_ = mode; ctlToneDro_ = false; }
-    applyControlsToActive();
-}
+void CameraSession::setSceneMode(int mode)  { ctlSceneMode_ = mode; applyControlsToActive(); }
 
 const CameraSession::CameraInfo* CameraSession::activeInfo() const
 {
@@ -1891,11 +1898,19 @@ int CameraSession::bestEdgeMode(bool preferHighQuality) const
         : firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_FAST, ACAMERA_EDGE_MODE_HIGH_QUALITY});
 }
 
+void CameraSession::setToneMap(int type)
+{
+    ctlToneMap_ = type;          // 0=standard, 1=HDR, 2=contrast
+    rebuildToneCurve();
+    applyControlsToActive();
+}
+
 void CameraSession::setDroStrength(float k)
 {
     if (k < 0.0f) k = 0.0f; else if (k > 0.85f) k = 0.85f;   // <1 keeps the curve monotonic
-    toneCurve_ = buildToneCurve(k);
-    if (ctlToneDro_) applyControlsToActive();   // live update when DRO is active
+    ctlDroStrength_ = k;
+    rebuildToneCurve();
+    if (ctlToneMap_ != 0) applyControlsToActive();   // live update when a curve is active
 }
 
 void CameraSession::setNoiseReduction(bool on)   { ctlNrOn_   = on; applyControlsToActive(); }

@@ -77,12 +77,13 @@ public:
         cropX_    = bridge->cropScaleX();
         cropY_    = bridge->cropScaleY();
         mirror_   = bridge->previewMirrored();
+        zebra_    = bridge->zebra();
     }
 
     void render() override
     {
         renderer_.render(reader_, viewSize_.width(), viewSize_.height(), rotation_,
-                         cropX_, cropY_, mirror_);
+                         cropX_, cropY_, mirror_, zebra_);
     }
 
 private:
@@ -93,6 +94,7 @@ private:
     float           cropX_    = 1.0f;
     float           cropY_    = 1.0f;
     bool            mirror_   = false;
+    bool            zebra_    = false;
 };
 
 } // namespace
@@ -830,8 +832,10 @@ void Camera2Bridge::setTorch(bool on) { if (session_) session_->setTorch(on); }
 void Camera2Bridge::setSceneMode(int mode) { if (session_) session_->setSceneMode(mode); }
 void Camera2Bridge::setRawEnabled(bool on) { if (session_) session_->setRawEnabled(on); }
 bool Camera2Bridge::rawSupported() const   { return session_ && session_->rawSupported(); }
+void Camera2Bridge::setZebra(bool on)           { zebraOn_.store(on); update(); }
 void Camera2Bridge::setNoiseReduction(bool on)  { if (session_) session_->setNoiseReduction(on); }
 void Camera2Bridge::setEdgeEnhancement(bool on) { if (session_) session_->setEdgeEnhancement(on); }
+void Camera2Bridge::setToneMap(int type)        { if (session_) session_->setToneMap(type); }
 void Camera2Bridge::setDroStrength(float k)     { if (session_) session_->setDroStrength(k); }
 void Camera2Bridge::setFlashMode(int mode)
 {

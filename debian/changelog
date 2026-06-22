@@ -3,10 +3,13 @@ furicam2 (2.1.0-1) unstable; urgency=medium
   * RAW (DNG) capture: a colour-accurate dual-illuminant DNG saved beside each
     JPEG (dependency-free writer; sensor white/black levels + colour matrices).
   * Noise reduction and edge enhancement toggles (HIGH_QUALITY on stills).
-  * HDR: a real in-ISP dynamic-range optimisation via a custom tone curve
-    (lifts shadows, rolls off highlights) on the live preview and capture, with
-    a live strength slider.  (The HAL's own HDR scene mode is a no-op.)
-  * Capture Mode: Normal / Action (freeze motion) / HDR.
+  * Tone Map selector (Standard / HDR / Contrast): a real in-ISP dynamic-range
+    optimisation via a custom tone curve (HDR lifts shadows + rolls off
+    highlights; Contrast is punchier) on the live preview and capture, with a
+    live strength slider.  (The HAL's own HDR scene mode is a no-op.)
+  * Capture Mode: Normal / Action (freeze motion).
+  * Zebra overlay: stripes blown highlights (red) + crushed shadows (blue) on
+    the preview; the EV slider snaps to neutral with a centre marker.
   * Video bitrate control and a steady-30 vs auto-5–30 frame-rate option.
   * Settings are mode-aware (only photo or video options shown), and the
     resolution pickers drop odd-aspect/encoder-padded sizes.

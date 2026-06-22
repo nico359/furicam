@@ -116,6 +116,8 @@ public:
     float         cropScaleY() const { return cropScaleY_.load(); }
     // Mirror the preview left-right for the front (selfie) camera.
     bool          previewMirrored() const { return lensFacingPref_.load() == 0; }
+    // Zebra overlay: stripe blown highlights + crushed shadows on the preview.
+    bool          zebra() const { return zebraOn_.load(); }
 
     // ── QML API ─────────────────────────────────────────────────────────────
     // All Q_INVOKABLE methods may be called from the QML/JavaScript thread.
@@ -201,9 +203,11 @@ public:
     Q_INVOKABLE void setSceneMode(int mode);   // 0=off; 2=ACTION (freeze motion)
     Q_INVOKABLE void setRawEnabled(bool on);   // also save a .dng per shot
     Q_INVOKABLE bool rawSupported() const;     // open camera advertises RAW capability
+    Q_INVOKABLE void setZebra(bool on);             // preview clipping overlay (highlights+shadows)
     Q_INVOKABLE void setNoiseReduction(bool on);    // HIGH_QUALITY denoise on stills
     Q_INVOKABLE void setEdgeEnhancement(bool on);   // HIGH_QUALITY sharpening on stills
-    Q_INVOKABLE void setDroStrength(float k);       // DRO/"HDR" tone-curve strength [0..0.85]
+    Q_INVOKABLE void setToneMap(int type);          // 0=standard, 1=HDR, 2=contrast
+    Q_INVOKABLE void setDroStrength(float k);       // HDR/Contrast tone-curve strength [0..0.85]
     Q_INVOKABLE void setFlashMode(int mode);   // 0=off, 1=on, 2=auto (per-shot)
 
     // Called from QML when device rotation changes (degrees, 0/90/180/270
@@ -322,6 +326,7 @@ private:
     std::atomic<float>   previewAspectRatio_ {9.0f / 16.0f};
     std::atomic<float>   cropScaleX_         {1.0f};
     std::atomic<float>   cropScaleY_         {1.0f};
+    std::atomic<bool>    zebraOn_            {false};
     std::atomic<int>     sensorOrientation_  {90};
     std::atomic<int>     deviceRotation_     {0};
     std::atomic<int>     displayRotation_    {90};
