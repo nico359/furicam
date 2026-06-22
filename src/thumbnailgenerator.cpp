@@ -9,14 +9,55 @@
 
 #include "thumbnailgenerator.h"
 
-ThumbnailGenerator::ThumbnailGenerator(QObject *parent) : QObject(parent) {
-    connect(&m_probe, &QVideoProbe::videoFrameProbed, this, &ThumbnailGenerator::processFrame);
-    m_probe.setSource(&m_mediaPlayer);
-}
+#include <QUrl>
+#include <QDir>
+#include <QFile>
+
+ThumbnailGenerator::ThumbnailGenerator(QObject *parent) : QObject(parent) {}
 
 void ThumbnailGenerator::setVideoSource(const QString &videoSource) {
-    m_mediaPlayer.setMedia(QUrl(videoSource));
-    m_mediaPlayer.play();
+    // The QML side passes a file:// URL; ffmpeg needs a plain filesystem path.
+    QString path = videoSource;
+    const QUrl u(videoSource);
+    if (u.isLocalFile())
+        path = u.toLocalFile();
+
+    if (path.isEmpty() || !QFile::exists(path))
+        return;
+
+    // Only one extraction at a time; drop any in-flight job (e.g. when the user
+    // swipes quickly between videos).
+    if (m_proc) {
+        m_proc->kill();
+        m_proc->deleteLater();
+        m_proc = nullptr;
+    }
+
+    m_outPath = QDir::tempPath() + QStringLiteral("/furicam2_vidthumb.jpg");
+    QFile::remove(m_outPath);
+
+    m_proc = new QProcess(this);
+    connect(m_proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this](int, QProcess::ExitStatus) {
+        QImage img(m_outPath);
+        if (!img.isNull())
+            emit thumbnailGenerated(img);
+        if (m_proc) {
+            m_proc->deleteLater();
+            m_proc = nullptr;
+        }
+    });
+
+    // Decode just the first frame, scaled down to a thumbnail.  Software decode
+    // (the default) works regardless of the device's hardware codec path.
+    QStringList args;
+    args << QStringLiteral("-y")
+         << QStringLiteral("-loglevel") << QStringLiteral("error")
+         << QStringLiteral("-i") << path
+         << QStringLiteral("-frames:v") << QStringLiteral("1")
+         << QStringLiteral("-vf") << QStringLiteral("scale=320:-2")
+         << m_outPath;
+    m_proc->start(QStringLiteral("ffmpeg"), args);
 }
 
 QString ThumbnailGenerator::toQmlImage(const QImage &image) {
@@ -24,18 +65,4 @@ QString ThumbnailGenerator::toQmlImage(const QImage &image) {
     QBuffer buffer(&byteArray);
     image.save(&buffer, "PNG");
     return QString("data:image/png;base64,") + QString(byteArray.toBase64());
-}
-
-void ThumbnailGenerator::processFrame(const QVideoFrame &frame) {
-    if (frame.isValid()) {
-        QVideoFrame cloneFrame(frame);
-        cloneFrame.map(QAbstractVideoBuffer::ReadOnly);
-        QImage image(cloneFrame.bits(),
-                     cloneFrame.width(),
-                     cloneFrame.height(),
-                     QVideoFrame::imageFormatFromPixelFormat(cloneFrame.pixelFormat()));
-        emit thumbnailGenerated(image);
-        m_mediaPlayer.stop();
-        cloneFrame.unmap();
-    }
 }

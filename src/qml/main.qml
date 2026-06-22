@@ -1140,7 +1140,9 @@ ApplicationWindow {
                         transformOrigin: Item.Center
                         fillMode: Image.Stretch
                         smooth: false
-                        source: (cslate.state == "PhotoCapture") ? mediaView.lastImg : ""
+                        // lastImg holds the latest photo (PhotoCapture) or the
+                        // generated video frame (VideoCapture); show it in both.
+                        source: mediaView.lastImg
                         scale: Math.min(parent.width / width, parent.height / height)
                     }
                 }
