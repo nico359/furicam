@@ -93,6 +93,13 @@ Rectangle {
         folder: viewRect._refreshClearing ? "" : viewRect.folder
         showDirs: false
         nameFilters: cslate.state == "VideoCapture" ? ["*.mp4", "*.mkv"] : ["*.jpg"]
+        // Sort by modification time, newest LAST, so onStatusChanged's
+        // `count - 1` is the most recent capture.  (Name sort is wrong here:
+        // it's case-sensitive, so legacy lowercase "image*" files sort after
+        // the engine's "IMG_*" files and the newest-looking entry got stuck on
+        // an old legacy photo.)
+        sortField: FolderListModel.Time
+        sortReversed: true
 
         onStatusChanged: {
             if (imgModel.status == FolderListModel.Ready) {
