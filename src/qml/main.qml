@@ -149,6 +149,37 @@ ApplicationWindow {
         id: allCamerasModel
     }
 
+    // Single source of truth for the recommended default of every user-tunable
+    // setting.  The Settings block seeds new installs from these, the Reset
+    // button restores to them, and the settings UI marks them (★ on the
+    // recommended pill, a tick at each slider's default).  Change a default here
+    // and it propagates to all of those places at once.
+    QtObject {
+        id: defaults
+        readonly property int  sceneMode: 0
+        readonly property int  toneMap: 0
+        readonly property real droStrength: 0.6
+        readonly property bool rawEnabled: false
+        readonly property bool zebraEnabled: false
+        readonly property int  noiseReductionLevel: 2
+        readonly property int  edgeLevel: 2
+        readonly property real brightnessEv: 0.5
+        readonly property int  jpegQuality: 95
+        readonly property bool hdrEnabled: false
+        readonly property int  whiteBalanceMode: 0
+        readonly property bool colorCorrectionEnabled: true
+        readonly property real colorCorrectionRed: 0.98
+        readonly property real colorCorrectionGreen: 1.02
+        readonly property real colorCorrectionBlue: 1.00
+        readonly property real colorCorrectionSaturation: 1.20
+        readonly property int  videoBitrate: 20000
+        readonly property int  videoResWidth: 2560
+        readonly property int  videoResHeight: 1920
+        readonly property int  videoFpsMode: 0
+        readonly property int  gridEnabled: 0
+        readonly property int  levelEnabled: 0
+    }
+
     Settings {
         id: settings
         objectName: "settingsObject"
@@ -170,30 +201,31 @@ ApplicationWindow {
         property int soundOn: 1
         property int gpsOn: 0
         property int cameraPosition: Camera.FrontFace
-        property int jpegQuality: 95
-        property int gridEnabled: 0
-        property int levelEnabled: 0
-        property int videoBitrate: 20000          // kbps; max H.264 rate (~0.13 bpp at 4.9 MP/30; VBR ceiling)
-        property int sceneMode: 0                  // scene mode: 0=normal, 2=ACTION (freeze)
-        property int toneMap: 0                     // tone map: 0=standard, 1=DRO, 2=contrast
-        property real droStrength: 0.6             // DRO/Contrast tone-curve strength [0..0.85]
-        property bool rawEnabled: false            // also save a .dng (raw) per shot
-        property bool zebraEnabled: false          // preview clipping overlay (highlights+shadows)
-        property int noiseReductionLevel: 2        // 0=off, 1=fast, 2=high quality
-        property int edgeLevel: 2                  // 0=off, 1=fast, 2=high quality
-        property int videoResWidth: 2560
-        property int videoResHeight: 1920
-        property int whiteBalanceMode: 0
-        property bool colorCorrectionEnabled: true
-        property real colorCorrectionRed:   0.98
-        property real colorCorrectionGreen: 1.02
-        property real colorCorrectionBlue:  1.00
-        property real colorCorrectionSaturation: 1.20
-        property bool hdrEnabled: false
+        // Tunable defaults live in the `defaults` object above (single source).
+        property int jpegQuality: defaults.jpegQuality
+        property int gridEnabled: defaults.gridEnabled
+        property int levelEnabled: defaults.levelEnabled
+        property int videoBitrate: defaults.videoBitrate          // kbps; max H.264 rate (VBR ceiling)
+        property int sceneMode: defaults.sceneMode                 // 0=normal, 2=ACTION (freeze)
+        property int toneMap: defaults.toneMap                     // 0=standard, 1=DRO, 2=contrast
+        property real droStrength: defaults.droStrength            // DRO/Contrast tone-curve strength [0..0.85]
+        property bool rawEnabled: defaults.rawEnabled              // also save a .dng (raw) per shot
+        property bool zebraEnabled: defaults.zebraEnabled          // preview clipping overlay
+        property int noiseReductionLevel: defaults.noiseReductionLevel   // 0=off, 1=fast, 2=high quality
+        property int edgeLevel: defaults.edgeLevel                 // 0=off, 1=fast, 2=high quality
+        property int videoResWidth: defaults.videoResWidth
+        property int videoResHeight: defaults.videoResHeight
+        property int whiteBalanceMode: defaults.whiteBalanceMode
+        property bool colorCorrectionEnabled: defaults.colorCorrectionEnabled
+        property real colorCorrectionRed:   defaults.colorCorrectionRed
+        property real colorCorrectionGreen: defaults.colorCorrectionGreen
+        property real colorCorrectionBlue:  defaults.colorCorrectionBlue
+        property real colorCorrectionSaturation: defaults.colorCorrectionSaturation
+        property bool hdrEnabled: defaults.hdrEnabled
         // Brightness (exposure-compensation) slider position in [0,1]; 0.5 = neutral.
-        property real brightnessEv: 0.5
+        property real brightnessEv: defaults.brightnessEv
         // Video frame-rate mode: 0 = steady 30 fps, 1 = auto (5–30, low-light).
-        property int videoFpsMode: 0
+        property int videoFpsMode: defaults.videoFpsMode
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
@@ -2102,9 +2134,9 @@ ApplicationWindow {
                     radius: 4 * window.scalingRatio
 
                     Text {
-                        // Recommended video default is 4.9 MP (2560×1920): full-FOV 4:3,
+                        // Recommended video default (4.9 MP / 2560×1920): full-FOV 4:3,
                         // far lighter than 4K; star that entry rather than the largest.
-                        text: ((model.resWidth === 2560 && model.resHeight === 1920) ? "<font color='#f5c211'>★</font> " : "") + model.label
+                        text: ((model.resWidth === defaults.videoResWidth && model.resHeight === defaults.videoResHeight) ? "<font color='#f5c211'>★</font> " : "") + model.label
                         textFormat: Text.StyledText
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
@@ -2146,7 +2178,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "30 fps",           mode: 0, rec: true },
+                        { label: "30 fps",           mode: 0 },
                         { label: "Auto (low light)", mode: 1 }
                     ]
                     delegate: Rectangle {
@@ -2160,7 +2192,7 @@ ApplicationWindow {
                         Text {
                             id: fpsPillText
                             anchors.centerIn: parent
-                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            text: (modelData.mode === defaults.videoFpsMode ? "<font color='#f5c211'>★</font> " : "") + modelData.label
                             textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
@@ -2198,7 +2230,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Normal", mode: 0, rec: true },
+                        { label: "Normal", mode: 0 },
                         { label: "Action", mode: 2 },
                         { label: "Face",   mode: 1 }
                     ]
@@ -2213,7 +2245,7 @@ ApplicationWindow {
                         Text {
                             id: actText
                             anchors.centerIn: parent
-                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            text: (modelData.mode === defaults.sceneMode ? "<font color='#f5c211'>★</font> " : "") + modelData.label
                             textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
@@ -2252,7 +2284,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Standard", type: 0, rec: true },
+                        { label: "Standard", type: 0 },
                         { label: "DRO",      type: 1 },
                         { label: "Contrast", type: 2 }
                     ]
@@ -2267,7 +2299,7 @@ ApplicationWindow {
                         Text {
                             id: tmText
                             anchors.centerIn: parent
-                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            text: (modelData.type === defaults.toneMap ? "<font color='#f5c211'>★</font> " : "") + modelData.label
                             textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
@@ -2323,14 +2355,14 @@ ApplicationWindow {
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (0.6)
+                    // ★ tick at defaults.droStrength
                     Rectangle {
                         width: 3 * window.scalingRatio
                         height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio
                         color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (0.6 - droSlider.from) / (droSlider.to - droSlider.from) * parent.width - width / 2
+                        x: (defaults.droStrength - droSlider.from) / (droSlider.to - droSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
@@ -2363,7 +2395,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "JPEG only",  on: false, rec: true },
+                        { label: "JPEG only",  on: false },
                         { label: "JPEG + RAW", on: true  }
                     ]
                     delegate: Rectangle {
@@ -2377,7 +2409,7 @@ ApplicationWindow {
                         Text {
                             id: rawText
                             anchors.centerIn: parent
-                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            text: (modelData.on === defaults.rawEnabled ? "<font color='#f5c211'>★</font> " : "") + modelData.label
                             textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
@@ -2415,7 +2447,7 @@ ApplicationWindow {
                     model: [
                         { label: "Off",     level: 0 },
                         { label: "Fast",    level: 1 },
-                        { label: "Quality", level: 2, rec: true }
+                        { label: "Quality", level: 2 }
                     ]
                     delegate: Rectangle {
                         width: nrText.implicitWidth + 26 * window.scalingRatio
@@ -2428,7 +2460,7 @@ ApplicationWindow {
                         Text {
                             id: nrText
                             anchors.centerIn: parent
-                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            text: (modelData.level === defaults.noiseReductionLevel ? "<font color='#f5c211'>★</font> " : "") + modelData.label
                             textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
@@ -2466,7 +2498,7 @@ ApplicationWindow {
                     model: [
                         { label: "Off",     level: 0 },
                         { label: "Fast",    level: 1 },
-                        { label: "Quality", level: 2, rec: true }
+                        { label: "Quality", level: 2 }
                     ]
                     delegate: Rectangle {
                         width: edgeText.implicitWidth + 26 * window.scalingRatio
@@ -2479,7 +2511,7 @@ ApplicationWindow {
                         Text {
                             id: edgeText
                             anchors.centerIn: parent
-                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            text: (modelData.level === defaults.edgeLevel ? "<font color='#f5c211'>★</font> " : "") + modelData.label
                             textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
@@ -2515,7 +2547,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Off", on: false, rec: true },
+                        { label: "Off", on: false },
                         { label: "On",  on: true  }
                     ]
                     delegate: Rectangle {
@@ -2529,7 +2561,7 @@ ApplicationWindow {
                         Text {
                             id: zebText
                             anchors.centerIn: parent
-                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            text: (modelData.on === defaults.zebraEnabled ? "<font color='#f5c211'>★</font> " : "") + modelData.label
                             textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
@@ -2594,14 +2626,14 @@ ApplicationWindow {
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (95)
+                    // ★ tick at defaults.jpegQuality
                     Rectangle {
                         width: 3 * window.scalingRatio
                         height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio
                         color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (95 - qualitySlider.from) / (qualitySlider.to - qualitySlider.from) * parent.width - width / 2
+                        x: (defaults.jpegQuality - qualitySlider.from) / (qualitySlider.to - qualitySlider.from) * parent.width - width / 2
                     }
                 }
 
@@ -2664,14 +2696,14 @@ ApplicationWindow {
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (20 Mbps)
+                    // ★ tick at defaults.videoBitrate
                     Rectangle {
                         width: 3 * window.scalingRatio
                         height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio
                         color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (20000 - bitrateSlider.from) / (bitrateSlider.to - bitrateSlider.from) * parent.width - width / 2
+                        x: (defaults.videoBitrate - bitrateSlider.from) / (bitrateSlider.to - bitrateSlider.from) * parent.width - width / 2
                     }
                 }
 
@@ -2747,12 +2779,12 @@ ApplicationWindow {
                         width: redScaleSlider.visualPosition * parent.width
                         height: parent.height; color: "#e05555"; radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (0.98)
+                    // ★ tick at defaults.colorCorrectionRed
                     Rectangle {
                         width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (0.98 - redScaleSlider.from) / (redScaleSlider.to - redScaleSlider.from) * parent.width - width / 2
+                        x: (defaults.colorCorrectionRed - redScaleSlider.from) / (redScaleSlider.to - redScaleSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
@@ -2797,12 +2829,12 @@ ApplicationWindow {
                         width: greenScaleSlider.visualPosition * parent.width
                         height: parent.height; color: "#55c055"; radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (1.02)
+                    // ★ tick at defaults.colorCorrectionGreen
                     Rectangle {
                         width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (1.02 - greenScaleSlider.from) / (greenScaleSlider.to - greenScaleSlider.from) * parent.width - width / 2
+                        x: (defaults.colorCorrectionGreen - greenScaleSlider.from) / (greenScaleSlider.to - greenScaleSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
@@ -2847,12 +2879,12 @@ ApplicationWindow {
                         width: blueScaleSlider.visualPosition * parent.width
                         height: parent.height; color: "#5580d0"; radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (1.00)
+                    // ★ tick at defaults.colorCorrectionBlue
                     Rectangle {
                         width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (1.00 - blueScaleSlider.from) / (blueScaleSlider.to - blueScaleSlider.from) * parent.width - width / 2
+                        x: (defaults.colorCorrectionBlue - blueScaleSlider.from) / (blueScaleSlider.to - blueScaleSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
@@ -2897,12 +2929,12 @@ ApplicationWindow {
                         width: saturationSlider.visualPosition * parent.width
                         height: parent.height; color: "#62a0ea"; radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (1.20)
+                    // ★ tick at defaults.colorCorrectionSaturation
                     Rectangle {
                         width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (1.20 - saturationSlider.from) / (saturationSlider.to - saturationSlider.from) * parent.width - width / 2
+                        x: (defaults.colorCorrectionSaturation - saturationSlider.from) / (saturationSlider.to - saturationSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
@@ -2943,41 +2975,41 @@ ApplicationWindow {
                     id: resetArea
                     anchors.fill: parent
                     onClicked: {
-                        settings.sceneMode = 0
-                        settings.toneMap = 0
-                        settings.droStrength = 0.6
-                        settings.rawEnabled = false
-                        settings.zebraEnabled = false
-                        settings.noiseReductionLevel = 2
-                        settings.edgeLevel = 2
-                        settings.brightnessEv = 0.5
-                        settings.jpegQuality = 95
-                        settings.hdrEnabled = false
-                        settings.whiteBalanceMode = 0
-                        settings.colorCorrectionEnabled = true
-                        settings.colorCorrectionRed = 0.98
-                        settings.colorCorrectionGreen = 1.02
-                        settings.colorCorrectionBlue = 1.00
-                        settings.colorCorrectionSaturation = 1.20
-                        settings.videoBitrate = 20000
-                        settings.videoResWidth = 2560
-                        settings.videoResHeight = 1920
-                        settings.gridEnabled = 0
-                        settings.levelEnabled = 0
+                        settings.sceneMode = defaults.sceneMode
+                        settings.toneMap = defaults.toneMap
+                        settings.droStrength = defaults.droStrength
+                        settings.rawEnabled = defaults.rawEnabled
+                        settings.zebraEnabled = defaults.zebraEnabled
+                        settings.noiseReductionLevel = defaults.noiseReductionLevel
+                        settings.edgeLevel = defaults.edgeLevel
+                        settings.brightnessEv = defaults.brightnessEv
+                        settings.jpegQuality = defaults.jpegQuality
+                        settings.hdrEnabled = defaults.hdrEnabled
+                        settings.whiteBalanceMode = defaults.whiteBalanceMode
+                        settings.colorCorrectionEnabled = defaults.colorCorrectionEnabled
+                        settings.colorCorrectionRed = defaults.colorCorrectionRed
+                        settings.colorCorrectionGreen = defaults.colorCorrectionGreen
+                        settings.colorCorrectionBlue = defaults.colorCorrectionBlue
+                        settings.colorCorrectionSaturation = defaults.colorCorrectionSaturation
+                        settings.videoBitrate = defaults.videoBitrate
+                        settings.videoResWidth = defaults.videoResWidth
+                        settings.videoResHeight = defaults.videoResHeight
+                        settings.gridEnabled = defaults.gridEnabled
+                        settings.levelEnabled = defaults.levelEnabled
                         if (cameraLoader.item) {
                             var c = cameraLoader.item
-                            c.handleSetSceneMode(0)
-                            c.handleSetToneMap(0)
-                            c.handleSetDroStrength(0.6)
-                            c.handleSetRaw(false)
-                            c.handleSetZebra(false)
-                            c.handleSetNoiseReduction(2)
-                            c.handleSetEdgeEnhancement(2)
-                            c.handleSetBrightness(0.5)
-                            c.setWhiteBalanceMode(0)
-                            c.handleSetVideoBitrate(20000)
+                            c.handleSetSceneMode(defaults.sceneMode)
+                            c.handleSetToneMap(defaults.toneMap)
+                            c.handleSetDroStrength(defaults.droStrength)
+                            c.handleSetRaw(defaults.rawEnabled)
+                            c.handleSetZebra(defaults.zebraEnabled)
+                            c.handleSetNoiseReduction(defaults.noiseReductionLevel)
+                            c.handleSetEdgeEnhancement(defaults.edgeLevel)
+                            c.handleSetBrightness(defaults.brightnessEv)
+                            c.setWhiteBalanceMode(defaults.whiteBalanceMode)
+                            c.handleSetVideoBitrate(defaults.videoBitrate)
                             if (cslate.state === "VideoCapture")
-                                c.handleSetVideoResolution(2560, 1920)
+                                c.handleSetVideoResolution(defaults.videoResWidth, defaults.videoResHeight)
                         }
                     }
                 }
