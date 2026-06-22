@@ -170,19 +170,19 @@ ApplicationWindow {
         property int soundOn: 1
         property int gpsOn: 0
         property int cameraPosition: Camera.FrontFace
-        property int jpegQuality: 100
+        property int jpegQuality: 95
         property int gridEnabled: 0
         property int levelEnabled: 0
-        property int videoBitrate: 50000          // kbps; wired to the H.264 encoder
+        property int videoBitrate: 20000          // kbps; max H.264 rate (~0.13 bpp at 4.9 MP/30; VBR ceiling)
         property int sceneMode: 0                  // scene mode: 0=normal, 2=ACTION (freeze)
-        property int toneMap: 0                     // tone map: 0=standard, 1=HDR, 2=contrast
-        property real droStrength: 0.6             // HDR/Contrast tone-curve strength [0..0.85]
+        property int toneMap: 0                     // tone map: 0=standard, 1=DRO, 2=contrast
+        property real droStrength: 0.6             // DRO/Contrast tone-curve strength [0..0.85]
         property bool rawEnabled: false            // also save a .dng (raw) per shot
         property bool zebraEnabled: false          // preview clipping overlay (highlights+shadows)
         property int noiseReductionLevel: 2        // 0=off, 1=fast, 2=high quality
         property int edgeLevel: 2                  // 0=off, 1=fast, 2=high quality
-        property int videoResWidth: 1920
-        property int videoResHeight: 1080
+        property int videoResWidth: 2560
+        property int videoResHeight: 1920
         property int whiteBalanceMode: 0
         property bool colorCorrectionEnabled: true
         property real colorCorrectionRed:   0.98
@@ -2102,7 +2102,9 @@ ApplicationWindow {
                     radius: 4 * window.scalingRatio
 
                     Text {
-                        text: (index === 0 ? "<font color='#f5c211'>★</font> " : "") + model.label
+                        // Recommended video default is 4.9 MP (2560×1920): full-FOV 4:3,
+                        // far lighter than 4K; star that entry rather than the largest.
+                        text: ((model.resWidth === 2560 && model.resHeight === 1920) ? "<font color='#f5c211'>★</font> " : "") + model.label
                         textFormat: Text.StyledText
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
@@ -2230,9 +2232,9 @@ ApplicationWindow {
                 }
             }
 
-            // Tone Map: in-ISP look.  Standard = the HAL's tuned default; HDR lifts
+            // Tone Map: in-ISP look.  Standard = the HAL's tuned default; DRO lifts
             // shadows + rolls off highlights (dynamic-range optimisation); Contrast
-            // is punchier.  HDR/Contrast expose the strength slider below.
+            // is punchier.  DRO/Contrast expose the strength slider below.
             Text {
                 visible: cslate.state === "PhotoCapture"
                 text: "Tone Map"
@@ -2251,7 +2253,7 @@ ApplicationWindow {
                 Repeater {
                     model: [
                         { label: "Standard", type: 0, rec: true },
-                        { label: "HDR",      type: 1 },
+                        { label: "DRO",      type: 1 },
                         { label: "Contrast", type: 2 }
                     ]
                     delegate: Rectangle {
@@ -2286,7 +2288,7 @@ ApplicationWindow {
 
             Text {
                 visible: cslate.state === "PhotoCapture" && settings.toneMap !== 0
-                text: (settings.toneMap === 2 ? "Contrast" : "HDR") + " Strength: " + Math.round(settings.droStrength / 0.85 * 100) + "%"
+                text: (settings.toneMap === 2 ? "Contrast" : "DRO") + " Strength: " + Math.round(settings.droStrength / 0.85 * 100) + "%"
                 color: "white"
                 font.pixelSize: 15 * window.scalingRatio
                 leftPadding: 16 * window.scalingRatio
@@ -2592,14 +2594,14 @@ ApplicationWindow {
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (Original / 100)
+                    // ★ recommended default (95)
                     Rectangle {
                         width: 3 * window.scalingRatio
                         height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio
                         color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (100 - qualitySlider.from) / (qualitySlider.to - qualitySlider.from) * parent.width - width / 2
+                        x: (95 - qualitySlider.from) / (qualitySlider.to - qualitySlider.from) * parent.width - width / 2
                     }
                 }
 
@@ -2623,7 +2625,7 @@ ApplicationWindow {
 
             Text {
                 visible: cslate.state === "VideoCapture"
-                text: "Video Bitrate: " + (settings.videoBitrate / 1000).toFixed(0) + " Mbps"
+                text: "Max Video Bitrate: " + (settings.videoBitrate / 1000).toFixed(0) + " Mbps"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
                 font.bold: true
@@ -2636,7 +2638,7 @@ ApplicationWindow {
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
                 from: 8000
-                to: 100000
+                to: 40000
                 stepSize: 4000
                 value: settings.videoBitrate
 
@@ -2662,14 +2664,14 @@ ApplicationWindow {
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
                     }
-                    // ★ recommended default (50 Mbps)
+                    // ★ recommended default (20 Mbps)
                     Rectangle {
                         width: 3 * window.scalingRatio
                         height: 12 * window.scalingRatio
                         radius: 1.5 * window.scalingRatio
                         color: "#f5c211"; opacity: 0.85
                         y: parent.height / 2 - height / 2
-                        x: (50000 - bitrateSlider.from) / (bitrateSlider.to - bitrateSlider.from) * parent.width - width / 2
+                        x: (20000 - bitrateSlider.from) / (bitrateSlider.to - bitrateSlider.from) * parent.width - width / 2
                     }
                 }
 
@@ -2949,7 +2951,7 @@ ApplicationWindow {
                         settings.noiseReductionLevel = 2
                         settings.edgeLevel = 2
                         settings.brightnessEv = 0.5
-                        settings.jpegQuality = 100
+                        settings.jpegQuality = 95
                         settings.hdrEnabled = false
                         settings.whiteBalanceMode = 0
                         settings.colorCorrectionEnabled = true
@@ -2957,7 +2959,9 @@ ApplicationWindow {
                         settings.colorCorrectionGreen = 1.02
                         settings.colorCorrectionBlue = 1.00
                         settings.colorCorrectionSaturation = 1.20
-                        settings.videoBitrate = 50000
+                        settings.videoBitrate = 20000
+                        settings.videoResWidth = 2560
+                        settings.videoResHeight = 1920
                         settings.gridEnabled = 0
                         settings.levelEnabled = 0
                         if (cameraLoader.item) {
@@ -2971,7 +2975,9 @@ ApplicationWindow {
                             c.handleSetEdgeEnhancement(2)
                             c.handleSetBrightness(0.5)
                             c.setWhiteBalanceMode(0)
-                            c.handleSetVideoBitrate(50000)
+                            c.handleSetVideoBitrate(20000)
+                            if (cslate.state === "VideoCapture")
+                                c.handleSetVideoResolution(2560, 1920)
                         }
                     }
                 }

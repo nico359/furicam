@@ -424,6 +424,8 @@ Item {
                 cameraItem.fnVideoResolutions()
                 cam2.setExposureCompensation(settings.brightnessEv)   // restore brightness after (re)start
                 cameraItem.handleSetVideoFps(settings.videoFpsMode)   // restore fps mode before video mode
+                if (settings.videoBitrate > 40000)                    // enforce the 40 Mbps ceiling on older saved values
+                    settings.videoBitrate = 40000
                 cam2.setVideoBitrate(settings.videoBitrate)           // restore chosen video bitrate
                 cam2.setDroStrength(settings.droStrength)             // tone-curve strength
                 cam2.setToneMap(settings.toneMap)                     // restore tone map (0/1/2)
