@@ -42,7 +42,7 @@ echo "=== computing library dependencies (dpkg-shlibdeps) ==="
 SHLIBS="$(dpkg-shlibdeps -O "$STAGE/usr/bin/furicam2" 2>/dev/null | sed -n 's/^shlibs:Depends=//p' || true)"
 # Not auto-detectable: QML modules (loaded at runtime), the shared furicam data
 # (icon/schema/polkit/config), and the GStreamer plugins used for AAC audio.
-MANUAL="furicam, qml-module-qtmultimedia, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qt-labs-platform, qml-module-qt-labs-folderlistmodel, qml-module-qt-labs-settings, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects, qml-module-qtquick-shapes, qml-module-qtsensors, libqt5svg5, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav"
+MANUAL="furicam, qml-module-qtmultimedia, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qt-labs-platform, qml-module-qt-labs-folderlistmodel, qml-module-qt-labs-settings, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects, qml-module-qtquick-shapes, qml-module-qtsensors, libqt5svg5, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav, ffmpeg"
 DEPENDS="${SHLIBS:+$SHLIBS, }$MANUAL"
 SIZE="$(du -sk "$STAGE/usr" | cut -f1)"
 

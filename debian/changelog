@@ -1,3 +1,24 @@
+furicam2 (2.2.0-1) unstable; urgency=medium
+
+  * Noise Reduction and Edge Enhancement are now Off / Fast / Quality
+    selectors (default Quality), replacing the on/off toggles: HIGH_QUALITY
+    on stills, FAST on the preview/video stream.
+  * Face capture mode (FACE_PRIORITY scene with face detection).
+  * "Reset Settings to Defaults" button at the bottom of the settings panel.
+  * Recommended-default markers: a gold star on the recommended option of
+    each selector (with a legend) and a gold tick at every slider's default
+    position; the resolution pickers star the highest resolution and note
+    that the 4:3 aspect ratio has the widest field of view.
+  * Gallery: recognise .mp4 recordings (not only legacy .mkv) and refresh
+    after a recording finishes, matching photo behaviour.
+  * Gallery: sort by modification time so the newest capture is shown first
+    (the previous name sort wrongly surfaced an old legacy-named photo).
+  * Gallery: video thumbnails are extracted with ffmpeg (fixes the black
+    thumbnail from the YUV/hardware-decode frame path) and shown in the
+    review button in video mode.  Adds an ffmpeg runtime dependency.
+
+ -- Sean Pollard <spollard08@gmail.com>  Mon, 22 Jun 2026 09:21:24 -0400
+
 furicam2 (2.1.0-1) unstable; urgency=medium
 
   * RAW (DNG) capture: a colour-accurate dual-illuminant DNG saved beside each
