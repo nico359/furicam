@@ -2994,6 +2994,7 @@ ApplicationWindow {
                         settings.videoBitrate = defaults.videoBitrate
                         settings.videoResWidth = defaults.videoResWidth
                         settings.videoResHeight = defaults.videoResHeight
+                        settings.videoFpsMode = defaults.videoFpsMode
                         settings.gridEnabled = defaults.gridEnabled
                         settings.levelEnabled = defaults.levelEnabled
                         if (cameraLoader.item) {
@@ -3008,6 +3009,7 @@ ApplicationWindow {
                             c.handleSetBrightness(defaults.brightnessEv)
                             c.setWhiteBalanceMode(defaults.whiteBalanceMode)
                             c.handleSetVideoBitrate(defaults.videoBitrate)
+                            c.handleSetVideoFps(defaults.videoFpsMode)
                             if (cslate.state === "VideoCapture")
                                 c.handleSetVideoResolution(defaults.videoResWidth, defaults.videoResHeight)
                         }
