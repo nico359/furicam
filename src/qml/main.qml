@@ -1989,6 +1989,16 @@ ApplicationWindow {
             }
 
             Text {
+                text: "<font color='#f5c211'>★</font>  marks the recommended default"
+                textFormat: Text.StyledText
+                color: "#999"
+                font.pixelSize: 12 * window.scalingRatio
+                font.italic: true
+                anchors.horizontalCenter: parent.horizontalCenter
+                topPadding: 2 * window.scalingRatio
+            }
+
+            Text {
                 visible: cslate.state === "PhotoCapture"
                 text: "Photo Resolution"
                 color: "white"
@@ -2112,7 +2122,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "30 fps",           mode: 0 },
+                        { label: "30 fps",           mode: 0, rec: true },
                         { label: "Auto (low light)", mode: 1 }
                     ]
                     delegate: Rectangle {
@@ -2126,7 +2136,8 @@ ApplicationWindow {
                         Text {
                             id: fpsPillText
                             anchors.centerIn: parent
-                            text: modelData.label
+                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
                             font.bold: settings.videoFpsMode === modelData.mode
@@ -2163,7 +2174,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Normal", mode: 0 },
+                        { label: "Normal", mode: 0, rec: true },
                         { label: "Action", mode: 2 },
                         { label: "Face",   mode: 1 }
                     ]
@@ -2178,7 +2189,8 @@ ApplicationWindow {
                         Text {
                             id: actText
                             anchors.centerIn: parent
-                            text: modelData.label
+                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
                             font.bold: settings.sceneMode === modelData.mode
@@ -2216,7 +2228,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Standard", type: 0 },
+                        { label: "Standard", type: 0, rec: true },
                         { label: "HDR",      type: 1 },
                         { label: "Contrast", type: 2 }
                     ]
@@ -2231,7 +2243,8 @@ ApplicationWindow {
                         Text {
                             id: tmText
                             anchors.centerIn: parent
-                            text: modelData.label
+                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
                             font.bold: settings.toneMap === modelData.type
@@ -2317,7 +2330,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "JPEG only",  on: false },
+                        { label: "JPEG only",  on: false, rec: true },
                         { label: "JPEG + RAW", on: true  }
                     ]
                     delegate: Rectangle {
@@ -2331,7 +2344,8 @@ ApplicationWindow {
                         Text {
                             id: rawText
                             anchors.centerIn: parent
-                            text: modelData.label
+                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
                             font.bold: settings.rawEnabled === modelData.on
@@ -2368,7 +2382,7 @@ ApplicationWindow {
                     model: [
                         { label: "Off",     level: 0 },
                         { label: "Fast",    level: 1 },
-                        { label: "Quality", level: 2 }
+                        { label: "Quality", level: 2, rec: true }
                     ]
                     delegate: Rectangle {
                         width: nrText.implicitWidth + 26 * window.scalingRatio
@@ -2381,7 +2395,8 @@ ApplicationWindow {
                         Text {
                             id: nrText
                             anchors.centerIn: parent
-                            text: modelData.label
+                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
                             font.bold: settings.noiseReductionLevel === modelData.level
@@ -2418,7 +2433,7 @@ ApplicationWindow {
                     model: [
                         { label: "Off",     level: 0 },
                         { label: "Fast",    level: 1 },
-                        { label: "Quality", level: 2 }
+                        { label: "Quality", level: 2, rec: true }
                     ]
                     delegate: Rectangle {
                         width: edgeText.implicitWidth + 26 * window.scalingRatio
@@ -2431,7 +2446,8 @@ ApplicationWindow {
                         Text {
                             id: edgeText
                             anchors.centerIn: parent
-                            text: modelData.label
+                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
                             font.bold: settings.edgeLevel === modelData.level
@@ -2466,7 +2482,7 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Off", on: false },
+                        { label: "Off", on: false, rec: true },
                         { label: "On",  on: true  }
                     ]
                     delegate: Rectangle {
@@ -2480,7 +2496,8 @@ ApplicationWindow {
                         Text {
                             id: zebText
                             anchors.centerIn: parent
-                            text: modelData.label
+                            text: (modelData.rec ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
                             font.bold: settings.zebraEnabled === modelData.on
