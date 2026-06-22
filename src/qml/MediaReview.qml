@@ -66,6 +66,14 @@ Rectangle {
         _refreshRestoreTimer.start()
     }
 
+    // Video files may be .mp4 (current encoder) or .mkv (older recordings);
+    // treat both as video throughout the gallery.
+    function isVideoFile(u) {
+        if (!u) return false
+        u = u.toString()
+        return u.endsWith(".mp4") || u.endsWith(".mkv")
+    }
+
     onVisibleChanged: {
         if (!visible) qrCodeComponent.lastValidResult =  null
     }
@@ -84,12 +92,12 @@ Rectangle {
         // when it returns to false (needed because inotify is unavailable on device).
         folder: viewRect._refreshClearing ? "" : viewRect.folder
         showDirs: false
-        nameFilters: cslate.state == "VideoCapture" ? ["*.mkv"] : ["*.jpg"]
+        nameFilters: cslate.state == "VideoCapture" ? ["*.mp4", "*.mkv"] : ["*.jpg"]
 
         onStatusChanged: {
             if (imgModel.status == FolderListModel.Ready) {
                 viewRect.index = imgModel.count - 1
-                if (cslate.state == "VideoCapture" && viewRect.currentFileUrl.endsWith(".mkv")) {
+                if (cslate.state == "VideoCapture" && viewRect.isVideoFile(viewRect.currentFileUrl)) {
                     thumbnailGenerator.setVideoSource(viewRect.currentFileUrl)
                 } else {
                     viewRect.lastImg = viewRect.currentFileUrl
@@ -111,7 +119,7 @@ Rectangle {
             } else if (imgModel.get(viewRect.index, "fileUrl") === undefined) {
                 loadedComponentType = "null";
                 return null;
-            } else if (imgModel.get(viewRect.index, "fileUrl").toString().endsWith(".mkv")) {
+            } else if (viewRect.isVideoFile(imgModel.get(viewRect.index, "fileUrl"))) {
                 loadedComponentType = "video";
                 return videoOutputComponent;
             } else {
@@ -245,7 +253,7 @@ Rectangle {
                 scale: viewRect.scaleRatio
                 fillMode: Image.PreserveAspectFit
                 smooth: true
-                source: (viewRect.currentFileUrl && !viewRect.currentFileUrl.endsWith(".mkv")) ? viewRect.currentFileUrl : ""
+                source: (viewRect.currentFileUrl && !viewRect.isVideoFile(viewRect.currentFileUrl)) ? viewRect.currentFileUrl : ""
 
                 y: parent.height / 2 - height / 2 + viewRect.vCenterOffsetValue
 
@@ -454,7 +462,7 @@ Rectangle {
             VideoOutput {
                 anchors.fill: parent
                 source: mediaPlayer
-                visible: viewRect.currentFileUrl && viewRect.currentFileUrl.endsWith(".mkv")
+                visible: viewRect.currentFileUrl && viewRect.isVideoFile(viewRect.currentFileUrl)
             }
 
             function playbackStateChangeHandler() {
@@ -514,7 +522,7 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        if (viewRect.currentFileUrl.endsWith(".mkv")) {
+                        if (viewRect.isVideoFile(viewRect.currentFileUrl)) {
                             viewRect.mediaState = MediaPlayer.PlayingState
                             parent.visible = parent.visible ? false : true
                             playbackRequest()
@@ -674,7 +682,7 @@ Rectangle {
                         spacing: 10
 
                         Text {
-                            text: viewRect.currentFileUrl.endsWith(".mkv") ? "  Delete Video?": "  Delete Photo?"
+                            text: viewRect.isVideoFile(viewRect.currentFileUrl) ? "  Delete Video?": "  Delete Photo?"
                             horizontalAlignment: parent.AlignHCenter
 
                             anchors.margins: 5 * viewRect.scalingRatio
@@ -851,7 +859,7 @@ Rectangle {
                 if (!viewRect.visible || viewRect.index === -1) {
                     return "None"
                 } else {
-                    if (viewRect.currentFileUrl.endsWith(".mkv")) {
+                    if (viewRect.isVideoFile(viewRect.currentFileUrl)) {
                         return fileManager.getVideoDate(viewRect.currentFileUrl)
                     } else {
                         return fileManager.getPictureDate(viewRect.currentFileUrl)

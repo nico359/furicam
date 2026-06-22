@@ -447,6 +447,9 @@ Item {
             errorBannerTimer.restart()
         }
         onPhotoSaved: cameraItem.onCam2PhotoSaved(path)
+        // A finished recording also needs the gallery to rescan; reuse the same
+        // photoSaved() signal that main.qml wires to the gallery refresh timer.
+        onRecordingSaved: cameraItem.photoSaved()
 
         // Live color correction, same shader the legacy path used.
         layer.enabled: settings.colorCorrectionEnabled
