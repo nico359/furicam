@@ -242,8 +242,8 @@ public:
     // Post-processing: noise reduction + edge enhancement.  On => FAST on the live
     // preview/video, HIGH_QUALITY on stills (best detail vs. noise); Off => OFF.
     // Only supported modes are submitted (read from the open camera).
-    void  setNoiseReduction(bool on);
-    void  setEdgeEnhancement(bool on);
+    void  setNoiseReduction(int level);   // 0=off, 1=fast, 2=high quality
+    void  setEdgeEnhancement(int level);
     void  setToneMap(int type);      // 0=standard (HAL default), 1=HDR, 2=contrast
     void  setDroStrength(float k);   // HDR/Contrast tone-curve strength [0..0.85]; live
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
@@ -488,8 +488,9 @@ private:
     int     ctlTorch_      = 0;
     int     flashMode_     = 0;   // per-shot flash: 0=off, 1=on, 2=auto
     int     ctlSceneMode_  = 0;   // 0=disabled; ACAMERA_CONTROL_SCENE_MODE_* (ACTION freezes motion)
-    bool    ctlNrOn_       = true;  // noise reduction (FAST preview / HIGH_QUALITY still)
-    bool    ctlEdgeOn_     = true;  // edge enhancement (FAST preview / HIGH_QUALITY still)
+    bool    ctlFaceDetect_ = false; // STATISTICS_FACE_DETECT_MODE=SIMPLE (faces reported in results)
+    int     ctlNrLevel_    = 2;    // noise reduction: 0=off, 1=fast, 2=high quality
+    int     ctlEdgeLevel_  = 2;    // edge enhancement: 0=off, 1=fast, 2=high quality
     int     ctlToneMap_    = 0;     // 0=standard (HAL default), 1=HDR (compress), 2=contrast (expand)
     float   ctlDroStrength_ = 0.6f; // tone-curve strength; 0 => use the HAL default (no curve)
     std::vector<float> toneCurve_;  // TONEMAP_CURVE points (P_IN,P_OUT interleaved)

@@ -1145,6 +1145,24 @@ void CameraSession::onCaptureResult(void* ctx, ACameraCaptureSession* /*session*
     ACameraMetadata_const_entry e{};
     if (ACameraMetadata_getConstEntry(result, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK && e.count >= 1)
         self->lastAeState_.store(e.data.u8[0]);
+    // FACEDBG: when face detection is on, log the detected face count + largest box
+    // (verifying the HAL actually reports faces) — logs only when the count changes.
+    if (self->ctlFaceDetect_) {
+        int nf = 0, bestA = 0, bx = 0, by = 0, bw = 0, bh = 0;
+        if (ACameraMetadata_getConstEntry(result, ACAMERA_STATISTICS_FACE_RECTANGLES, &e) == ACAMERA_OK && e.count >= 4) {
+            nf = (int)(e.count / 4);
+            for (int k = 0; k < nf; ++k) {
+                int l = e.data.i32[k*4+0], t = e.data.i32[k*4+1], r = e.data.i32[k*4+2], b = e.data.i32[k*4+3];
+                int a = (r - l) * (b - t);
+                if (a > bestA) { bestA = a; bx = l; by = t; bw = r - l; bh = b - t; }
+            }
+        }
+        static thread_local int prevNf = -1;
+        if (nf != prevNf) {
+            prevNf = nf;
+            self->log(fmt("FACEDBG: %d face(s); largest=[%d,%d %dx%d]", nf, bx, by, bw, bh));
+        }
+    }
     // Cache WB gains / ISO / exposure for DNG metadata (cheap; only used on capture).
     std::lock_guard<std::mutex> lk(self->resultMutex_);
     if (ACameraMetadata_getConstEntry(result, ACAMERA_COLOR_CORRECTION_GAINS, &e) == ACAMERA_OK && e.count >= 4) {
@@ -1770,6 +1788,10 @@ void CameraSession::applyControls(ACaptureRequest* req) const
     int edge = bestEdgeMode(/*preferHighQuality*/ false);
     if (edge >= 0) { uint8_t v = (uint8_t)edge; ACaptureRequest_setEntry_u8(req, ACAMERA_EDGE_MODE, 1, &v); }
 
+    uint8_t faceMode = ctlFaceDetect_ ? (uint8_t)ACAMERA_STATISTICS_FACE_DETECT_MODE_SIMPLE
+                                      : (uint8_t)ACAMERA_STATISTICS_FACE_DETECT_MODE_OFF;
+    ACaptureRequest_setEntry_u8(req, ACAMERA_STATISTICS_FACE_DETECT_MODE, 1, &faceMode);
+
     // DRO / "HDR" look: a custom in-ISP tone curve (range-compressing) applied live
     // to preview + capture; otherwise the HAL's normal FAST tonemap.
     applyToneCurve(req);
@@ -1845,7 +1867,14 @@ void CameraSession::setAwbMode(int awbMode) { ctlAwbMode_ = awbMode; applyContro
 void CameraSession::setAfMode(int afMode)   { ctlAfMode_  = afMode;  applyControlsToActive(); }
 void CameraSession::setTorch(bool on)       { ctlTorch_   = on ? 1 : 0; applyControlsToActive(); }
 void CameraSession::setFlashMode(int mode)  { flashMode_  = mode;       applyControlsToActive(); }
-void CameraSession::setSceneMode(int mode)  { ctlSceneMode_ = mode; applyControlsToActive(); }
+void CameraSession::setSceneMode(int mode)
+{
+    ctlSceneMode_  = mode;
+    // FACE_PRIORITY also turns on SIMPLE face detection so faces are reported in
+    // results (for verification + drawing boxes / driving AF-AE later).
+    ctlFaceDetect_ = (mode == ACAMERA_CONTROL_SCENE_MODE_FACE_PRIORITY);
+    applyControlsToActive();
+}
 
 const CameraSession::CameraInfo* CameraSession::activeInfo() const
 {
@@ -1872,30 +1901,36 @@ int firstSupported(const std::vector<int>& avail, std::initializer_list<int> pre
 }
 }  // namespace
 
-// NR mode for a request: On => HIGH_QUALITY (still) / FAST (preview); Off => OFF.
-// Returns -1 when no usable mode is advertised (leave the HAL default).
-int CameraSession::bestNrMode(bool preferHighQuality) const
+// NR mode for a request, from the level (0=off,1=fast,2=high quality).  forStill
+// gets HIGH_QUALITY at level 2; the live preview can't run HQ at frame rate so it
+// caps at FAST.  Returns -1 when no usable mode is advertised (leave HAL default).
+int CameraSession::bestNrMode(bool forStill) const
 {
     const CameraInfo* ci = activeInfo();
     if (!ci) return -1;
-    if (!ctlNrOn_)
-        return firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_OFF});
-    return preferHighQuality
-        ? firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY,
-                                       ACAMERA_NOISE_REDUCTION_MODE_FAST})
-        : firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_FAST,
-                                       ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY});
+    switch (ctlNrLevel_) {
+        case 0:  return firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_OFF});
+        case 1:  return firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_FAST,
+                                                     ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY});
+        default: return forStill
+            ? firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY,
+                                           ACAMERA_NOISE_REDUCTION_MODE_FAST})
+            : firstSupported(ci->nrModes, {ACAMERA_NOISE_REDUCTION_MODE_FAST,
+                                           ACAMERA_NOISE_REDUCTION_MODE_HIGH_QUALITY});
+    }
 }
 
-int CameraSession::bestEdgeMode(bool preferHighQuality) const
+int CameraSession::bestEdgeMode(bool forStill) const
 {
     const CameraInfo* ci = activeInfo();
     if (!ci) return -1;
-    if (!ctlEdgeOn_)
-        return firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_OFF});
-    return preferHighQuality
-        ? firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_HIGH_QUALITY, ACAMERA_EDGE_MODE_FAST})
-        : firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_FAST, ACAMERA_EDGE_MODE_HIGH_QUALITY});
+    switch (ctlEdgeLevel_) {
+        case 0:  return firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_OFF});
+        case 1:  return firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_FAST, ACAMERA_EDGE_MODE_HIGH_QUALITY});
+        default: return forStill
+            ? firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_HIGH_QUALITY, ACAMERA_EDGE_MODE_FAST})
+            : firstSupported(ci->edgeModes, {ACAMERA_EDGE_MODE_FAST, ACAMERA_EDGE_MODE_HIGH_QUALITY});
+    }
 }
 
 void CameraSession::setToneMap(int type)
@@ -1913,8 +1948,8 @@ void CameraSession::setDroStrength(float k)
     if (ctlToneMap_ != 0) applyControlsToActive();   // live update when a curve is active
 }
 
-void CameraSession::setNoiseReduction(bool on)   { ctlNrOn_   = on; applyControlsToActive(); }
-void CameraSession::setEdgeEnhancement(bool on)  { ctlEdgeOn_ = on; applyControlsToActive(); }
+void CameraSession::setNoiseReduction(int level)  { ctlNrLevel_   = level; applyControlsToActive(); }
+void CameraSession::setEdgeEnhancement(int level) { ctlEdgeLevel_ = level; applyControlsToActive(); }
 
 // Create the RAW16 reader/window once (largest RAW16 size for the open camera).
 // The session output + still target are wired up later (build / ensureStillRequest).

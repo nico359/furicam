@@ -31,6 +31,7 @@ typedef enum acamera_metadata_section_start {
     ACAMERA_SCALER_START      = 13u << 16,
     ACAMERA_SENSOR_START      = 14u << 16,
     ACAMERA_SENSOR_INFO_START = 15u << 16,
+    ACAMERA_STATISTICS_START  = 17u << 16,
     ACAMERA_TONEMAP_START     = 19u << 16,
     ACAMERA_INFO_START        = 21u << 16,
 } acamera_metadata_section_start;
@@ -111,6 +112,11 @@ typedef enum acamera_metadata_tag {
 
     ACAMERA_INFO_SUPPORTED_HARDWARE_LEVEL          = ACAMERA_INFO_START + 0,
 
+    /* STATISTICS — face detection (request mode + result rectangles/scores). */
+    ACAMERA_STATISTICS_FACE_DETECT_MODE            = ACAMERA_STATISTICS_START + 0,
+    ACAMERA_STATISTICS_FACE_RECTANGLES             = ACAMERA_STATISTICS_START + 6,
+    ACAMERA_STATISTICS_FACE_SCORES                 = ACAMERA_STATISTICS_START + 7,
+
     /* TONEMAP — custom per-channel tone curve (for in-ISP DRO / "HDR" look). */
     ACAMERA_TONEMAP_CURVE_BLUE                     = ACAMERA_TONEMAP_START + 0,
     ACAMERA_TONEMAP_CURVE_GREEN                    = ACAMERA_TONEMAP_START + 1,
@@ -153,6 +159,14 @@ enum {
     ACAMERA_TONEMAP_MODE_CONTRAST_CURVE = 0,
     ACAMERA_TONEMAP_MODE_FAST           = 1,
     ACAMERA_TONEMAP_MODE_HIGH_QUALITY   = 2,
+};
+enum {
+    ACAMERA_STATISTICS_FACE_DETECT_MODE_OFF    = 0,
+    ACAMERA_STATISTICS_FACE_DETECT_MODE_SIMPLE = 1,
+    ACAMERA_STATISTICS_FACE_DETECT_MODE_FULL   = 2,
+};
+enum {
+    ACAMERA_CONTROL_SCENE_MODE_FACE_PRIORITY = 1,
 };
 enum {
     ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE    = 0,

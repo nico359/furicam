@@ -204,8 +204,8 @@ public:
     Q_INVOKABLE void setRawEnabled(bool on);   // also save a .dng per shot
     Q_INVOKABLE bool rawSupported() const;     // open camera advertises RAW capability
     Q_INVOKABLE void setZebra(bool on);             // preview clipping overlay (highlights+shadows)
-    Q_INVOKABLE void setNoiseReduction(bool on);    // HIGH_QUALITY denoise on stills
-    Q_INVOKABLE void setEdgeEnhancement(bool on);   // HIGH_QUALITY sharpening on stills
+    Q_INVOKABLE void setNoiseReduction(int level);  // 0=off, 1=fast, 2=high quality
+    Q_INVOKABLE void setEdgeEnhancement(int level); // 0=off, 1=fast, 2=high quality
     Q_INVOKABLE void setToneMap(int type);          // 0=standard, 1=HDR, 2=contrast
     Q_INVOKABLE void setDroStrength(float k);       // HDR/Contrast tone-curve strength [0..0.85]
     Q_INVOKABLE void setFlashMode(int mode);   // 0=off, 1=on, 2=auto (per-shot)

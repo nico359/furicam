@@ -257,12 +257,12 @@ Item {
         cam2.setZebra(on)
     }
 
-    // Post-processing toggles: HIGH_QUALITY denoise / sharpening on stills.
-    function handleSetNoiseReduction(on) {
-        cam2.setNoiseReduction(on)
+    // Post-processing levels: 0=off, 1=fast, 2=high quality (HQ on stills).
+    function handleSetNoiseReduction(level) {
+        cam2.setNoiseReduction(level)
     }
-    function handleSetEdgeEnhancement(on) {
-        cam2.setEdgeEnhancement(on)
+    function handleSetEdgeEnhancement(level) {
+        cam2.setEdgeEnhancement(level)
     }
 
     // Populate the camera selector from the engine's full list (incl. the
@@ -430,8 +430,8 @@ Item {
                 cam2.setSceneMode(settings.sceneMode)                 // restore scene mode (0=normal, 2=action)
                 cam2.setRawEnabled(settings.rawEnabled)               // restore RAW (DNG) capture
                 cam2.setZebra(settings.zebraEnabled)                   // restore clipping overlay
-                cam2.setNoiseReduction(settings.noiseReductionEnabled) // restore denoise toggle
-                cam2.setEdgeEnhancement(settings.edgeEnhancementEnabled) // restore sharpening toggle
+                cam2.setNoiseReduction(settings.noiseReductionLevel)   // restore denoise level (0/1/2)
+                cam2.setEdgeEnhancement(settings.edgeLevel)            // restore sharpening level (0/1/2)
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
                 // Sync GUI position state to the camera that actually opened (bridge
                 // ground truth) — the flash button and other UI gate on

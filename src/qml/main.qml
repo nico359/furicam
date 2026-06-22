@@ -179,8 +179,8 @@ ApplicationWindow {
         property real droStrength: 0.6             // HDR/Contrast tone-curve strength [0..0.85]
         property bool rawEnabled: false            // also save a .dng (raw) per shot
         property bool zebraEnabled: false          // preview clipping overlay (highlights+shadows)
-        property bool noiseReductionEnabled: true  // HIGH_QUALITY denoise on stills
-        property bool edgeEnhancementEnabled: true // HIGH_QUALITY sharpening on stills
+        property int noiseReductionLevel: 2        // 0=off, 1=fast, 2=high quality
+        property int edgeLevel: 2                  // 0=off, 1=fast, 2=high quality
         property int videoResWidth: 1920
         property int videoResHeight: 1080
         property int whiteBalanceMode: 0
@@ -2164,7 +2164,8 @@ ApplicationWindow {
                 Repeater {
                     model: [
                         { label: "Normal", mode: 0 },
-                        { label: "Action", mode: 2 }
+                        { label: "Action", mode: 2 },
+                        { label: "Face",   mode: 1 }
                     ]
                     delegate: Rectangle {
                         width: actText.implicitWidth + 28 * window.scalingRatio
@@ -2365,15 +2366,16 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Off", on: false },
-                        { label: "On",  on: true  }
+                        { label: "Off",     level: 0 },
+                        { label: "Fast",    level: 1 },
+                        { label: "Quality", level: 2 }
                     ]
                     delegate: Rectangle {
-                        width: nrText.implicitWidth + 28 * window.scalingRatio
+                        width: nrText.implicitWidth + 26 * window.scalingRatio
                         height: 38 * window.scalingRatio
                         radius: 19 * window.scalingRatio
-                        color: settings.noiseReductionEnabled === modelData.on ? "#444" : "#222"
-                        border.color: settings.noiseReductionEnabled === modelData.on ? "#ffffff" : "#555"
+                        color: settings.noiseReductionLevel === modelData.level ? "#444" : "#222"
+                        border.color: settings.noiseReductionLevel === modelData.level ? "#ffffff" : "#555"
                         border.width: 1
 
                         Text {
@@ -2382,15 +2384,15 @@ ApplicationWindow {
                             text: modelData.label
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
-                            font.bold: settings.noiseReductionEnabled === modelData.on
+                            font.bold: settings.noiseReductionLevel === modelData.level
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                settings.noiseReductionEnabled = modelData.on;
+                                settings.noiseReductionLevel = modelData.level;
                                 if (cameraLoader.item)
-                                    cameraLoader.item.handleSetNoiseReduction(modelData.on);
+                                    cameraLoader.item.handleSetNoiseReduction(modelData.level);
                             }
                         }
                     }
@@ -2414,15 +2416,16 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { label: "Off", on: false },
-                        { label: "On",  on: true  }
+                        { label: "Off",     level: 0 },
+                        { label: "Fast",    level: 1 },
+                        { label: "Quality", level: 2 }
                     ]
                     delegate: Rectangle {
-                        width: edgeText.implicitWidth + 28 * window.scalingRatio
+                        width: edgeText.implicitWidth + 26 * window.scalingRatio
                         height: 38 * window.scalingRatio
                         radius: 19 * window.scalingRatio
-                        color: settings.edgeEnhancementEnabled === modelData.on ? "#444" : "#222"
-                        border.color: settings.edgeEnhancementEnabled === modelData.on ? "#ffffff" : "#555"
+                        color: settings.edgeLevel === modelData.level ? "#444" : "#222"
+                        border.color: settings.edgeLevel === modelData.level ? "#ffffff" : "#555"
                         border.width: 1
 
                         Text {
@@ -2431,15 +2434,15 @@ ApplicationWindow {
                             text: modelData.label
                             color: "white"
                             font.pixelSize: 14 * window.scalingRatio
-                            font.bold: settings.edgeEnhancementEnabled === modelData.on
+                            font.bold: settings.edgeLevel === modelData.level
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                settings.edgeEnhancementEnabled = modelData.on;
+                                settings.edgeLevel = modelData.level;
                                 if (cameraLoader.item)
-                                    cameraLoader.item.handleSetEdgeEnhancement(modelData.on);
+                                    cameraLoader.item.handleSetEdgeEnhancement(modelData.level);
                             }
                         }
                     }
@@ -2814,6 +2817,73 @@ ApplicationWindow {
                     color: saturationSlider.pressed ? "#ddd" : "white"
                 }
             }
+
+            Rectangle {
+                width: parent.width - 32 * window.scalingRatio
+                height: 1
+                color: "#444"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            // Reset every setting back to its recommended default.
+            Rectangle {
+                width: parent.width - 32 * window.scalingRatio
+                height: 46 * window.scalingRatio
+                radius: 10 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
+                color: resetArea.pressed ? "#7a3030" : "#3a2828"
+                border.color: "#9a5050"
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "↺  Reset Settings to Defaults"
+                    color: "#ffc0c0"
+                    font.pixelSize: 15 * window.scalingRatio
+                    font.bold: true
+                }
+
+                MouseArea {
+                    id: resetArea
+                    anchors.fill: parent
+                    onClicked: {
+                        settings.sceneMode = 0
+                        settings.toneMap = 0
+                        settings.droStrength = 0.6
+                        settings.rawEnabled = false
+                        settings.zebraEnabled = false
+                        settings.noiseReductionLevel = 2
+                        settings.edgeLevel = 2
+                        settings.brightnessEv = 0.5
+                        settings.jpegQuality = 100
+                        settings.hdrEnabled = false
+                        settings.whiteBalanceMode = 0
+                        settings.colorCorrectionEnabled = true
+                        settings.colorCorrectionRed = 0.98
+                        settings.colorCorrectionGreen = 1.02
+                        settings.colorCorrectionBlue = 1.00
+                        settings.colorCorrectionSaturation = 1.20
+                        settings.videoBitrate = 50000
+                        settings.gridEnabled = 0
+                        settings.levelEnabled = 0
+                        if (cameraLoader.item) {
+                            var c = cameraLoader.item
+                            c.handleSetSceneMode(0)
+                            c.handleSetToneMap(0)
+                            c.handleSetDroStrength(0.6)
+                            c.handleSetRaw(false)
+                            c.handleSetZebra(false)
+                            c.handleSetNoiseReduction(2)
+                            c.handleSetEdgeEnhancement(2)
+                            c.handleSetBrightness(0.5)
+                            c.setWhiteBalanceMode(0)
+                            c.handleSetVideoBitrate(50000)
+                        }
+                    }
+                }
+            }
+
+            Item { width: 1; height: 14 * window.scalingRatio }   // bottom breathing room
             }   // Column (settingsColumnContent)
         }       // Flickable
     }           // Drawer

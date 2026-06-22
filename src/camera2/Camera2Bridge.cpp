@@ -833,8 +833,8 @@ void Camera2Bridge::setSceneMode(int mode) { if (session_) session_->setSceneMod
 void Camera2Bridge::setRawEnabled(bool on) { if (session_) session_->setRawEnabled(on); }
 bool Camera2Bridge::rawSupported() const   { return session_ && session_->rawSupported(); }
 void Camera2Bridge::setZebra(bool on)           { zebraOn_.store(on); update(); }
-void Camera2Bridge::setNoiseReduction(bool on)  { if (session_) session_->setNoiseReduction(on); }
-void Camera2Bridge::setEdgeEnhancement(bool on) { if (session_) session_->setEdgeEnhancement(on); }
+void Camera2Bridge::setNoiseReduction(int level)  { if (session_) session_->setNoiseReduction(level); }
+void Camera2Bridge::setEdgeEnhancement(int level) { if (session_) session_->setEdgeEnhancement(level); }
 void Camera2Bridge::setToneMap(int type)        { if (session_) session_->setToneMap(type); }
 void Camera2Bridge::setDroStrength(float k)     { if (session_) session_->setDroStrength(k); }
 void Camera2Bridge::setFlashMode(int mode)
