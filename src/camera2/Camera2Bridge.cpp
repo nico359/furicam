@@ -170,6 +170,21 @@ void Camera2Bridge::startCamera()
     }
     sensorOrientation_.store(chosenOrientation);
 
+    // pony: pull sensor range for manual exposure sliders from the chosen camera
+    for (const auto& c : cams) {
+        if (c.id == chosen) {
+            isoMin_.store(c.isoMin);
+            isoMax_.store(c.isoMax);
+            exposureMinMs_.store((int)(c.exposureMinNs / 1000000));
+            exposureMaxMs_.store((int)(c.exposureMaxNs / 1000000));
+            manualSensor_.store(c.manualSensor);
+            minFocusDistance_.store(c.minFocusDistance);
+            focusDistanceCalibration_.store(c.focusDistanceCalibration);
+            break;
+        }
+    }
+    emit manualRangeChanged();
+
     if (!session_->open(chosen)) {
         emit cameraError(QString::fromStdString(session_->lastError()));
         return;
@@ -758,6 +773,12 @@ void Camera2Bridge::setExposureCompensation(float ev)
     else if (steps > 4) steps = 4;
     if (session_)
         session_->setExposureCompensation(steps);
+}
+
+void Camera2Bridge::setFocusDistance(float diopters)
+{
+    if (session_)
+        session_->setFocusDistance(diopters);
 }
 
 void Camera2Bridge::setAELock(bool lock)  { if (session_) session_->setAeLock(lock); }

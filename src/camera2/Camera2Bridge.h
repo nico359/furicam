@@ -67,6 +67,18 @@ class Camera2Bridge
     Q_PROPERTY(int     isoValue            READ isoValue              NOTIFY exposureChanged)
     Q_PROPERTY(qint64  shutterNs           READ shutterNs             NOTIFY exposureChanged)
 
+    // Sensor range for manual exposure controls — QML uses these to set slider
+    // bounds (ISO, shutter in milliseconds, manual sensor flag).
+    Q_PROPERTY(int     isoMin              READ isoMin                NOTIFY manualRangeChanged)
+    Q_PROPERTY(int     isoMax              READ isoMax                NOTIFY manualRangeChanged)
+    Q_PROPERTY(int     exposureMinMs       READ exposureMinMs         NOTIFY manualRangeChanged)
+    Q_PROPERTY(int     exposureMaxMs       READ exposureMaxMs         NOTIFY manualRangeChanged)
+    Q_PROPERTY(bool    manualSensor        READ manualSensor          NOTIFY manualRangeChanged)
+
+    // Manual focus: minimum focus distance in diopters (0 = fixed focus, no manual).
+    Q_PROPERTY(float   minFocusDistance    READ minFocusDistance      NOTIFY manualRangeChanged)
+    Q_PROPERTY(int focusDistanceCalibration READ focusDistanceCalibration NOTIFY manualRangeChanged)
+
     // Preview surface aspect ratio (width / height).  QML uses this to size the
     // viewfinder Item so the framebuffer maps 1:1 to pixels.
     Q_PROPERTY(qreal   previewAspectRatio  READ previewAspectRatio    NOTIFY previewAspectRatioChanged)
@@ -98,6 +110,13 @@ public:
     int     frameCount()          const { return frameCount_.load(); }
     int     isoValue()            const { return lastIso_.load(); }
     qint64  shutterNs()           const { return lastExposureNs_.load(); }
+    int     isoMin()              const { return isoMin_.load(); }
+    int     isoMax()              const { return isoMax_.load(); }
+    int     exposureMinMs()       const { return exposureMinMs_.load(); }
+    int     exposureMaxMs()       const { return exposureMaxMs_.load(); }
+    bool    manualSensor()        const { return manualSensor_.load(); }
+    float   minFocusDistance()    const { return minFocusDistance_.load(); }
+    int     focusDistanceCalibration() const { return focusDistanceCalibration_.load(); }
     qreal   previewAspectRatio()  const { return previewAspectRatio_.load(); }
     bool    hdrEnabled()          const { return hdrEnabled_.load(); }
     void    setHdrEnabled(bool on);
@@ -183,6 +202,7 @@ public:
     Q_INVOKABLE void setAutoExposure();
     Q_INVOKABLE void setManualExposure(int iso, int exposureMs);
     Q_INVOKABLE void setExposureCompensation(float ev);
+    Q_INVOKABLE void setFocusDistance(float diopters);   // 0=infinity
 
     // Lock auto-exposure (AE) and auto-white-balance (AWB) at current values.
     Q_INVOKABLE void setAELock(bool lock);
@@ -233,6 +253,7 @@ signals:
     void hasFrontCameraChanged();
     void frameCountChanged();
     void exposureChanged();
+    void manualRangeChanged();
     void previewAspectRatioChanged();
     void lastPhotoPathChanged();
     void videoModeChanged();
@@ -295,6 +316,13 @@ private:
     std::atomic<int>     frameCount_         {0};
     std::atomic<int32_t> lastIso_            {0};
     std::atomic<int64_t> lastExposureNs_     {0};
+    std::atomic<int32_t> isoMin_             {100};
+    std::atomic<int32_t> isoMax_             {800};
+    std::atomic<int32_t> exposureMinMs_      {1};
+    std::atomic<int32_t> exposureMaxMs_      {100};
+    std::atomic<bool>    manualSensor_       {false};
+    std::atomic<float>   minFocusDistance_   {0.0f};
+    std::atomic<int>     focusDistanceCalibration_ {0};
     std::atomic<int64_t> lastQrMs_           {0};   // throttle QR decode rate
     std::atomic<float>   previewAspectRatio_ {9.0f / 16.0f};
     std::atomic<float>   cropScaleX_         {1.0f};

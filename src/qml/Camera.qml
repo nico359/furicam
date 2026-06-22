@@ -33,6 +33,18 @@ Item {
     property int currentResWidth: 0
     property int currentResHeight: 0
 
+    // Manual exposure — forwarded from Camera2Bridge for settings-drawer access
+    readonly property bool manualSensor: cam2.manualSensor
+    readonly property int isoMin: cam2.isoMin
+    readonly property int isoMax: cam2.isoMax
+    readonly property int exposureMinMs: cam2.exposureMinMs
+    readonly property int exposureMaxMs: cam2.exposureMaxMs
+    readonly property real minFocusDistance: cam2.minFocusDistance
+    readonly property int focusDistanceCalibration: cam2.focusDistanceCalibration
+    function setManualExposure(iso, exposureMs) { cam2.setManualExposure(iso, exposureMs) }
+    function setAutoExposure() { cam2.setAutoExposure() }
+    function setFocusDistance(diopters) { cam2.setFocusDistance(diopters) }
+
     // Zoom is exposed in the legacy "slider value" model main.qml expects:
     //   maxZoom is the slider range, currentZoom is the slider value, and the
     //   magnification label main.qml shows is 1 + (currentZoom/maxZoom)*3.

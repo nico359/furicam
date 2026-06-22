@@ -56,6 +56,8 @@ public:
         int64_t exposureMinNs  = 0;
         int64_t exposureMaxNs  = 0;
         bool manualSensor      = false;  // derived: MANUAL_SENSOR capability present
+        float minFocusDistance = 0.0f;   // 0 = fixed focus; diopters (>0 = closest focus distance)
+        int   focusDistanceCalibration = 0;  // LENS_INFO_FOCUS_DISTANCE_CALIBRATION: 0=UNCALIBRATED, 1=APPROXIMATE, 2=CALIBRATED
         std::vector<int>          capabilities;  // ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_*
         std::vector<StreamConfig> outputs;       // output stream configs only
     };
@@ -176,6 +178,7 @@ public:
     // the next session begins.  Enum args use ACAMERA_CONTROL_* values.
     void  setAutoExposure();                               // AE back to auto
     void  setManualExposure(int iso, int64_t exposureNs);  // AE off + fixed values
+    void  setFocusDistance(float diopters);                // 0=infinity, >0=closer
     void  setExposureCompensation(int steps);              // AE comp index (× step EV)
     void  setAeLock(bool lock);
     void  setAwbLock(bool lock);
@@ -332,6 +335,7 @@ private:
     int     ctlAwbMode_    = ACAMERA_CONTROL_AWB_MODE_AUTO;
     int     ctlAfMode_     = ACAMERA_CONTROL_AF_MODE_CONTINUOUS_PICTURE;
     float   ctlZoom_       = 1.0f;
+    float   ctlFocusDistance_ = 0.0f;   // 0 = infinity (lens focus at furthest); diopters
     int     ctlTorch_      = 0;
     int     flashMode_     = 0;   // per-shot flash: 0=off, 1=on, 2=auto
     int     openActiveArray_[4] = {0, 0, 0, 0};

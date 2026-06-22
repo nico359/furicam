@@ -211,6 +211,16 @@ bool CameraSession::readInfo(const std::string& id, CameraInfo* out)
                 info.manualSensor = true;
         }
     }
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_LENS_INFO_MINIMUM_FOCUS_DISTANCE, &e) == ACAMERA_OK && e.count >= 1) {
+        info.minFocusDistance = e.data.f[0];   // diopters; 0 = fixed focus
+    }
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_LENS_INFO_FOCUS_DISTANCE_CALIBRATION, &e) == ACAMERA_OK && e.count >= 1) {
+        // Standard: byte 0/1/2.  Qualcomm HAL sometimes reports i32.
+        if (e.type == ACAMERA_TYPE_BYTE)
+            info.focusDistanceCalibration = (int)e.data.u8[0];
+        else
+            info.focusDistanceCalibration = (int)e.data.i32[0];
+    }
     if (ACameraMetadata_getConstEntry(meta, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &e) == ACAMERA_OK) {
         // int32[n*4]: (format, width, height, direction).
         for (uint32_t k = 0; k + 3 < e.count; k += 4) {
@@ -894,11 +904,17 @@ bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
     uint8_t quality = 95;
     ACaptureRequest_setEntry_u8(req, ACAMERA_JPEG_QUALITY, 1, &quality);
 
-    // Per-shot flash via the AE mode on this still capture.
-    uint8_t aeMode = ACAMERA_CONTROL_AE_MODE_ON;                 // off: normal AE, no flash
-    if (flashMode_ == 1)      aeMode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
-    else if (flashMode_ == 2) aeMode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
-    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &aeMode);
+    // Apply manual exposure controls (ISO, shutter, focus, WB, etc.) to still
+    applyControls(req);
+
+    // Per-shot flash — overrides AE mode if flash is requested AND we're not
+    // in manual exposure (manual exposure already set AE_MODE_OFF above).
+    if (ctlAeMode_ != ACAMERA_CONTROL_AE_MODE_OFF) {
+        uint8_t aeFlash = ACAMERA_CONTROL_AE_MODE_ON;
+        if (flashMode_ == 1)      aeFlash = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+        else if (flashMode_ == 2) aeFlash = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
+        ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &aeFlash);
+    }
 
     int seqId = 0;
     cs = ACameraCaptureSession_capture(captureSession_, nullptr, 1, &req, &seqId);
@@ -1235,6 +1251,12 @@ void CameraSession::applyControls(ACaptureRequest* req) const
 
     float zoom = ctlZoom_;
     ACaptureRequest_setEntry_float(req, ACAMERA_CONTROL_ZOOM_RATIO, 1, &zoom);
+
+    if (ctlFocusDistance_ > 0.0f) {
+        uint8_t afOff = ACAMERA_CONTROL_AF_MODE_OFF;
+        ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AF_MODE, 1, &afOff);  // override AF
+        ACaptureRequest_setEntry_float(req, ACAMERA_LENS_FOCUS_DISTANCE, 1, &ctlFocusDistance_);
+    }
 }
 
 bool CameraSession::applyControlsToActive()
@@ -1242,8 +1264,9 @@ bool CameraSession::applyControlsToActive()
     if (!activeSession_ || !activeRequest_)
         return false;   // not streaming yet — state applies when a session starts
     applyControls(activeRequest_);
-    return ACameraCaptureSession_setRepeatingRequest(
-               activeSession_, nullptr, 1, &activeRequest_, nullptr) == ACAMERA_OK;
+    camera_status_t cs = ACameraCaptureSession_setRepeatingRequest(
+               activeSession_, nullptr, 1, &activeRequest_, nullptr);
+    return cs == ACAMERA_OK;
 }
 
 void CameraSession::setAutoExposure()
@@ -1259,6 +1282,12 @@ void CameraSession::setManualExposure(int iso, int64_t exposureNs)
         ctlIso_ = iso;
     if (exposureNs > 0)
         ctlExposureNs_ = exposureNs;
+    applyControlsToActive();
+}
+
+void CameraSession::setFocusDistance(float diopters)
+{
+    ctlFocusDistance_ = diopters;   // pony: 0 = infinity, >0 = diopters
     applyControlsToActive();
 }
 

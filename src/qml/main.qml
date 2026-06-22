@@ -183,6 +183,10 @@ ApplicationWindow {
         property real colorCorrectionBlue:  1.00
         property real colorCorrectionSaturation: 1.20
         property bool hdrEnabled: false
+        property bool manualExposureEnabled: false
+        property int  manualIso: 200
+        property int  manualExposureMs: 33
+        property bool proModeEnabled: false
 
         onFocusModeChanged: setFocusMode(settings.focusMode)
         onFocusPointModeChanged: setFocusPointMode(settings.focusPointMode)
@@ -320,6 +324,9 @@ ApplicationWindow {
                 cameraLoader.item.photoSaved.connect(galleryRefreshTimer.restart);
                 cameraLoader.item.initializeCameraList(); // Initialize CameraList model
                 cameraLoader.item.setWhiteBalanceMode(settings.whiteBalanceMode);
+                // Restore manual exposure if pro mode or manual exposure was on
+                if ((settings.manualExposureEnabled || settings.proModeEnabled) && cameraLoader.item.manualSensor)
+                    cameraLoader.item.setManualExposure(settings.manualIso, settings.manualExposureMs);
                 signalsConnected = true;
             }
         }
@@ -502,187 +509,259 @@ ApplicationWindow {
         repeat: true
     }
 
-    // White balance mode selector
-    Item {
-        id: wbSliderContainer
-        anchors.left: parent.left
-        anchors.leftMargin: 16 * window.scalingRatio
-        anchors.bottom: mainBar.top
-        anchors.bottomMargin: 20 * window.scalingRatio
-        width: 50 * window.scalingRatio
-        height: parent.height * 0.35
-        visible: settings.whiteBalanceMode !== 0
-                 && !mediaView.visible && !window.videoCaptured
+    // ── Pro mode bar (horizontal WB / ISO / Shutter) ───────────────────
+    Column {
+        id: proBar
+        anchors.bottom: zoomBar.top
+        anchors.bottomMargin: 8 * window.scalingRatio
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: parent.width - 24 * window.scalingRatio
+        visible: settings.proModeEnabled && !mediaView.visible && !window.videoCaptured
                  && cameraLoader.item !== null
-        opacity: wbSlider.pressed ? 1.0 : 0.7
+        spacing: 4 * window.scalingRatio
 
-        Behavior on opacity {
-            NumberAnimation { duration: 200 }
-        }
-
-        // Mode label
-        Rectangle {
-            id: wbLabel
+        // White balance mode selector row
+        Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: wbSlider.top
-            anchors.bottomMargin: 6 * window.scalingRatio
-            width: 52 * window.scalingRatio
-            height: 24 * window.scalingRatio
-            radius: 12 * window.scalingRatio
-            color: "#99000000"
+            spacing: 8 * window.scalingRatio
 
             Text {
-                anchors.centerIn: parent
-                text: {
-                    var names = ["AWB", "☀️", "☁️", "💡", "🔥"];
-                    return names[Math.round(wbSlider.value)] || "AWB";
-                }
+                text: "WB"
                 color: "white"
                 font.pixelSize: 13 * window.scalingRatio
                 font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Repeater {
+                model: ["A", "☀", "☁", "💡", "🔥"]
+                delegate: Rectangle {
+                    width: 36 * window.scalingRatio
+                    height: 28 * window.scalingRatio
+                    radius: 6 * window.scalingRatio
+                    color: settings.whiteBalanceMode === index ? "#44ffffff" : "#22ffffff"
+                    border.color: settings.whiteBalanceMode === index ? "#ffffff" : "#66ffffff"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData
+                        color: settings.whiteBalanceMode === index ? "white" : "#ccc"
+                        font.pixelSize: 13 * window.scalingRatio
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            settings.whiteBalanceMode = index;
+                            if (cameraLoader.item)
+                                cameraLoader.item.setWhiteBalanceMode(index);
+                        }
+                    }
+                }
             }
         }
 
-        Slider {
-            id: wbSlider
+        // ISO slider row
+        Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: wbLabel.bottom
-            anchors.topMargin: 6 * window.scalingRatio
-            anchors.bottom: parent.bottom
-            orientation: Qt.Vertical
-            from: 0
-            to: 4
-            value: settings.whiteBalanceMode
-            stepSize: 1
-            live: true
-            snapMode: Slider.SnapAlways
+            width: parent.width
+            spacing: 8 * window.scalingRatio
 
-            onMoved: {
-                if (cameraLoader.item) {
-                    var mode = Math.round(value);
-                    cameraLoader.item.setWhiteBalanceMode(mode);
-                    settings.whiteBalanceMode = mode;
+            Text {
+                text: "ISO"
+                color: "white"
+                font.pixelSize: 12 * window.scalingRatio
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+                width: 32 * window.scalingRatio
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Slider {
+                id: proIsoSlider
+                width: parent.width - 100 * window.scalingRatio
+                anchors.verticalCenter: parent.verticalCenter
+                from: cameraLoader.item ? cameraLoader.item.isoMin : 100
+                to: cameraLoader.item ? cameraLoader.item.isoMax : 2400
+                stepSize: 100
+                value: settings.manualIso
+                enabled: cameraLoader.item ? cameraLoader.item.manualSensor : false
+
+                onMoved: {
+                    settings.manualIso = value;
+                    settings.manualExposureEnabled = true;
+                    cameraLoader.item.setManualExposure(value, settings.manualExposureMs);
+                }
+
+                background: Rectangle {
+                    x: proIsoSlider.leftPadding
+                    y: proIsoSlider.topPadding + proIsoSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200; implicitHeight: 3 * window.scalingRatio
+                    width: proIsoSlider.availableWidth; height: implicitHeight
+                    radius: 2 * window.scalingRatio; color: "#444"
+                    Rectangle {
+                        width: proIsoSlider.visualPosition * parent.width
+                        height: parent.height; color: "#f0a030"; radius: 2 * window.scalingRatio
+                    }
+                }
+                handle: Rectangle {
+                    x: proIsoSlider.leftPadding + proIsoSlider.visualPosition * (proIsoSlider.availableWidth - width)
+                    y: proIsoSlider.topPadding + proIsoSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 18 * window.scalingRatio; implicitHeight: 18 * window.scalingRatio
+                    radius: 9 * window.scalingRatio
+                    color: proIsoSlider.pressed ? "#ddd" : "white"
                 }
             }
 
-            background: Rectangle {
-                x: wbSlider.leftPadding + wbSlider.availableWidth / 2 - width / 2
-                y: wbSlider.topPadding
-                width: 4 * window.scalingRatio
-                height: wbSlider.availableHeight
-                radius: 2 * window.scalingRatio
-                color: "#66ffffff"
+            Text {
+                text: settings.manualIso
+                color: "#f0a030"
+                font.pixelSize: 12 * window.scalingRatio
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+                width: 40 * window.scalingRatio
+                horizontalAlignment: Text.AlignHCenter
+            }
+        }
 
-                Rectangle {
-                    width: parent.width
-                    height: wbSlider.visualPosition * parent.height
-                    radius: parent.radius
-                    color: "white"
+        // Shutter slider row
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            spacing: 8 * window.scalingRatio
+
+            Text {
+                text: "⏱"
+                color: "white"
+                font.pixelSize: 12 * window.scalingRatio
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+                width: 32 * window.scalingRatio
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Slider {
+                id: proShutterSlider
+                width: parent.width - 100 * window.scalingRatio
+                anchors.verticalCenter: parent.verticalCenter
+                from: cameraLoader.item ? cameraLoader.item.exposureMinMs : 1
+                to: cameraLoader.item ? cameraLoader.item.exposureMaxMs : 400
+                stepSize: 1
+                value: settings.manualExposureMs
+                enabled: cameraLoader.item ? cameraLoader.item.manualSensor : false
+
+                onMoved: {
+                    settings.manualExposureMs = value;
+                    settings.manualExposureEnabled = true;
+                    cameraLoader.item.setManualExposure(settings.manualIso, value);
+                }
+
+                background: Rectangle {
+                    x: proShutterSlider.leftPadding
+                    y: proShutterSlider.topPadding + proShutterSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 200; implicitHeight: 3 * window.scalingRatio
+                    width: proShutterSlider.availableWidth; height: implicitHeight
+                    radius: 2 * window.scalingRatio; color: "#444"
+                    Rectangle {
+                        width: proShutterSlider.visualPosition * parent.width
+                        height: parent.height; color: "#62a0ea"; radius: 2 * window.scalingRatio
+                    }
+                }
+                handle: Rectangle {
+                    x: proShutterSlider.leftPadding + proShutterSlider.visualPosition * (proShutterSlider.availableWidth - width)
+                    y: proShutterSlider.topPadding + proShutterSlider.availableHeight / 2 - height / 2
+                    implicitWidth: 18 * window.scalingRatio; implicitHeight: 18 * window.scalingRatio
+                    radius: 9 * window.scalingRatio
+                    color: proShutterSlider.pressed ? "#ddd" : "white"
                 }
             }
 
-            handle: Rectangle {
-                x: wbSlider.leftPadding + wbSlider.availableWidth / 2 - width / 2
-                y: wbSlider.topPadding + wbSlider.visualPosition * (wbSlider.availableHeight - height)
-                width: 20 * window.scalingRatio
-                height: 20 * window.scalingRatio
-                radius: width / 2
-                color: wbSlider.pressed ? "#e0e0e0" : "white"
-                border.color: "#40000000"
-                border.width: 1
+            Text {
+                text: settings.manualExposureMs < 1000
+                    ? "1/" + Math.round(1000 / settings.manualExposureMs) + "s"
+                    : (settings.manualExposureMs / 1000).toFixed(2) + "s"
+                color: "#62a0ea"
+                font.pixelSize: 12 * window.scalingRatio
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+                width: 50 * window.scalingRatio
+                horizontalAlignment: Text.AlignHCenter
             }
         }
     }
 
-    // Zoom slider with magnification label
-    Item {
-        id: zoomSliderContainer
-        anchors.right: parent.right
-        anchors.rightMargin: 16 * window.scalingRatio
+    // ── Horizontal zoom bar ──────────────────────────────────────────────
+    Row {
+        id: zoomBar
         anchors.bottom: mainBar.top
-        anchors.bottomMargin: 20 * window.scalingRatio
-        width: 50 * window.scalingRatio
-        height: parent.height * 0.35
+        anchors.bottomMargin: 12 * window.scalingRatio
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: parent.width - 24 * window.scalingRatio
+        height: 28 * window.scalingRatio
+        spacing: 8 * window.scalingRatio
         visible: !mediaView.visible && !window.videoCaptured
                  && cameraLoader.item !== null
                  && cameraLoader.item.maxZoom > 0
-        opacity: zoomSlider.pressed ? 1.0 : 0.7
 
-        Behavior on opacity {
-            NumberAnimation { duration: 200 }
-        }
-
-        // Magnification label
-        Rectangle {
-            id: zoomLabel
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: zoomSlider.top
-            anchors.bottomMargin: 6 * window.scalingRatio
-            width: 48 * window.scalingRatio
-            height: 24 * window.scalingRatio
-            radius: 12 * window.scalingRatio
-            color: "#99000000"
-
-            Text {
-                anchors.centerIn: parent
-                text: {
-                    var z = cameraLoader.item ? cameraLoader.item.currentZoom : 0;
-                    var max = cameraLoader.item ? cameraLoader.item.maxZoom : 1;
-                    var magnification = max > 0 ? (1.0 + (z / max) * 3.0) : 1.0;
-                    return magnification.toFixed(1) + "×";
-                }
-                color: "white"
-                font.pixelSize: 13 * window.scalingRatio
-                font.bold: true
-            }
+        Text {
+            text: "1×"
+            color: "white"
+            font.pixelSize: 12 * window.scalingRatio
+            font.bold: true
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32 * window.scalingRatio
+            horizontalAlignment: Text.AlignHCenter
         }
 
         Slider {
-            id: zoomSlider
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: zoomLabel.bottom
-            anchors.topMargin: 6 * window.scalingRatio
-            anchors.bottom: parent.bottom
-            orientation: Qt.Vertical
+            id: zoomSliderH
+            width: parent.width - 100 * window.scalingRatio
+            anchors.verticalCenter: parent.verticalCenter
             from: 0
             to: cameraLoader.item ? cameraLoader.item.maxZoom : 0
             value: cameraLoader.item ? cameraLoader.item.currentZoom : 0
             stepSize: 1
             live: true
 
-            // Only push slider changes when the user is dragging
             onMoved: {
-                if (cameraLoader.item) {
-                    cameraLoader.item.handleSetZoom(value)
-                }
+                if (cameraLoader.item)
+                    cameraLoader.item.handleSetZoom(value);
             }
 
             background: Rectangle {
-                x: zoomSlider.leftPadding + zoomSlider.availableWidth / 2 - width / 2
-                y: zoomSlider.topPadding
-                width: 4 * window.scalingRatio
-                height: zoomSlider.availableHeight
-                radius: 2 * window.scalingRatio
-                color: "#66ffffff"
-
+                x: zoomSliderH.leftPadding
+                y: zoomSliderH.topPadding + zoomSliderH.availableHeight / 2 - height / 2
+                implicitWidth: 200; implicitHeight: 3 * window.scalingRatio
+                width: zoomSliderH.availableWidth; height: implicitHeight
+                radius: 2 * window.scalingRatio; color: "#444"
                 Rectangle {
-                    width: parent.width
-                    height: zoomSlider.visualPosition * parent.height
-                    radius: parent.radius
-                    color: "white"
+                    width: zoomSliderH.visualPosition * parent.width
+                    height: parent.height; color: "white"; radius: 2 * window.scalingRatio
                 }
             }
-
             handle: Rectangle {
-                x: zoomSlider.leftPadding + zoomSlider.availableWidth / 2 - width / 2
-                y: zoomSlider.topPadding + zoomSlider.visualPosition * (zoomSlider.availableHeight - height)
-                width: 20 * window.scalingRatio
-                height: 20 * window.scalingRatio
-                radius: width / 2
-                color: zoomSlider.pressed ? "#e0e0e0" : "white"
-                border.color: "#40000000"
-                border.width: 1
+                x: zoomSliderH.leftPadding + zoomSliderH.visualPosition * (zoomSliderH.availableWidth - width)
+                y: zoomSliderH.topPadding + zoomSliderH.availableHeight / 2 - height / 2
+                implicitWidth: 18 * window.scalingRatio; implicitHeight: 18 * window.scalingRatio
+                radius: 9 * window.scalingRatio
+                color: zoomSliderH.pressed ? "#ddd" : "white"
             }
+        }
+
+        Text {
+            text: {
+                var max = cameraLoader.item ? cameraLoader.item.maxZoom : 1;
+                var z = cameraLoader.item ? cameraLoader.item.currentZoom : 0;
+                var mag = max > 0 ? (1.0 + (z / max) * 3.0) : 1.0;
+                return mag.toFixed(1) + "×";
+            }
+            color: "white"
+            font.pixelSize: 12 * window.scalingRatio
+            font.bold: true
+            anchors.verticalCenter: parent.verticalCenter
+            width: 40 * window.scalingRatio
+            horizontalAlignment: Text.AlignHCenter
         }
     }
 
@@ -694,7 +773,24 @@ ApplicationWindow {
         width: parent.width
         visible: !mediaView.visible
         // Expose total height so Camera.qml can offset the viewfinder
-        Component.onCompleted: window.controlBarReservedHeight = height + anchors.bottomMargin
+        Component.onCompleted: updateControlBarHeight()
+        Connections {
+            target: settings
+            function onProModeEnabledChanged() { updateControlBarHeight() }
+        }
+        Connections {
+            target: cameraLoader.item ? cameraLoader.item : null
+            function onMaxZoomChanged() { updateControlBarHeight() }
+        }
+        function updateControlBarHeight() {
+            // proBar ~96px + zoomBar ~40px when pro mode is on and zoom available
+            var extra = 0;
+            if (settings.proModeEnabled)
+                extra += 96 * window.scalingRatio;
+            if (cameraLoader.item && cameraLoader.item.maxZoom > 0)
+                extra += 40 * window.scalingRatio;
+            window.controlBarReservedHeight = height + anchors.bottomMargin + extra;
+        }
 
         ToolTip {
             id: copiedTip
@@ -1596,17 +1692,14 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     spacing: 0
 
-                    // AWB toggle
+                    // Pro mode toggle (WB + ISO + Shutter manual controls)
                     Button {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
 
                         contentItem: Text {
-                            text: {
-                                var names = ["AWB", "☀", "☁", "💡", "🔥"]
-                                return names[settings.whiteBalanceMode] || "AWB"
-                            }
-                            color: settings.whiteBalanceMode === 0 ? "white" : "#f0c040"
+                            text: "Pro"
+                            color: settings.proModeEnabled ? "#f0c040" : "white"
                             font.pixelSize: 13 * window.scalingRatio
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
@@ -1616,10 +1709,10 @@ ApplicationWindow {
                         background: Rectangle { color: "transparent" }
 
                         onClicked: {
-                            if (cameraLoader.item) {
-                                var newMode = settings.whiteBalanceMode === 0 ? 1 : 0
-                                cameraLoader.item.setWhiteBalanceMode(newMode)
-                                settings.whiteBalanceMode = newMode
+                            settings.proModeEnabled = !settings.proModeEnabled;
+                            if (!settings.proModeEnabled && cameraLoader.item) {
+                                settings.manualExposureEnabled = false;
+                                cameraLoader.item.setAutoExposure();
                             }
                         }
                     }
