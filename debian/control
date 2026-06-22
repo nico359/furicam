@@ -44,6 +44,7 @@ Depends: ${misc:Depends},
          gstreamer1.0-plugins-base,
          gstreamer1.0-plugins-good,
          gstreamer1.0-libav,
+         ffmpeg,
 Description: FuriCam2 - Camera2/libhybris camera app for the FuriPhone FLX1s
  A camera app for FuriOS that drives the camera through the Android Camera2
  native development kit (NDK) via libhybris, replacing the QtMultimedia/gst-droid
