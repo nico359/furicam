@@ -2008,6 +2008,15 @@ ApplicationWindow {
                 topPadding: 4 * window.scalingRatio
             }
 
+            Text {
+                visible: cslate.state === "PhotoCapture"
+                text: "4:3 gives the widest field of view"
+                color: "#999"
+                font.pixelSize: 12 * window.scalingRatio
+                font.italic: true
+                leftPadding: 16 * window.scalingRatio
+            }
+
             ListView {
                 id: resolutionList
                 visible: cslate.state === "PhotoCapture"
@@ -2029,7 +2038,8 @@ ApplicationWindow {
                     radius: 4 * window.scalingRatio
 
                     Text {
-                        text: model.label
+                        text: (index === 0 ? "<font color='#f5c211'>★</font> " : "") + model.label
+                        textFormat: Text.StyledText
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
                         anchors.verticalCenter: parent.verticalCenter
@@ -2065,6 +2075,15 @@ ApplicationWindow {
                 topPadding: 4 * window.scalingRatio
             }
 
+            Text {
+                visible: cslate.state === "VideoCapture"
+                text: "4:3 gives the widest field of view"
+                color: "#999"
+                font.pixelSize: 12 * window.scalingRatio
+                font.italic: true
+                leftPadding: 16 * window.scalingRatio
+            }
+
             ListView {
                 id: videoResolutionList
                 visible: cslate.state === "VideoCapture"
@@ -2081,7 +2100,8 @@ ApplicationWindow {
                     radius: 4 * window.scalingRatio
 
                     Text {
-                        text: model.label
+                        text: (index === 0 ? "<font color='#f5c211'>★</font> " : "") + model.label
+                        textFormat: Text.StyledText
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
                         anchors.verticalCenter: parent.verticalCenter
@@ -2298,6 +2318,15 @@ ApplicationWindow {
                         height: parent.height
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
+                    }
+                    // ★ recommended default (0.6)
+                    Rectangle {
+                        width: 3 * window.scalingRatio
+                        height: 12 * window.scalingRatio
+                        radius: 1.5 * window.scalingRatio
+                        color: "#f5c211"; opacity: 0.85
+                        y: parent.height / 2 - height / 2
+                        x: (0.6 - droSlider.from) / (droSlider.to - droSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
@@ -2561,6 +2590,15 @@ ApplicationWindow {
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
                     }
+                    // ★ recommended default (Original / 100)
+                    Rectangle {
+                        width: 3 * window.scalingRatio
+                        height: 12 * window.scalingRatio
+                        radius: 1.5 * window.scalingRatio
+                        color: "#f5c211"; opacity: 0.85
+                        y: parent.height / 2 - height / 2
+                        x: (100 - qualitySlider.from) / (qualitySlider.to - qualitySlider.from) * parent.width - width / 2
+                    }
                 }
 
                 handle: Rectangle {
@@ -2621,6 +2659,15 @@ ApplicationWindow {
                         height: parent.height
                         color: "#62a0ea"
                         radius: 2 * window.scalingRatio
+                    }
+                    // ★ recommended default (50 Mbps)
+                    Rectangle {
+                        width: 3 * window.scalingRatio
+                        height: 12 * window.scalingRatio
+                        radius: 1.5 * window.scalingRatio
+                        color: "#f5c211"; opacity: 0.85
+                        y: parent.height / 2 - height / 2
+                        x: (50000 - bitrateSlider.from) / (bitrateSlider.to - bitrateSlider.from) * parent.width - width / 2
                     }
                 }
 
@@ -2696,6 +2743,13 @@ ApplicationWindow {
                         width: redScaleSlider.visualPosition * parent.width
                         height: parent.height; color: "#e05555"; radius: 2 * window.scalingRatio
                     }
+                    // ★ recommended default (0.98)
+                    Rectangle {
+                        width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
+                        radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
+                        y: parent.height / 2 - height / 2
+                        x: (0.98 - redScaleSlider.from) / (redScaleSlider.to - redScaleSlider.from) * parent.width - width / 2
+                    }
                 }
                 handle: Rectangle {
                     x: redScaleSlider.leftPadding + redScaleSlider.visualPosition * (redScaleSlider.availableWidth - width)
@@ -2738,6 +2792,13 @@ ApplicationWindow {
                     Rectangle {
                         width: greenScaleSlider.visualPosition * parent.width
                         height: parent.height; color: "#55c055"; radius: 2 * window.scalingRatio
+                    }
+                    // ★ recommended default (1.02)
+                    Rectangle {
+                        width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
+                        radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
+                        y: parent.height / 2 - height / 2
+                        x: (1.02 - greenScaleSlider.from) / (greenScaleSlider.to - greenScaleSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
@@ -2782,6 +2843,13 @@ ApplicationWindow {
                         width: blueScaleSlider.visualPosition * parent.width
                         height: parent.height; color: "#5580d0"; radius: 2 * window.scalingRatio
                     }
+                    // ★ recommended default (1.00)
+                    Rectangle {
+                        width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
+                        radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
+                        y: parent.height / 2 - height / 2
+                        x: (1.00 - blueScaleSlider.from) / (blueScaleSlider.to - blueScaleSlider.from) * parent.width - width / 2
+                    }
                 }
                 handle: Rectangle {
                     x: blueScaleSlider.leftPadding + blueScaleSlider.visualPosition * (blueScaleSlider.availableWidth - width)
@@ -2824,6 +2892,13 @@ ApplicationWindow {
                     Rectangle {
                         width: saturationSlider.visualPosition * parent.width
                         height: parent.height; color: "#62a0ea"; radius: 2 * window.scalingRatio
+                    }
+                    // ★ recommended default (1.20)
+                    Rectangle {
+                        width: 3 * window.scalingRatio; height: 12 * window.scalingRatio
+                        radius: 1.5 * window.scalingRatio; color: "#f5c211"; opacity: 0.85
+                        y: parent.height / 2 - height / 2
+                        x: (1.20 - saturationSlider.from) / (saturationSlider.to - saturationSlider.from) * parent.width - width / 2
                     }
                 }
                 handle: Rectangle {
