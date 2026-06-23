@@ -1237,6 +1237,25 @@ ApplicationWindow {
                                     color: "black"
                                 }
 
+                                // Inner white dot — a plain centred Rectangle (a Button
+                                // background wasn't honouring its size/centre).  The Button
+                                // below is a transparent click target over it.
+                                Rectangle {
+                                    id: camerabtn
+                                    anchors.centerIn: parent
+                                    height: shutterBtnFrame.height * 0.74
+                                    width: height
+                                    radius: width / 2
+                                    color: "white"
+
+                                    SequentialAnimation on color {
+                                        id: animation
+                                        running: false
+                                        ColorAnimation { target: camerabtn; property: "color"; from: "white"; to: "gray"; duration: 150 }
+                                        ColorAnimation { target: camerabtn; property: "color"; from: "gray"; to: "white"; duration: 150 }
+                                    }
+                                }
+
                                 Button {
                                     id: shutterBtn
                                     anchors.centerIn: parent
@@ -1244,35 +1263,7 @@ ApplicationWindow {
                                     width: height
                                     enabled: cslate.state === "PhotoCapture" && !mediaView.visible
 
-                                    background: Rectangle {
-                                        id: camerabtn
-                                        anchors.centerIn: parent
-                                        height: shutterBtnFrame.height * 0.74
-                                        width: height
-                                        radius: width / 2
-                                        color: "white"
-
-                                        SequentialAnimation on color {
-                                            id: animation
-                                            running: false
-
-                                            ColorAnimation {
-                                                target: camerabtn
-                                                property: "color"
-                                                from: "white"
-                                                to: "gray"
-                                                duration: 150
-                                            }
-
-                                            ColorAnimation {
-                                                target: camerabtn
-                                                property: "color"
-                                                from: "gray"
-                                                to: "white"
-                                                duration: 150
-                                            }
-                                        }
-                                    }
+                                    background: Item {}
 
                                     onClicked: {
                                         animation.start();                            
