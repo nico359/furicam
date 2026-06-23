@@ -1,3 +1,24 @@
+furicam2 (2.2.1-1) unstable; urgency=medium
+
+  * Default video resolution is now 4.9 MP (2560x1920) — full-FOV 4:3 —
+    and the video picker stars that entry rather than the largest (4K).
+  * Default JPEG quality is 95 (near-visually-lossless at roughly half
+    the file size of Original).
+  * Rename "Video Bitrate" to "Max Video Bitrate" (it's a VBR ceiling),
+    default 20 Mbps, and cap the slider at 40 Mbps to avoid needlessly
+    huge files; previously-saved values above 40 Mbps are clamped on
+    startup.
+  * Rename the tone-map "HDR" option to "DRO" (single-capture in-ISP
+    dynamic-range optimisation), distinct from the multi-capture HDR
+    toggle, so the term no longer collides.
+  * Reset Settings to Defaults now also restores the 30 fps frame-rate
+    mode.
+  * Internal: setting defaults now live in a single source of truth that
+    the first-run defaults, the Reset button, the slider ticks and the
+    recommended-default markers all reference, so they can't drift apart.
+
+ -- Sean Pollard <spollard08@gmail.com>  Mon, 22 Jun 2026 12:42:21 -0400
+
 furicam2 (2.2.0-1) unstable; urgency=medium
 
   * Noise Reduction and Edge Enhancement are now Off / Fast / Quality
