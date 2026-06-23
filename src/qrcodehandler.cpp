@@ -9,6 +9,7 @@
 #include "zxingreader.h"
 #include <QProcess>
 #include <QImage>
+#include <QImageReader>
 #include <cstdlib>
 #include <iostream>
 #include <QRegularExpression>
@@ -635,10 +636,21 @@ QVariant QRCodeHandler::scanImageURL(const QString &currUrl) {
         filePath.remove(0, colonIndex + 1);
     }
 
-    QImage image;
+    // Decode at a reduced resolution: a full 21 MP JPEG takes seconds to load and
+    // scan on the UI thread (freezing the gallery), and QR/barcodes are found just
+    // as well at ~1600 px.  QImageReader::setScaledSize lets libjpeg downscale
+    // during decode, so it's cheap.  Auto-transform to match the displayed image.
+    QImageReader reader(filePath);
+    reader.setAutoTransform(true);
+    const QSize full = reader.size();
+    const int maxEdge = 1600;
+    if (full.isValid() && (full.width() > maxEdge || full.height() > maxEdge))
+        reader.setScaledSize(full.scaled(maxEdge, maxEdge, Qt::KeepAspectRatio));
 
-    if (!image.load(filePath)) {
-        qDebug() << "Failed to load image from" << filePath;
+    QImage image = reader.read();
+
+    if (image.isNull()) {
+        qDebug() << "Failed to load image from" << filePath << reader.errorString();
         resultMap["text"] = "";
         resultMap["isValid"] = false;
         resultMap["position"] = QVariantMap();
