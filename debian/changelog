@@ -1,3 +1,21 @@
+furicam2 (2.3.1-1) unstable; urgency=medium
+
+  * Resolution pickers are now compact select boxes (a tap opens a
+    scrollable popup) instead of long inline lists; recommended size
+    starred, current one highlighted.
+  * Default capture mode is now Face (FACE_PRIORITY) — equivalent to Auto
+    with no face, better with one.
+  * Rename the clipping overlay setting to "Exposure Warning" (was
+    "Zebra").
+  * Brightness/EV slider: moved back to the left edge (mirroring the zoom
+    slider) and added a Shown/Hidden toggle; it now defaults to Hidden.
+  * Zoom and white-balance sliders match the brightness slider's size and
+    handle, with a 60 px touch zone.
+  * Settings panel scrolls as one piece — the resolution area no longer
+    swallows the drag.
+
+ -- Sean Pollard <spollard08@gmail.com>  Tue, 23 Jun 2026 11:52:16 -0400
+
 furicam2 (2.3.0-1) unstable; urgency=medium
 
   * Face capture mode now draws a box around each detected face on the
