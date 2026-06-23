@@ -161,7 +161,7 @@ ApplicationWindow {
         readonly property real droStrength: 0.6
         readonly property bool rawEnabled: false
         readonly property bool zebraEnabled: false
-        readonly property bool evSliderVisible: true
+        readonly property bool evSliderVisible: false
         readonly property int  noiseReductionLevel: 2
         readonly property int  edgeLevel: 2
         readonly property real brightnessEv: 0.5
