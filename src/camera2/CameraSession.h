@@ -19,6 +19,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <array>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -155,6 +156,13 @@ public:
     void setAnalysisCallback(std::function<void(const uint8_t* y, int width, int height, int rowStride)> cb)
     {
         analysisCallback_ = std::move(cb);
+    }
+
+    // Detected faces, as {left,top,right,bottom} normalised [0,1] in active-array
+    // space (fired from the result callback while Face mode detection is on).
+    void setFacesCallback(std::function<void(const std::vector<std::array<float, 4>>&)> cb)
+    {
+        facesCallback_ = std::move(cb);
     }
 
     // Available JPEG capture sizes for the open camera (output configs).
@@ -438,6 +446,7 @@ private:
     ACameraOutputTarget*       analysisTarget_   = nullptr;
     AImageReader_ImageListener analysisListener_{};
     std::function<void(const uint8_t* y, int width, int height, int rowStride)> analysisCallback_;
+    std::function<void(const std::vector<std::array<float, 4>>&)> facesCallback_;
 
     // RAW16 output for DNG capture — swaps in for the analysis stream when raw is
     // on (3-stream HAL limit).  Only the still request targets it (no live frames);

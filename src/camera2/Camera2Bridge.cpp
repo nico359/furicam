@@ -210,6 +210,35 @@ void Camera2Bridge::startCamera()
     session_->setAnalysisCallback([this](const uint8_t* y, int w, int h, int stride) {
         qrDecode(y, w, h, stride);
     });
+    // Map detected faces (active-array normalized) onto the letterboxed preview:
+    // same inverse rotation + inverse crop as the QR overlay, plus the front-camera
+    // mirror.  Emits {x,y,w,h} rects in [0,1] of the preview item.
+    session_->setFacesCallback([this](const std::vector<std::array<float, 4>>& faces) {
+        const double rad = -displayRotation_.load() * 3.14159265358979 / 180.0;
+        const double cc = std::cos(rad), ss = std::sin(rad);
+        const double cx = cropScaleX_.load(), cy = cropScaleY_.load();
+        const bool mir = previewMirrored();
+        QVariantList out;
+        for (const auto& f : faces) {
+            const float xs[4] = { f[0], f[2], f[2], f[0] };
+            const float ys[4] = { f[1], f[1], f[3], f[3] };
+            double minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+            for (int i = 0; i < 4; ++i) {
+                const double nx = ((double)xs[i] - 0.5) / (cx > 0 ? cx : 1.0);
+                const double ny = ((double)ys[i] - 0.5) / (cy > 0 ? cy : 1.0);
+                double px = (cc * nx - ss * ny) + 0.5;
+                const double py = (ss * nx + cc * ny) + 0.5;
+                if (mir) px = 1.0 - px;
+                minx = std::min(minx, px); maxx = std::max(maxx, px);
+                miny = std::min(miny, py); maxy = std::max(maxy, py);
+            }
+            QVariantMap m;
+            m["x"] = minx; m["y"] = miny;
+            m["w"] = maxx - minx; m["h"] = maxy - miny;
+            out.append(m);
+        }
+        QMetaObject::invokeMethod(this, [this, out] { emit facesDetected(out); }, Qt::QueuedConnection);
+    });
     if (hasFrontCamera_.exchange(haveFront) != haveFront)
         emit hasFrontCameraChanged();
     updateDisplayRotation();   // also recomputes previewAspectRatio_ from the stream size

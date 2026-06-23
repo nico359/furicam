@@ -1145,23 +1145,26 @@ void CameraSession::onCaptureResult(void* ctx, ACameraCaptureSession* /*session*
     ACameraMetadata_const_entry e{};
     if (ACameraMetadata_getConstEntry(result, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK && e.count >= 1)
         self->lastAeState_.store(e.data.u8[0]);
-    // FACEDBG: when face detection is on, log the detected face count + largest box
-    // (verifying the HAL actually reports faces) — logs only when the count changes.
-    if (self->ctlFaceDetect_) {
-        int nf = 0, bestA = 0, bx = 0, by = 0, bw = 0, bh = 0;
-        if (ACameraMetadata_getConstEntry(result, ACAMERA_STATISTICS_FACE_RECTANGLES, &e) == ACAMERA_OK && e.count >= 4) {
-            nf = (int)(e.count / 4);
+    // Face detection: report each detected face as {l,t,r,b} normalised [0,1] in
+    // active-array space so the UI can draw boxes.  Fired (incl. empty, to clear)
+    // every result while Face mode has detection on.
+    if (self->ctlFaceDetect_ && self->facesCallback_) {
+        const float aw = (float)self->openActiveArray_[2];
+        const float ah = (float)self->openActiveArray_[3];
+        std::vector<std::array<float, 4>> faces;
+        if (aw > 0.0f && ah > 0.0f &&
+            ACameraMetadata_getConstEntry(result, ACAMERA_STATISTICS_FACE_RECTANGLES, &e) == ACAMERA_OK && e.count >= 4) {
+            const float ox = (float)self->openActiveArray_[0], oy = (float)self->openActiveArray_[1];
+            const int nf = (int)(e.count / 4);
+            faces.reserve(nf);
             for (int k = 0; k < nf; ++k) {
-                int l = e.data.i32[k*4+0], t = e.data.i32[k*4+1], r = e.data.i32[k*4+2], b = e.data.i32[k*4+3];
-                int a = (r - l) * (b - t);
-                if (a > bestA) { bestA = a; bx = l; by = t; bw = r - l; bh = b - t; }
+                faces.push_back({ (e.data.i32[k*4+0] - ox) / aw,
+                                  (e.data.i32[k*4+1] - oy) / ah,
+                                  (e.data.i32[k*4+2] - ox) / aw,
+                                  (e.data.i32[k*4+3] - oy) / ah });
             }
         }
-        static thread_local int prevNf = -1;
-        if (nf != prevNf) {
-            prevNf = nf;
-            self->log(fmt("FACEDBG: %d face(s); largest=[%d,%d %dx%d]", nf, bx, by, bw, bh));
-        }
+        self->facesCallback_(faces);
     }
     // Cache WB gains / ISO / exposure for DNG metadata (cheap; only used on capture).
     std::lock_guard<std::mutex> lk(self->resultMutex_);

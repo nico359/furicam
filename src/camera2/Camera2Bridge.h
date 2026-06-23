@@ -268,6 +268,10 @@ signals:
     // (topLeft, topRight, bottomRight, bottomLeft) as {x,y} normalized to [0,1].
     void qrDetected(const QString& text, const QVariantList& points);
 
+    // Detected faces for the live preview: each a {x,y,w,h} rect normalized to
+    // [0,1] of the letterboxed preview item (empty list clears the boxes).
+    void facesDetected(const QVariantList& faces);
+
 private slots:
     // iio-sensor-proxy PropertiesChanged → refresh the cached device orientation.
     void onSensorPropertiesChanged(const QString& iface, const QVariantMap& changed,

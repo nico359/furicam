@@ -673,6 +673,35 @@ Item {
         onScaleChanged: cameraItem.handleSetZoom(scale * zoomFactor)
     }
 
+    // Boxes around faces the HAL detects (Face capture mode); normalized rects
+    // from the bridge map onto the letterboxed preview, same frame as the QR box.
+    Item {
+        id: faceOverlay
+        z: 8999
+        anchors.fill: cam2
+        visible: settings.sceneMode === 1 && !mediaView.visible && !window.videoCaptured
+        property var faces: []
+
+        Connections {
+            target: cam2
+            function onFacesDetected(f) { faceOverlay.faces = f }
+        }
+
+        Repeater {
+            model: faceOverlay.faces
+            delegate: Rectangle {
+                color: "transparent"
+                border.color: "#3dff7a"
+                border.width: 2 * window.scalingRatio
+                radius: 6 * window.scalingRatio
+                x: modelData.x * faceOverlay.width
+                y: modelData.y * faceOverlay.height
+                width:  modelData.w * faceOverlay.width
+                height: modelData.h * faceOverlay.height
+            }
+        }
+    }
+
     // Box drawn around the detected QR code (tappable → action popup).
     Item {
         id: qrOverlay
