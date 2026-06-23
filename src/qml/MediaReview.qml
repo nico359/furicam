@@ -284,10 +284,10 @@ Rectangle {
                     return Math.max(-m, Math.min(m, v))
                 }
 
-                // New photo: drop any zoom/pan carried over from the previous one.
+                // New photo: clear pinch-zoom and pan, but keep the metadata "peek"
+                // (scaleRatio / vCenterOffset) so the half-height + open-properties
+                // view persists when swiping between photos.
                 onSourceChanged: {
-                    viewRect.scaleRatio = 1.0
-                    viewRect.vCenterOffsetValue = 0
                     image.scale = Qt.binding(function() { return viewRect.scaleRatio })
                     image.panX = 0
                     image.panY = 0
@@ -355,12 +355,14 @@ Rectangle {
             PinchArea {
                 id: pinchArea
                 anchors.fill: parent
+                pinch.target: image
                 pinch.maximumScale: 4
                 pinch.minimumScale: 1
                 enabled: viewRect.visible
 
                 onPinchUpdated: {
-                    image.scale = Math.max(1, Math.min(4, pinchArea.pinch.scale))
+                    if (pinchArea.pinch.center !== undefined)
+                        image.scale = pinchArea.pinch.scale
                 }
                 onPinchFinished: {
                     image.panX = image.clampPanX(image.panX)
@@ -390,7 +392,7 @@ Rectangle {
                     // While zoomed in, dragging pans the photo instead of swiping to
                     // the next/previous one, so the two gestures don't collide.
                     onPositionChanged: {
-                        if (image.scale > 1.01) {
+                        if (!pinchArea.pinch.active && image.scale > 1.01) {
                             panning = true
                             image.panX = image.clampPanX(panStartX + (mouse.x - startX))
                             image.panY = image.clampPanY(panStartY + (mouse.y - startY))
