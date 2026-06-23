@@ -1,3 +1,22 @@
+furicam2 (2.2.2-1) unstable; urgency=medium
+
+  * Gallery video fixes for the Camera2 .mp4 files: read the date from the
+    container creation_time via ffprobe (was "Date not found"), and apply
+    the stored rotation hint so portrait clips no longer play sideways.
+  * Show the capture date and time on a single line so the time isn't
+    clipped off the date bar.
+  * Photo viewer: drag to pan when zoomed in (a drag still swipes to the
+    next/previous photo at fit-scale), and reset zoom/pan when switching
+    photos so the previous photo's zoom no longer carries over.
+  * Photo viewer: fix the ~4 s freeze when tapping a photo — the on-tap QR
+    scan decoded the full 21 MP JPEG on the UI thread; it now decodes at a
+    reduced resolution.
+  * Photo viewer: fix pinch turning the photo black, keep the half-height
+    "peek" + open properties view when swiping between photos, and use a
+    consistent size for that view however it's opened.
+
+ -- Sean Pollard <spollard08@gmail.com>  Tue, 23 Jun 2026 07:55:57 -0400
+
 furicam2 (2.2.1-1) unstable; urgency=medium
 
   * Default video resolution is now 4.9 MP (2560x1920) — full-FOV 4:3 —
