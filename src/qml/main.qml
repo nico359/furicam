@@ -564,7 +564,7 @@ ApplicationWindow {
         anchors.leftMargin: 16 * window.scalingRatio
         anchors.bottom: mainBar.top
         anchors.bottomMargin: 20 * window.scalingRatio
-        width: 50 * window.scalingRatio
+        width: 125 * window.scalingRatio   // match the brightness slider's wide touch zone
         height: parent.height * 0.35
         visible: settings.whiteBalanceMode !== 0
                  && !mediaView.visible && !window.videoCaptured
@@ -578,7 +578,8 @@ ApplicationWindow {
         // Mode label
         Rectangle {
             id: wbLabel
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.horizontalCenter: parent.left
+            anchors.horizontalCenterOffset: 25 * window.scalingRatio
             anchors.bottom: wbSlider.top
             anchors.bottomMargin: 6 * window.scalingRatio
             width: 52 * window.scalingRatio
@@ -604,6 +605,7 @@ ApplicationWindow {
             anchors.top: wbLabel.bottom
             anchors.topMargin: 6 * window.scalingRatio
             anchors.bottom: parent.bottom
+            width: parent.width            // fill the wide container for a large hit box
             orientation: Qt.Vertical
             from: 0
             to: 4
@@ -621,7 +623,7 @@ ApplicationWindow {
             }
 
             background: Rectangle {
-                x: wbSlider.leftPadding + wbSlider.availableWidth / 2 - width / 2
+                x: 25 * window.scalingRatio - width / 2   // visual at the left edge
                 y: wbSlider.topPadding
                 width: 4 * window.scalingRatio
                 height: wbSlider.availableHeight
@@ -637,10 +639,10 @@ ApplicationWindow {
             }
 
             handle: Rectangle {
-                x: wbSlider.leftPadding + wbSlider.availableWidth / 2 - width / 2
+                x: 25 * window.scalingRatio - width / 2   // visual at the left edge
                 y: wbSlider.topPadding + wbSlider.visualPosition * (wbSlider.availableHeight - height)
-                width: 20 * window.scalingRatio
-                height: 20 * window.scalingRatio
+                width: 30 * window.scalingRatio
+                height: 30 * window.scalingRatio
                 radius: width / 2
                 color: wbSlider.pressed ? "#e0e0e0" : "white"
                 border.color: "#40000000"
@@ -657,7 +659,7 @@ ApplicationWindow {
     Item {
         id: brightnessSliderContainer
         anchors.left: parent.left
-        anchors.leftMargin: (wbSliderContainer.visible ? 76 : 16) * window.scalingRatio
+        anchors.leftMargin: (wbSliderContainer.visible ? 149 : 16) * window.scalingRatio   // clear the (now wide) WB slider
         anchors.bottom: mainBar.top
         anchors.bottomMargin: 20 * window.scalingRatio
         width: 125 * window.scalingRatio   // wide invisible touch zone (2.5× the old 50)
@@ -758,7 +760,7 @@ ApplicationWindow {
         anchors.rightMargin: 16 * window.scalingRatio
         anchors.bottom: mainBar.top
         anchors.bottomMargin: 20 * window.scalingRatio
-        width: 50 * window.scalingRatio
+        width: 125 * window.scalingRatio   // match the brightness slider's wide touch zone
         height: parent.height * 0.35
         visible: !mediaView.visible && !window.videoCaptured
                  && cameraLoader.item !== null
@@ -772,7 +774,8 @@ ApplicationWindow {
         // Magnification label
         Rectangle {
             id: zoomLabel
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.horizontalCenter: parent.right
+            anchors.horizontalCenterOffset: -25 * window.scalingRatio
             anchors.bottom: zoomSlider.top
             anchors.bottomMargin: 6 * window.scalingRatio
             width: 48 * window.scalingRatio
@@ -800,6 +803,7 @@ ApplicationWindow {
             anchors.top: zoomLabel.bottom
             anchors.topMargin: 6 * window.scalingRatio
             anchors.bottom: parent.bottom
+            width: parent.width            // fill the wide container for a large hit box
             orientation: Qt.Vertical
             from: 0
             to: cameraLoader.item ? cameraLoader.item.maxZoom : 0
@@ -815,7 +819,7 @@ ApplicationWindow {
             }
 
             background: Rectangle {
-                x: zoomSlider.leftPadding + zoomSlider.availableWidth / 2 - width / 2
+                x: zoomSlider.width - 25 * window.scalingRatio - width / 2   // visual at the right edge, mirroring brightness
                 y: zoomSlider.topPadding
                 width: 4 * window.scalingRatio
                 height: zoomSlider.availableHeight
@@ -831,10 +835,10 @@ ApplicationWindow {
             }
 
             handle: Rectangle {
-                x: zoomSlider.leftPadding + zoomSlider.availableWidth / 2 - width / 2
+                x: zoomSlider.width - 25 * window.scalingRatio - width / 2   // visual at the right edge, mirroring brightness
                 y: zoomSlider.topPadding + zoomSlider.visualPosition * (zoomSlider.availableHeight - height)
-                width: 20 * window.scalingRatio
-                height: 20 * window.scalingRatio
+                width: 30 * window.scalingRatio
+                height: 30 * window.scalingRatio
                 radius: width / 2
                 color: zoomSlider.pressed ? "#e0e0e0" : "white"
                 border.color: "#40000000"
@@ -2058,7 +2062,8 @@ ApplicationWindow {
                 id: resolutionList
                 visible: cslate.state === "PhotoCapture"
                 width: parent.width
-                height: settingsDrawer.height * 0.5
+                height: contentHeight
+                interactive: false   // don't capture drags — let the settings panel scroll as one
                 clip: true
                 model: cameraLoader.item ? cameraLoader.item.resolutionModel : null
                 spacing: 2 * window.scalingRatio
@@ -2125,7 +2130,8 @@ ApplicationWindow {
                 id: videoResolutionList
                 visible: cslate.state === "VideoCapture"
                 width: parent.width
-                height: settingsDrawer.height * 0.5
+                height: contentHeight
+                interactive: false   // don't capture drags — let the settings panel scroll as one
                 clip: true
                 model: cameraLoader.item ? cameraLoader.item.videoResolutionModel : null
                 spacing: 2 * window.scalingRatio
