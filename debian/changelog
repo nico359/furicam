@@ -1,3 +1,18 @@
+furicam2 (2.3.2-1) unstable; urgency=medium
+
+  * Fix audio/video sync: recorded clips had the soundtrack ~0.7s ahead
+    of the picture (audio playing ~1s behind) because the hot mic started
+    writing before the first encoded video frame.  Audio is now held
+    until the first frame is muxed so the two line up.
+  * Embed the capture settings (mode, tone map/DRO, NR, edge, JPEG
+    quality, RAW, WB, EV) into each photo's EXIF UserComment — for the
+    JPEG and the DNG — and show them as a "Capture Settings" row (below
+    GPS, one per line) in the gallery.  Readable by any EXIF tool.
+  * Shutter button: the inner dot is now truly concentric with the ring
+    (it was slightly small and off-centre).
+
+ -- Sean Pollard <spollard08@gmail.com>  Tue, 23 Jun 2026 17:01:32 -0400
+
 furicam2 (2.3.1-1) unstable; urgency=medium
 
   * Resolution pickers are now compact select boxes (a tap opens a
