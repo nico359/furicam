@@ -1306,6 +1306,8 @@ bool CameraSession::capturePhoto(const std::string& path)
     if (flashMode_ == 1)      aeMode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
     else if (flashMode_ == 2) aeMode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
     ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_AE_MODE, 1, &aeMode);
+    uint8_t stillAntiband = (uint8_t)ACAMERA_CONTROL_AE_ANTIBANDING_MODE_AUTO;   // anti-flicker
+    ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_AE_ANTIBANDING_MODE, 1, &stillAntiband);
 
     // HIGH_QUALITY noise reduction + edge enhancement for the still (no fps cost on
     // a one-shot); falls back to FAST/skips when unsupported.
@@ -1759,6 +1761,9 @@ void CameraSession::applyControls(ACaptureRequest* req) const
     if (ctlAeMode_ != ACAMERA_CONTROL_AE_MODE_OFF && flashMode_ == 2)
         ae = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
     ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &ae);
+    // Cancel mains-light flicker banding (50/60 Hz); AUTO lets the HAL detect which.
+    uint8_t antiband = (uint8_t)ACAMERA_CONTROL_AE_ANTIBANDING_MODE_AUTO;
+    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_ANTIBANDING_MODE, 1, &antiband);
     if (ctlAeMode_ == ACAMERA_CONTROL_AE_MODE_OFF) {
         int64_t exp = ctlExposureNs_;
         int32_t iso = ctlIso_;
