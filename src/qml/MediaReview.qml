@@ -181,7 +181,9 @@ Rectangle {
                 viewRect.vCenterOffsetValue = 0
             } else {
                 if (metadataDrawer.y <= 600) {
-                    viewRect.scaleRatio = 0.5
+                    // Match the swipe-up "peek" size (was 0.5 here, 0.7 there),
+                    // so toggling the widgets returns the photo to the same size.
+                    viewRect.scaleRatio = 0.7
                     viewRect.vCenterOffsetValue = -(viewRect.height * 0.19)
                 }
             }
