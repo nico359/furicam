@@ -33,6 +33,9 @@ Rectangle {
     property var vCenterOffsetValue: 0
     property var textSize: viewRect.height * 0.018
     property var mediaState: MediaPlayer.StoppedState
+    // Display rotation (deg) for the current video; the muxer stores it as a hint
+    // the QML VideoOutput doesn't auto-apply on this backend.
+    property int videoRotation: 0
     property var videoAudio: false
     signal playbackRequest()
     signal scanImageComponent()
@@ -42,6 +45,8 @@ Rectangle {
 
     onCurrentFileUrlChanged: {
         viewRect.scanImageComponent()
+        viewRect.videoRotation = isVideoFile(currentFileUrl)
+                                 ? fileManager.getVideoRotation(currentFileUrl) : 0
     }
 
     function openPopup(title, body, buttons, data) {
@@ -469,6 +474,8 @@ Rectangle {
             VideoOutput {
                 anchors.fill: parent
                 source: mediaPlayer
+                // Apply the clip's stored rotation hint (the backend won't).
+                orientation: viewRect.videoRotation
                 visible: viewRect.currentFileUrl && viewRect.isVideoFile(viewRect.currentFileUrl)
             }
 

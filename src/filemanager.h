@@ -46,6 +46,7 @@ public:
     Q_INVOKABLE QString runMkvInfo(const QString &fileUrl);
     Q_INVOKABLE void finalizeMkv(const QString &fileUrl);
     Q_INVOKABLE QString getVideoDate(const QString &fileUrl);
+    Q_INVOKABLE int getVideoRotation(const QString &fileUrl);
     Q_INVOKABLE QString getVideoDimensions(const QString &fileUrl);
     Q_INVOKABLE QString getDuration(const QString &fileUrl);
     Q_INVOKABLE QString getMultiplexingApplication(const QString &fileUrl);

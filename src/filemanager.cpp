@@ -16,6 +16,8 @@
 #include <QFile>
 #include <QProcess>
 #include <QDateTime>
+#include <QFileInfo>
+#include <QUrl>
 #include <QDebug>
 #include <iomanip>
 #include <exiv2/exiv2.hpp>
@@ -496,28 +498,66 @@ void FileManager::finalizeMkv(const QString &fileUrl) {
 }
 
 QString FileManager::getVideoDate(const QString &fileUrl) {
-    QString output = runMkvInfo(fileUrl);
-    QStringList outputLines = output.split('\n');
+    const QString path = QUrl(fileUrl).isLocalFile() ? QUrl(fileUrl).toLocalFile() : fileUrl;
 
-    for (const QString &line : outputLines) {
-        if (line.contains("Date")) {
-            QString dateLine = line.trimmed();
-            QString dateTimeStr = dateLine.section(':', 1).trimmed();
-            QDateTime dateTime = QDateTime::fromString(dateTimeStr, "yyyy-MM-dd HH:mm:ss t");
-            if (dateTime.isValid()) {
-                QString timeFormat = getTimeFormat();
-                if (timeFormat == "'24h'") {
-                    // 24-hour format
-                    return dateTime.toString("MMM d, yyyy \n HH:mm");
-                } else {
-                    // AM/PM format
-                    return dateTime.toString("MMM d, yyyy \n h:mm AP");
-                }
+    // Read the container's creation_time via ffprobe (works for both .mp4 and
+    // .mkv); fall back to the file's modification time.  The previous mkvinfo
+    // path only reads Matroska, so the Camera2 .mp4 files showed "Date not found".
+    QDateTime dateTime;
+    QProcess probe;
+    probe.start("ffprobe", QStringList()
+                << "-v" << "error"
+                << "-show_entries" << "format_tags=creation_time"
+                << "-of" << "default=noprint_wrappers=1:nokey=1"
+                << path);
+    if (probe.waitForFinished(3000)) {
+        const QString out = QString::fromUtf8(probe.readAllStandardOutput()).trimmed();
+        if (out.length() >= 19) {
+            // e.g. "2026-06-23T02:45:06.000000Z" — parse the seconds-precision
+            // UTC instant and present it in local time.
+            QDateTime utc = QDateTime::fromString(out.left(19), "yyyy-MM-ddTHH:mm:ss");
+            if (utc.isValid()) {
+                utc.setTimeSpec(Qt::UTC);
+                dateTime = utc.toLocalTime();
             }
-            break;
         }
     }
-    return QString("Date not found.");
+    if (!dateTime.isValid())
+        dateTime = QFileInfo(path).lastModified();
+
+    if (!dateTime.isValid())
+        return QString("Date not found.");
+
+    QString timeFormat = getTimeFormat();
+    if (timeFormat == "'24h'")
+        return dateTime.toString("MMM d, yyyy \n HH:mm");
+    else
+        return dateTime.toString("MMM d, yyyy \n h:mm AP");
+}
+
+int FileManager::getVideoRotation(const QString &fileUrl) {
+    // The Camera2 muxer stores the device orientation as a rotation hint rather
+    // than baking it into the frames, and the QML VideoOutput doesn't apply it
+    // on this backend — so portrait clips play sideways.  Read the rotation
+    // (signed degrees, e.g. -90) so the gallery can correct the display.
+    const QString path = QUrl(fileUrl).isLocalFile() ? QUrl(fileUrl).toLocalFile() : fileUrl;
+    QProcess probe;
+    probe.start("ffprobe", QStringList()
+                << "-v" << "error"
+                << "-select_streams" << "v:0"
+                << "-show_entries" << "stream_side_data=rotation:stream_tags=rotate"
+                << "-of" << "default=noprint_wrappers=1:nokey=1"
+                << path);
+    if (probe.waitForFinished(3000)) {
+        const QStringList lines = QString::fromUtf8(probe.readAllStandardOutput()).split('\n');
+        for (const QString &line : lines) {
+            bool ok = false;
+            const int rot = line.trimmed().toInt(&ok);
+            if (ok)
+                return rot;
+        }
+    }
+    return 0;
 }
 
 QString FileManager::getVideoDimensions(const QString &fileUrl) {
