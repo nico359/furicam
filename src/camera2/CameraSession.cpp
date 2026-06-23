@@ -1302,9 +1302,12 @@ bool CameraSession::capturePhoto(const std::string& path)
     ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_JPEG_QUALITY, 1, &quality);
 
     // Per-shot flash via the AE mode on this still capture.
+    // A per-shot override (set by the auto-flash path) forces the flash on this
+    // still only; otherwise the GUI flash mode applies.
+    const int fm = (stillFlashOverride_ != 0) ? stillFlashOverride_ : flashMode_;
     uint8_t aeMode = ACAMERA_CONTROL_AE_MODE_ON;                 // off: normal AE, no flash
-    if (flashMode_ == 1)      aeMode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
-    else if (flashMode_ == 2) aeMode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
+    if (fm == 1)      aeMode = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+    else if (fm == 2) aeMode = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
     ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_AE_MODE, 1, &aeMode);
     uint8_t stillAntiband = (uint8_t)ACAMERA_CONTROL_AE_ANTIBANDING_MODE_AUTO;   // anti-flicker
     ACaptureRequest_setEntry_u8(stillRequest_, ACAMERA_CONTROL_AE_ANTIBANDING_MODE, 1, &stillAntiband);

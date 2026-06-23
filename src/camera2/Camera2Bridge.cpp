@@ -753,11 +753,11 @@ void Camera2Bridge::beginAutoFlashCapture(const QString& outputPath, int attempt
     const int elapsedMs = attempt * 50;
     const bool settled = (s == 2 || s == 3 || s == 4);
     if ((settled && elapsedMs >= 200) || elapsedMs >= 1200) {
-        if (s == 4) {                       // dark → force the flash to actually fire
-            session_->setFlashMode(1);      // ON_ALWAYS_FLASH for this shot
-            doSingleCapture(outputPath);
-            session_->setFlashMode(2);      // restore Auto for the preview/next shot
-        } else {                            // bright → no flash
+        if (s == 4) {                            // dark → force the flash to fire
+            session_->setStillFlashOverride(1);  // ALWAYS_FLASH on this still only —
+            doSingleCapture(outputPath);         // capturePhoto builds+submits synchronously,
+            session_->setStillFlashOverride(0);  // so the preview never goes torch-on.
+        } else {                                 // bright → no flash
             doSingleCapture(outputPath);
         }
         return;

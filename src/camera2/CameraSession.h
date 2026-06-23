@@ -240,6 +240,10 @@ public:
     void  setZoomRatio(float ratio);                       // 1.0 .. maxZoomRatio()
     void  setTorch(bool on);
     void  setFlashMode(int mode);                          // 0=off, 1=on, 2=auto (per-shot)
+    // Force a flash mode on the NEXT still only (0 = no override), without
+    // touching the preview request.  Used by the auto-flash path so the still
+    // fires ALWAYS_FLASH while the preview never goes torch-on.
+    void  setStillFlashOverride(int mode) { stillFlashOverride_ = mode; }
     void  setSceneMode(int mode);                          // 0=off; ACAMERA_CONTROL_SCENE_MODE_* (e.g. ACTION)
     // RAW/DNG capture: when enabled, each shot also saves a color-accurate .dng
     // (the RAW16 stream replaces the live-QR stream — 3-stream HAL limit).  Toggling
@@ -496,6 +500,7 @@ private:
     float   ctlZoom_       = 1.0f;
     int     ctlTorch_      = 0;
     int     flashMode_     = 0;   // per-shot flash: 0=off, 1=on, 2=auto
+    int     stillFlashOverride_ = 0;  // !=0 forces this flash mode on the next still only
     int     ctlSceneMode_  = 0;   // 0=disabled; ACAMERA_CONTROL_SCENE_MODE_* (ACTION freezes motion)
     bool    ctlFaceDetect_ = false; // STATISTICS_FACE_DETECT_MODE=SIMPLE (faces reported in results)
     int     ctlNrLevel_    = 2;    // noise reduction: 0=off, 1=fast, 2=high quality
