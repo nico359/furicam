@@ -251,9 +251,9 @@ QString FileManager::getPictureDate(const QString &fileUrl) {
     QString timeFormat = getTimeFormat();
 
     if (timeFormat == "'24h'") {
-        strftime(buffer, sizeof(buffer), "%b %d, %Y \n %H:%M", &tm);
+        strftime(buffer, sizeof(buffer), "%b %d, %Y · %H:%M", &tm);
     } else {
-        strftime(buffer, sizeof(buffer), "%b %d, %Y \n %I:%M %p", &tm);
+        strftime(buffer, sizeof(buffer), "%b %d, %Y · %I:%M %p", &tm);
     }
 
     return QString::fromStdString(buffer);
@@ -530,9 +530,9 @@ QString FileManager::getVideoDate(const QString &fileUrl) {
 
     QString timeFormat = getTimeFormat();
     if (timeFormat == "'24h'")
-        return dateTime.toString("MMM d, yyyy \n HH:mm");
+        return dateTime.toString("MMM d, yyyy · HH:mm");
     else
-        return dateTime.toString("MMM d, yyyy \n h:mm AP");
+        return dateTime.toString("MMM d, yyyy · h:mm AP");
 }
 
 int FileManager::getVideoRotation(const QString &fileUrl) {
