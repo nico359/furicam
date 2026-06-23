@@ -564,7 +564,7 @@ ApplicationWindow {
         anchors.leftMargin: 16 * window.scalingRatio
         anchors.bottom: mainBar.top
         anchors.bottomMargin: 20 * window.scalingRatio
-        width: 125 * window.scalingRatio   // match the brightness slider's wide touch zone
+        width: 60 * window.scalingRatio   // match the brightness slider's wide touch zone
         height: parent.height * 0.35
         visible: settings.whiteBalanceMode !== 0
                  && !mediaView.visible && !window.videoCaptured
@@ -659,10 +659,10 @@ ApplicationWindow {
     Item {
         id: brightnessSliderContainer
         anchors.left: parent.left
-        anchors.leftMargin: (wbSliderContainer.visible ? 149 : 16) * window.scalingRatio   // clear the (now wide) WB slider
+        anchors.leftMargin: (wbSliderContainer.visible ? 84 : 16) * window.scalingRatio   // clear the WB slider when both show
         anchors.bottom: mainBar.top
         anchors.bottomMargin: 20 * window.scalingRatio
-        width: 125 * window.scalingRatio   // wide invisible touch zone (2.5× the old 50)
+        width: 60 * window.scalingRatio   // touch zone; visual sits at the left edge
         height: parent.height * 0.35
         visible: settings.evSliderVisible && !mediaView.visible && cameraLoader.item !== null
         opacity: brightnessSlider.pressed ? 1.0 : 0.7
@@ -760,7 +760,7 @@ ApplicationWindow {
         anchors.rightMargin: 16 * window.scalingRatio
         anchors.bottom: mainBar.top
         anchors.bottomMargin: 20 * window.scalingRatio
-        width: 125 * window.scalingRatio   // match the brightness slider's wide touch zone
+        width: 60 * window.scalingRatio   // match the brightness slider's wide touch zone
         height: parent.height * 0.35
         visible: !mediaView.visible && !window.videoCaptured
                  && cameraLoader.item !== null
