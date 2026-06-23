@@ -160,6 +160,53 @@ void FileManager::appendGPSMetadata(const QString &fileUrl) {
     image->writeMetadata();
 }
 
+// Record the app's capture settings into the file's EXIF UserComment (works for
+// JPEG and, via exiv2's TIFF support, DNG).  Read back by getCaptureSettings().
+void FileManager::writeCaptureSettings(const QString &fileUrl, const QString &summary) {
+    QString path = fileUrl;
+    const QUrl u(fileUrl);
+    if (u.isLocalFile())
+        path = u.toLocalFile();
+    try {
+        std::unique_ptr<Exiv2::Image> image = Exiv2::ImageFactory::open(path.toStdString());
+        if (!image)
+            return;   // file not present yet (e.g. DNG still being written) — skip
+        image->readMetadata();
+        Exiv2::ExifData& exif = image->exifData();
+        exif["Exif.Photo.UserComment"] = ("charset=Ascii " + summary).toStdString();
+        exif["Exif.Image.Software"] = "furicam2";
+        image->writeMetadata();
+    } catch (const std::exception &e) {
+        qWarning() << "writeCaptureSettings:" << path << e.what();
+    }
+}
+
+QString FileManager::getCaptureSettings(const QString &fileUrl) {
+    QString path = fileUrl;
+    const QUrl u(fileUrl);
+    if (u.isLocalFile())
+        path = u.toLocalFile();
+    try {
+        std::unique_ptr<Exiv2::Image> image = Exiv2::ImageFactory::open(path.toStdString());
+        if (!image)
+            return QString();
+        image->readMetadata();
+        Exiv2::ExifData& exif = image->exifData();
+        auto it = exif.findKey(Exiv2::ExifKey("Exif.Photo.UserComment"));
+        if (it == exif.end())
+            return QString();
+        QString v = QString::fromStdString(it->toString()).trimmed();
+        if (v.startsWith("charset=")) {            // drop the exiv2 charset prefix
+            const int sp = v.indexOf(' ');
+            if (sp >= 0) v = v.mid(sp + 1).trimmed();
+        }
+        return v;
+    } catch (const std::exception &e) {
+        qWarning() << "getCaptureSettings:" << path << e.what();
+        return QString();
+    }
+}
+
 QString FileManager::getFileSize(const QString &fileUrl) {
     const qint64 kilobyte = 1024;
     const qint64 megabyte = 1024 * kilobyte;

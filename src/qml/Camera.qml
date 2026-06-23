@@ -319,6 +319,26 @@ Item {
         }
     }
 
+    // One-line summary of the app settings used for a shot, for EXIF UserComment.
+    function captureSettingsSummary() {
+        var s = settings
+        var mode  = (s.sceneMode === 1 ? "Face" : s.sceneMode === 2 ? "Action" : "Normal")
+        var tones = ["Standard", "DRO", "Contrast"]
+        var tone  = tones[s.toneMap] + (s.toneMap !== 0 ? " " + Math.round(s.droStrength / 0.85 * 100) + "%" : "")
+        var lvl   = ["Off", "Fast", "Quality"]
+        var wb    = ["Auto", "Daylight", "Cloudy", "Tungsten", "Fluorescent"]
+        var ev    = (s.brightnessEv - 0.5) * 4
+        return "furicam2 | Mode:" + mode
+             + " | Tone:" + tone
+             + " | NR:" + lvl[s.noiseReductionLevel]
+             + " | Edge:" + lvl[s.edgeLevel]
+             + " | JPEG:" + s.jpegQuality
+             + " | RAW:" + (s.rawEnabled ? "on" : "off")
+             + " | WB:" + (wb[s.whiteBalanceMode] || "Auto")
+             + " | EV:" + (ev >= 0 ? "+" : "") + ev.toFixed(1)
+             + (s.colorCorrectionEnabled ? " | ColorCorr:on" : "")
+    }
+
     // Post-process + announce a saved photo (fires on the GUI thread).
     function onCam2PhotoSaved(path) {
         if (settings.colorCorrectionEnabled) {
@@ -332,6 +352,12 @@ Item {
         }
         if (window.locationAvailable === 1)
             fileManager.appendGPSMetadata(path)
+        // Stamp the app settings into the JPEG (and the DNG if present); write last
+        // so the color-correction re-encode above can't drop it.
+        var summary = captureSettingsSummary()
+        fileManager.writeCaptureSettings(path, summary)
+        if (settings.rawEnabled)
+            fileManager.writeCaptureSettings(path.replace(/\.jpe?g$/i, ".dng"), summary)
         photoSaved()
     }
 

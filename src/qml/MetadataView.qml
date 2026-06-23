@@ -40,6 +40,10 @@ Item {
                 metadataModel.append({title: "Exposure", value: fileManager.getExposure(url), dataHeight: avgMetadataContainerHeight});
                 metadataModel.append({title: "ISO", value: fileManager.getISOSpeed(url), dataHeight: avgMetadataContainerHeight});
                 metadataModel.append({title: "Focal Length", value: fileManager.focalLength(url), dataHeight: avgMetadataContainerHeight});
+                var capSettings = fileManager.getCaptureSettings(url);
+                if (capSettings && capSettings.length > 0) {
+                    metadataModel.append({title: "Capture Settings", value: capSettings, dataHeight: 80 * scalingRatio});
+                }
                 if(fileManager.gpsMetadataAvailable(url)) {
                     metadataModel.append({title: "GPS Data", value: fileManager.getGpsMetadata(url), dataHeight: 80 * scalingRatio});
                 }
