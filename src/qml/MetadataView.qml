@@ -40,12 +40,15 @@ Item {
                 metadataModel.append({title: "Exposure", value: fileManager.getExposure(url), dataHeight: avgMetadataContainerHeight});
                 metadataModel.append({title: "ISO", value: fileManager.getISOSpeed(url), dataHeight: avgMetadataContainerHeight});
                 metadataModel.append({title: "Focal Length", value: fileManager.focalLength(url), dataHeight: avgMetadataContainerHeight});
-                var capSettings = fileManager.getCaptureSettings(url);
-                if (capSettings && capSettings.length > 0) {
-                    metadataModel.append({title: "Capture Settings", value: capSettings, dataHeight: 80 * scalingRatio});
-                }
                 if(fileManager.gpsMetadataAvailable(url)) {
                     metadataModel.append({title: "GPS Data", value: fileManager.getGpsMetadata(url), dataHeight: 80 * scalingRatio});
+                }
+                var capSettings = fileManager.getCaptureSettings(url);
+                if (capSettings && capSettings.length > 0) {
+                    var capLines = capSettings.split(" | ");   // one setting per line (was running off-screen)
+                    metadataModel.append({title: "Capture Settings",
+                                          value: capLines.join("\n"),
+                                          dataHeight: (capLines.length * 26 + 44) * scalingRatio});
                 }
             }
         }
@@ -136,7 +139,9 @@ Item {
                                         font.pixelSize: metadataViewComponent.textSize
                                         style: Text.Raised
                                         styleColor: "black"
-                                        elide: Text.ElideRight
+                                        width: parent.width - 20 * metadataViewComponent.scalingRatio
+                                        wrapMode: Text.WordWrap
+                                        elide: Text.ElideNone
                                         anchors {
                                             left: parent.left
                                             bottom: parent.bottom

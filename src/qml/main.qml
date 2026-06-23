@@ -1214,7 +1214,7 @@ ApplicationWindow {
                         id: shutterBtnFrame
                         height: parent.height * 0.75
                         width: height
-                        radius: 75 * window.scalingRatio
+                        radius: width / 2
                         color: "white"
                         anchors.centerIn: parent
                         visible: cslate.state === "PhotoCapture"
@@ -1233,7 +1233,7 @@ ApplicationWindow {
                                     anchors.centerIn: parent
                                     height: shutterBtnFrame.height * 0.8
                                     width: height
-                                    radius: 55 * window.scalingRatio
+                                    radius: width / 2
                                     color: "black"
                                 }
 
@@ -1249,7 +1249,7 @@ ApplicationWindow {
                                         anchors.centerIn: parent
                                         height: shutterBtnFrame.height * 0.74
                                         width: height
-                                        radius: 55 * window.scalingRatio
+                                        radius: width / 2
                                         color: "white"
 
                                         SequentialAnimation on color {
