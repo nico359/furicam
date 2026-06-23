@@ -1,3 +1,18 @@
+furicam2 (2.3.0-1) unstable; urgency=medium
+
+  * Face capture mode now draws a box around each detected face on the
+    preview, smoothed with an exponential moving average (per-face
+    tracking, brief hold over detection gaps) so it glides rather than
+    jitters.  AF/AE already track faces via the HAL's FACE_PRIORITY scene.
+  * Enable antibanding (AUTO): the HAL cancels 50/60 Hz mains-light
+    flicker banding on the preview, video and stills.  No UI; just a
+    better default.
+  * Auto-flash no longer flickers the torch: a dark shot forces the flash
+    on the still request only, instead of briefly putting the preview
+    into always-flash (which acts as a torch on this HAL).
+
+ -- Sean Pollard <spollard08@gmail.com>  Tue, 23 Jun 2026 11:04:32 -0400
+
 furicam2 (2.2.2-1) unstable; urgency=medium
 
   * Gallery video fixes for the Camera2 .mp4 files: read the date from the
