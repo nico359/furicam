@@ -22,7 +22,9 @@
 #include <QVariant>
 #include <QMutex>
 #include <atomic>
+#include <array>
 #include <memory>
+#include <vector>
 
 // Forward declarations to keep NDK types out of QML/Qt headers.  The actual
 // types come from <camera/NdkCameraManager.h> et al. in the .cpp.
@@ -327,6 +329,9 @@ private:
     std::atomic<int32_t> lastIso_            {0};
     std::atomic<int64_t> lastExposureNs_     {0};
     std::atomic<int64_t> lastQrMs_           {0};   // throttle QR decode rate
+    // EMA-smoothed face boxes (x,y,w,h,missedFrames); touched only on the result
+    // callback thread, so no lock needed.
+    std::vector<std::array<double, 5>> smoothedFaces_;
     std::atomic<float>   previewAspectRatio_ {9.0f / 16.0f};
     std::atomic<float>   cropScaleX_         {1.0f};
     std::atomic<float>   cropScaleY_         {1.0f};

@@ -218,7 +218,10 @@ void Camera2Bridge::startCamera()
         const double cc = std::cos(rad), ss = std::sin(rad);
         const double cx = cropScaleX_.load(), cy = cropScaleY_.load();
         const bool mir = previewMirrored();
-        QVariantList out;
+
+        // Transform each raw face to {x,y,w,h} in preview-normalized space.
+        std::vector<std::array<double, 4>> raw;
+        raw.reserve(faces.size());
         for (const auto& f : faces) {
             const float xs[4] = { f[0], f[2], f[2], f[0] };
             const float ys[4] = { f[1], f[1], f[3], f[3] };
@@ -232,9 +235,49 @@ void Camera2Bridge::startCamera()
                 minx = std::min(minx, px); maxx = std::max(maxx, px);
                 miny = std::min(miny, py); maxy = std::max(maxy, py);
             }
+            raw.push_back({ minx, miny, maxx - minx, maxy - miny });
+        }
+
+        // Exponential moving average to kill per-frame jitter: greedily match each
+        // new face to the nearest tracked one, blend toward it, and hold a dropped
+        // face for a few frames so brief detection gaps don't flicker the box.
+        const double alpha = 0.3;          // ~3-4 frame time constant
+        const double assoc2 = 0.15 * 0.15; // max match distance^2 (center, normalized)
+        const double maxMissed = 6;
+        std::vector<std::array<double, 5>> next;          // x,y,w,h,missed
+        std::vector<bool> used(smoothedFaces_.size(), false);
+        for (const auto& r : raw) {
+            const double rcx = r[0] + r[2] / 2, rcy = r[1] + r[3] / 2;
+            int best = -1; double bestD = assoc2;
+            for (size_t i = 0; i < smoothedFaces_.size(); ++i) {
+                if (used[i]) continue;
+                const double scx = smoothedFaces_[i][0] + smoothedFaces_[i][2] / 2;
+                const double scy = smoothedFaces_[i][1] + smoothedFaces_[i][3] / 2;
+                const double d = (rcx - scx) * (rcx - scx) + (rcy - scy) * (rcy - scy);
+                if (d < bestD) { bestD = d; best = (int)i; }
+            }
+            std::array<double, 5> s;
+            if (best >= 0) {
+                used[best] = true;
+                for (int k = 0; k < 4; ++k)
+                    s[k] = alpha * r[k] + (1.0 - alpha) * smoothedFaces_[best][k];
+                s[4] = 0;
+            } else {
+                s = { r[0], r[1], r[2], r[3], 0 };   // newly appeared face
+            }
+            next.push_back(s);
+        }
+        // Carry over tracked faces that weren't matched this frame, briefly.
+        for (size_t i = 0; i < smoothedFaces_.size(); ++i) {
+            if (used[i] || smoothedFaces_[i][4] + 1 > maxMissed) continue;
+            auto s = smoothedFaces_[i]; s[4] += 1; next.push_back(s);
+        }
+        smoothedFaces_ = next;
+
+        QVariantList out;
+        for (const auto& s : next) {
             QVariantMap m;
-            m["x"] = minx; m["y"] = miny;
-            m["w"] = maxx - minx; m["h"] = maxy - miny;
+            m["x"] = s[0]; m["y"] = s[1]; m["w"] = s[2]; m["h"] = s[3];
             out.append(m);
         }
         QMetaObject::invokeMethod(this, [this, out] { emit facesDetected(out); }, Qt::QueuedConnection);
