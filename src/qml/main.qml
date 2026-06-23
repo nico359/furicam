@@ -156,11 +156,12 @@ ApplicationWindow {
     // and it propagates to all of those places at once.
     QtObject {
         id: defaults
-        readonly property int  sceneMode: 0
+        readonly property int  sceneMode: 1   // Face (FACE_PRIORITY) — ~= Auto with no face, better with one
         readonly property int  toneMap: 0
         readonly property real droStrength: 0.6
         readonly property bool rawEnabled: false
         readonly property bool zebraEnabled: false
+        readonly property bool evSliderVisible: true
         readonly property int  noiseReductionLevel: 2
         readonly property int  edgeLevel: 2
         readonly property real brightnessEv: 0.5
@@ -211,6 +212,7 @@ ApplicationWindow {
         property real droStrength: defaults.droStrength            // DRO/Contrast tone-curve strength [0..0.85]
         property bool rawEnabled: defaults.rawEnabled              // also save a .dng (raw) per shot
         property bool zebraEnabled: defaults.zebraEnabled          // preview clipping overlay
+        property bool evSliderVisible: defaults.evSliderVisible     // show the brightness/EV slider
         property int noiseReductionLevel: defaults.noiseReductionLevel   // 0=off, 1=fast, 2=high quality
         property int edgeLevel: defaults.edgeLevel                 // 0=off, 1=fast, 2=high quality
         property int videoResWidth: defaults.videoResWidth
@@ -660,7 +662,7 @@ ApplicationWindow {
         anchors.bottomMargin: 20 * window.scalingRatio
         width: 125 * window.scalingRatio   // wide invisible touch zone (2.5× the old 50)
         height: parent.height * 0.35
-        visible: !mediaView.visible && cameraLoader.item !== null
+        visible: settings.evSliderVisible && !mediaView.visible && cameraLoader.item !== null
         opacity: brightnessSlider.pressed ? 1.0 : 0.7
 
         Behavior on opacity { NumberAnimation { duration: 200 } }
@@ -668,7 +670,8 @@ ApplicationWindow {
         // Brightness icon badge
         Rectangle {
             id: brightnessLabel
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.horizontalCenter: parent.left
+            anchors.horizontalCenterOffset: 25 * window.scalingRatio
             anchors.bottom: brightnessSlider.top
             anchors.bottomMargin: 6 * window.scalingRatio
             width: 48 * window.scalingRatio
@@ -709,7 +712,7 @@ ApplicationWindow {
             }
 
             background: Rectangle {
-                x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
+                x: 25 * window.scalingRatio - width / 2   // visual at the left edge, mirroring the zoom slider
                 y: brightnessSlider.topPadding
                 width: 4 * window.scalingRatio
                 height: brightnessSlider.availableHeight
@@ -736,7 +739,7 @@ ApplicationWindow {
             }
 
             handle: Rectangle {
-                x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
+                x: 25 * window.scalingRatio - width / 2   // visual at the left edge, mirroring the zoom slider
                 y: brightnessSlider.topPadding + brightnessSlider.visualPosition * (brightnessSlider.availableHeight - height)
                 width: 30 * window.scalingRatio   // bigger, easier-to-grab ball
                 height: 30 * window.scalingRatio
@@ -2530,10 +2533,10 @@ ApplicationWindow {
                 }
             }
 
-            // Zebra: stripe blown highlights (red) + crushed shadows (blue) on the
-            // live preview — an exposure aid (correct with the brightness slider).
+            // Exposure Warning ("zebra"): stripe blown highlights (red) + crushed
+            // shadows (blue) on the live preview (correct with the brightness slider).
             Text {
-                text: "Zebra (Clipping)"
+                text: "Exposure Warning"
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
                 font.bold: true
@@ -2575,6 +2578,51 @@ ApplicationWindow {
                                 if (cameraLoader.item)
                                     cameraLoader.item.handleSetZebra(modelData.on);
                             }
+                        }
+                    }
+                }
+            }
+
+            // Show/hide the on-screen brightness (EV) slider.
+            Text {
+                text: "Brightness Slider"
+                color: "white"
+                font.pixelSize: 18 * window.scalingRatio
+                font.bold: true
+                leftPadding: 16 * window.scalingRatio
+                topPadding: 4 * window.scalingRatio
+            }
+
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 8 * window.scalingRatio
+
+                Repeater {
+                    model: [
+                        { label: "Hidden", on: false },
+                        { label: "Shown",  on: true  }
+                    ]
+                    delegate: Rectangle {
+                        width: evToggleText.implicitWidth + 28 * window.scalingRatio
+                        height: 38 * window.scalingRatio
+                        radius: 19 * window.scalingRatio
+                        color: settings.evSliderVisible === modelData.on ? "#444" : "#222"
+                        border.color: settings.evSliderVisible === modelData.on ? "#ffffff" : "#555"
+                        border.width: 1
+
+                        Text {
+                            id: evToggleText
+                            anchors.centerIn: parent
+                            text: (modelData.on === defaults.evSliderVisible ? "<font color='#f5c211'>★</font> " : "") + modelData.label
+                            textFormat: Text.StyledText
+                            color: "white"
+                            font.pixelSize: 14 * window.scalingRatio
+                            font.bold: settings.evSliderVisible === modelData.on
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: settings.evSliderVisible = modelData.on
                         }
                     }
                 }
@@ -2980,6 +3028,7 @@ ApplicationWindow {
                         settings.droStrength = defaults.droStrength
                         settings.rawEnabled = defaults.rawEnabled
                         settings.zebraEnabled = defaults.zebraEnabled
+                        settings.evSliderVisible = defaults.evSliderVisible
                         settings.noiseReductionLevel = defaults.noiseReductionLevel
                         settings.edgeLevel = defaults.edgeLevel
                         settings.brightnessEv = defaults.brightnessEv
