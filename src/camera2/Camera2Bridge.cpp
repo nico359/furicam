@@ -241,7 +241,7 @@ void Camera2Bridge::startCamera()
         // Exponential moving average to kill per-frame jitter: greedily match each
         // new face to the nearest tracked one, blend toward it, and hold a dropped
         // face for a few frames so brief detection gaps don't flicker the box.
-        const double alpha = 0.3;          // ~3-4 frame time constant
+        const double alpha = 0.7;          // ~1.5 frame time constant (light smoothing)
         const double assoc2 = 0.15 * 0.15; // max match distance^2 (center, normalized)
         const double maxMissed = 6;
         std::vector<std::array<double, 5>> next;          // x,y,w,h,missed
