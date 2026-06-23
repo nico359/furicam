@@ -2058,43 +2058,83 @@ ApplicationWindow {
                 leftPadding: 16 * window.scalingRatio
             }
 
-            ListView {
-                id: resolutionList
+            ComboBox {
+                id: photoResCombo
                 visible: cslate.state === "PhotoCapture"
-                width: parent.width
-                height: contentHeight
-                interactive: false   // don't capture drags — let the settings panel scroll as one
-                clip: true
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
                 model: cameraLoader.item ? cameraLoader.item.resolutionModel : null
-                spacing: 2 * window.scalingRatio
+                textRole: "label"
+                font.pixelSize: 15 * window.scalingRatio
 
-                delegate: Rectangle {
-                    width: resolutionList.width
-                    height: 44 * window.scalingRatio
-                    color: {
-                        if (cameraLoader.item && cameraLoader.item.currentResWidth === model.resWidth && cameraLoader.item.currentResHeight === model.resHeight) {
-                            return "#444";
-                        }
-                        return "transparent";
+                onActivated: {
+                    if (cameraLoader.item) {
+                        var m = cameraLoader.item.resolutionModel.get(index)
+                        cameraLoader.item.setResolution(m.resWidth, m.resHeight)
                     }
-                    radius: 4 * window.scalingRatio
+                }
 
-                    Text {
+                // Collapsed display: the active resolution's label (driven by the
+                // engine's current size, so Reset/camera-switch keep it in sync).
+                contentItem: Text {
+                    leftPadding: 14 * window.scalingRatio
+                    rightPadding: 36 * window.scalingRatio
+                    text: {
+                        var cam = cameraLoader.item
+                        if (!cam || !cam.resolutionModel) return ""
+                        for (var i = 0; i < cam.resolutionModel.count; i++) {
+                            var m = cam.resolutionModel.get(i)
+                            if (m.resWidth === cam.currentResWidth && m.resHeight === cam.currentResHeight)
+                                return m.label
+                        }
+                        return ""
+                    }
+                    color: "white"
+                    font: photoResCombo.font
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+                background: Rectangle {
+                    implicitHeight: 46 * window.scalingRatio
+                    color: "#222"; border.color: "#555"; border.width: 1
+                    radius: 8 * window.scalingRatio
+                }
+                indicator: Text {
+                    x: photoResCombo.width - width - 14 * window.scalingRatio
+                    y: (photoResCombo.height - height) / 2
+                    text: "▾"; color: "#aaa"; font.pixelSize: 16 * window.scalingRatio
+                }
+                delegate: ItemDelegate {
+                    width: photoResCombo.width
+                    height: 44 * window.scalingRatio
+                    highlighted: photoResCombo.highlightedIndex === index
+                    contentItem: Text {
+                        leftPadding: 14 * window.scalingRatio
                         text: (index === 0 ? "<font color='#f5c211'>★</font> " : "") + model.label
                         textFormat: Text.StyledText
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
-                        anchors.verticalCenter: parent.verticalCenter
-                        leftPadding: 16 * window.scalingRatio
+                        verticalAlignment: Text.AlignVCenter
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            if (cameraLoader.item) {
-                                cameraLoader.item.setResolution(model.resWidth, model.resHeight);
-                            }
-                        }
+                    background: Rectangle {
+                        color: highlighted ? "#444"
+                             : (cameraLoader.item && cameraLoader.item.currentResWidth === model.resWidth
+                                && cameraLoader.item.currentResHeight === model.resHeight) ? "#333" : "#262626"
+                    }
+                }
+                popup: Popup {
+                    y: photoResCombo.height + 2
+                    width: photoResCombo.width
+                    implicitHeight: Math.min(listView.contentHeight + 2, 360 * window.scalingRatio)
+                    padding: 1
+                    background: Rectangle { color: "#262626"; border.color: "#555"; radius: 8 * window.scalingRatio }
+                    contentItem: ListView {
+                        id: listView
+                        clip: true
+                        implicitHeight: contentHeight
+                        model: photoResCombo.popup.visible ? photoResCombo.delegateModel : null
+                        currentIndex: photoResCombo.highlightedIndex
+                        ScrollIndicator.vertical: ScrollIndicator {}
                     }
                 }
             }
@@ -2126,43 +2166,83 @@ ApplicationWindow {
                 leftPadding: 16 * window.scalingRatio
             }
 
-            ListView {
-                id: videoResolutionList
+            ComboBox {
+                id: videoResCombo
                 visible: cslate.state === "VideoCapture"
-                width: parent.width
-                height: contentHeight
-                interactive: false   // don't capture drags — let the settings panel scroll as one
-                clip: true
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
                 model: cameraLoader.item ? cameraLoader.item.videoResolutionModel : null
-                spacing: 2 * window.scalingRatio
+                textRole: "label"
+                font.pixelSize: 15 * window.scalingRatio
 
-                delegate: Rectangle {
-                    width: videoResolutionList.width
+                onActivated: {
+                    var m = cameraLoader.item.videoResolutionModel.get(index)
+                    settings.videoResWidth  = m.resWidth
+                    settings.videoResHeight = m.resHeight
+                    if (cameraLoader.item)   // apply now so the preview re-letterboxes (atomic w+h)
+                        cameraLoader.item.handleSetVideoResolution(m.resWidth, m.resHeight)
+                }
+
+                contentItem: Text {
+                    leftPadding: 14 * window.scalingRatio
+                    rightPadding: 36 * window.scalingRatio
+                    text: {
+                        var cam = cameraLoader.item
+                        if (!cam || !cam.videoResolutionModel) return ""
+                        for (var i = 0; i < cam.videoResolutionModel.count; i++) {
+                            var m = cam.videoResolutionModel.get(i)
+                            if (m.resWidth === settings.videoResWidth && m.resHeight === settings.videoResHeight)
+                                return m.label
+                        }
+                        return ""
+                    }
+                    color: "white"
+                    font: videoResCombo.font
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+                background: Rectangle {
+                    implicitHeight: 46 * window.scalingRatio
+                    color: "#222"; border.color: "#555"; border.width: 1
+                    radius: 8 * window.scalingRatio
+                }
+                indicator: Text {
+                    x: videoResCombo.width - width - 14 * window.scalingRatio
+                    y: (videoResCombo.height - height) / 2
+                    text: "▾"; color: "#aaa"; font.pixelSize: 16 * window.scalingRatio
+                }
+                delegate: ItemDelegate {
+                    width: videoResCombo.width
                     height: 44 * window.scalingRatio
-                    color: (settings.videoResWidth === model.resWidth && settings.videoResHeight === model.resHeight) ? "#444" : "transparent"
-                    radius: 4 * window.scalingRatio
-
-                    Text {
-                        // Recommended video default (4.9 MP / 2560×1920): full-FOV 4:3,
-                        // far lighter than 4K; star that entry rather than the largest.
+                    highlighted: videoResCombo.highlightedIndex === index
+                    contentItem: Text {
+                        leftPadding: 14 * window.scalingRatio
+                        // ★ the recommended 4.9 MP entry, not the largest.
                         text: ((model.resWidth === defaults.videoResWidth && model.resHeight === defaults.videoResHeight) ? "<font color='#f5c211'>★</font> " : "") + model.label
                         textFormat: Text.StyledText
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
-                        anchors.verticalCenter: parent.verticalCenter
-                        leftPadding: 16 * window.scalingRatio
+                        verticalAlignment: Text.AlignVCenter
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            settings.videoResWidth  = model.resWidth;
-                            settings.videoResHeight = model.resHeight;
-                            // Apply now so the preview re-letterboxes to the new
-                            // aspect immediately (atomic w+h).
-                            if (cameraLoader.item)
-                                cameraLoader.item.handleSetVideoResolution(model.resWidth, model.resHeight);
-                        }
+                    background: Rectangle {
+                        color: highlighted ? "#444"
+                             : (settings.videoResWidth === model.resWidth
+                                && settings.videoResHeight === model.resHeight) ? "#333" : "#262626"
+                    }
+                }
+                popup: Popup {
+                    y: videoResCombo.height + 2
+                    width: videoResCombo.width
+                    implicitHeight: Math.min(vListView.contentHeight + 2, 360 * window.scalingRatio)
+                    padding: 1
+                    background: Rectangle { color: "#262626"; border.color: "#555"; radius: 8 * window.scalingRatio }
+                    contentItem: ListView {
+                        id: vListView
+                        clip: true
+                        implicitHeight: contentHeight
+                        model: videoResCombo.popup.visible ? videoResCombo.delegateModel : null
+                        currentIndex: videoResCombo.highlightedIndex
+                        ScrollIndicator.vertical: ScrollIndicator {}
                     }
                 }
             }
