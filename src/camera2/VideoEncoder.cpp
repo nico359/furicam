@@ -122,6 +122,7 @@ bool VideoEncoder::beginClip(const std::string& path)
         firstVideoPtsUs_ = -1;
         firstAudioPtsUs_ = -1;
         lastOutputMs_    = nowMs();
+        clipBeginMs_     = lastOutputMs_;
         framesWritten_.store(0);
         audioFramesWritten_.store(0);
         clipActive_.store(true);
@@ -132,6 +133,8 @@ bool VideoEncoder::beginClip(const std::string& path)
             videoTrackReady_ = (trackIdx_ >= 0);
             maybeStartMuxerLocked();
         }
+        fprintf(stderr, "[fc2] beginClip: encoder was %s pre-fed (cachedFormat=%s)\n",
+                cachedFormat_ ? "ALREADY" : "NOT", cachedFormat_ ? "yes" : "no");
     }
 
     // Force an IDR so this clip's file starts on a keyframe (decodable alone).
@@ -164,8 +167,12 @@ void VideoEncoder::drainLoop()
                     if (!sawKeyFrame_ && (info.flags & BUFFER_FLAG_KEY_FRAME))
                         sawKeyFrame_ = true;
                     if (sawKeyFrame_) {
-                        if (firstVideoPtsUs_ < 0)
+                        if (firstVideoPtsUs_ < 0) {
                             firstVideoPtsUs_ = info.presentationTimeUs;
+                            fprintf(stderr, "[fc2] record-start latency: first video "
+                                    "frame muxed %lldms after beginClip\n",
+                                    (long long)(nowMs() - clipBeginMs_));
+                        }
                         AMediaCodecBufferInfo wi = info;
                         wi.presentationTimeUs = info.presentationTimeUs - firstVideoPtsUs_;
                         AMediaMuxer_writeSampleData(muxer_, (size_t)trackIdx_, buf, &wi);
@@ -179,6 +186,9 @@ void VideoEncoder::drainLoop()
             AMediaFormat* of = AMediaCodec_getOutputFormat(codec_);
             if (of) {
                 std::lock_guard<std::mutex> lk(muxerMutex_);
+                if (!cachedFormat_)
+                    fprintf(stderr, "[fc2] encoder produced first output (format known) "
+                            "— clipActive=%d\n", (int)clipActive_.load());
                 if (cachedFormat_)
                     AMediaFormat_delete(cachedFormat_);
                 cachedFormat_ = of;   // owned; re-used to add the track per clip
@@ -274,8 +284,18 @@ void VideoEncoder::maybeStartMuxerLocked()
         return;
     if (audioExpected_ && audioTrackIdx_ < 0)
         return;   // still waiting for the audio track to be added
-    if (AMediaMuxer_start(muxer_) == AMEDIA_OK)
+    if (AMediaMuxer_start(muxer_) == AMEDIA_OK) {
         muxerStarted_ = true;
+        // The clip's keyframe request in beginClip() may have already fired and been
+        // discarded while we waited for the audio track (the encoder is pre-fed and
+        // runs continuously through preview).  Force a fresh IDR now that both tracks
+        // are live, so the clip starts on the very next frame instead of waiting for
+        // the next natural GOP boundary (which made record-start latency jittery).
+        AMediaFormat* p = AMediaFormat_new();
+        AMediaFormat_setInt32(p, KEY_REQUEST_SYNC, 0);
+        AMediaCodec_setParameters(codec_, p);
+        AMediaFormat_delete(p);
+    }
 }
 
 void VideoEncoder::cancelAudioExpectation()
@@ -293,6 +313,8 @@ ssize_t VideoEncoder::addAudioTrack(AMediaFormat* fmt)
     if (!muxer_ || muxerStarted_)
         return -1;   // too late — the muxer was already started
     audioTrackIdx_ = AMediaMuxer_addTrack(muxer_, fmt);
+    fprintf(stderr, "[fc2] audio track added %lldms after beginClip\n",
+            (long long)(nowMs() - clipBeginMs_));
     maybeStartMuxerLocked();
     return audioTrackIdx_;
 }

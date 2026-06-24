@@ -509,6 +509,7 @@ void CameraSession::close()
     if (recordRequest_)       { ACaptureRequest_free(recordRequest_);            recordRequest_ = nullptr; }
     if (recordPreviewTarget_) { ACameraOutputTarget_free(recordPreviewTarget_);  recordPreviewTarget_ = nullptr; }
     if (recordTarget_)        { ACameraOutputTarget_free(recordTarget_);         recordTarget_ = nullptr; }
+    if (previewEncoderTarget_){ ACameraOutputTarget_free(previewEncoderTarget_); previewEncoderTarget_ = nullptr; }
     if (recordOutput_)        { ACaptureSessionOutput_free(recordOutput_);       recordOutput_ = nullptr; }
     videoMode_ = false;
 
@@ -808,6 +809,7 @@ void CameraSession::freeSessionKeepReaders()
     if (outputTarget_)        { ACameraOutputTarget_free(outputTarget_);          outputTarget_ = nullptr; }
     if (recordPreviewTarget_) { ACameraOutputTarget_free(recordPreviewTarget_);   recordPreviewTarget_ = nullptr; }
     if (recordTarget_)        { ACameraOutputTarget_free(recordTarget_);          recordTarget_ = nullptr; }
+    if (previewEncoderTarget_){ ACameraOutputTarget_free(previewEncoderTarget_);  previewEncoderTarget_ = nullptr; }
     if (analysisTarget_)      { ACameraOutputTarget_free(analysisTarget_);        analysisTarget_ = nullptr; }
     if (sessionOutput_)       { ACaptureSessionOutput_free(sessionOutput_);       sessionOutput_ = nullptr; }
     if (jpegOutput_)          { ACaptureSessionOutput_free(jpegOutput_);          jpegOutput_ = nullptr; }
@@ -909,6 +911,16 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         // Stabilize the idle (not-yet-recording) preview too, so its framing matches
         // the EIS-cropped recording (WYSIWYG); during recording it rides recordRequest_.
         applyVideoStabilization(previewRequest_);
+        // PREFEED (env-gated, default OFF): also target the encoder surface from the
+        // preview request, feeding the codec continuously while idle in video mode.
+        // This caches the output format early — BUT it keeps the encoder mid-GOP, so
+        // at record-start the next frame is a P-frame and the clip waits up to one
+        // i-frame-interval (1s) for the next natural keyframe (the encoder ignores
+        // request-sync-frame on this HAL).  Leaving it OFF lets the cold-but-open
+        // encoder emit a fresh IDR as its first fed frame → instant clip start.
+        if (getenv("FC2_PREFEED")
+            && ACameraOutputTarget_create(ew, &previewEncoderTarget_) == ACAMERA_OK)
+            ACaptureRequest_addTarget(previewRequest_, previewEncoderTarget_);
     }
 
     // Record request (targets the preview reader AND the encoder surface) so the
@@ -1017,6 +1029,13 @@ bool CameraSession::enterVideoMode(int width, int height, int fps, int bitrate)
     }
     videoMode_ = true;
     log(fmt("video mode ready: preview+encoder session (%dx%d@%d)", width, height, sessFps));
+    // Pre-warm the mic now (not at record-start): the GStreamer→AAC pipeline's cold
+    // start — open ALSA, prime the encoder, first sample — is ~0.5–1.2s, and the
+    // muxer can't start until the audio track is added, so that cold start was the
+    // dominant record-start latency.  Keep it hot (frames discarded) while in video
+    // mode; a failure is non-fatal (recording falls back to a cold/absent mic).
+    if (!prepareRecording())
+        log("video mode: mic pre-warm failed, will cold-start at record");
     return true;
 }
 
@@ -1034,6 +1053,7 @@ void CameraSession::exitVideoMode()
         encoder_->close();
         encoder_.reset();
     }
+    releaseRecording();   // stop the pre-warmed mic (no hot mic in photo mode)
     log("video mode exited: preview-only session, encoder closed");
 }
 

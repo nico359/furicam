@@ -137,6 +137,7 @@ private:
     int64_t        firstVideoPtsUs_ = -1;
     int64_t        firstAudioPtsUs_ = -1;
     int64_t        lastOutputMs_    = 0;       // for the soft-stop drain wait
+    int64_t        clipBeginMs_     = 0;       // beginClip() wall time, for record-start latency log
 
     std::thread        drainThread_;
     std::atomic<bool>  stopDrain_     {false};
