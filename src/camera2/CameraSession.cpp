@@ -1036,8 +1036,17 @@ bool CameraSession::enterVideoMode(int width, int height, int fps, int bitrate)
     // muxer can't start until the audio track is added, so that cold start was the
     // dominant record-start latency.  Keep it hot (frames discarded) while in video
     // mode; a failure is non-fatal (recording falls back to a cold/absent mic).
-    if (!prepareRecording())
+    if (!prepareRecording()) {
         log("video mode: mic pre-warm failed, will cold-start at record");
+    } else if (audioEnc_) {
+        // Stream every encoded AAC sample into the encoder's pre-record buffer (the
+        // ring) so the pre-roll has sound.  The mic outlives this only until
+        // exitVideoMode, which stops it BEFORE the encoder is destroyed.
+        VideoEncoder* enc = encoder_.get();
+        audioEnc_->setSink([enc](const uint8_t* d, int sz, int64_t pts) {
+            enc->bufferAudioSample(d, sz, pts);
+        });
+    }
     return true;
 }
 
@@ -1051,11 +1060,13 @@ void CameraSession::exitVideoMode()
     // Rebuild a preview-only session FIRST (drops the encoder surface output),
     // THEN close the encoder (releases the surface it owned).
     buildSessionFromReaders(/*withEncoder*/ false, previewFps_);
+    // Stop the mic FIRST: releaseRecording() joins its pull thread, so its sink (which
+    // holds a raw pointer to encoder_) can't fire while we destroy the encoder.
+    releaseRecording();   // stop the pre-warmed mic (no hot mic in photo mode)
     if (encoder_) {
         encoder_->close();
         encoder_.reset();
     }
-    releaseRecording();   // stop the pre-warmed mic (no hot mic in photo mode)
     log("video mode exited: preview-only session, encoder closed");
 }
 
@@ -1548,6 +1559,11 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
             lastError_ = "video mode active but encoder not open";
             return false;
         }
+        // Hand the encoder the AAC track format up front (the mic pre-warmed during
+        // preview, so it's ready) — beginClip adds both tracks and flushes the
+        // pre-roll (video + buffered audio).  Samples already stream in via the sink.
+        if (audioActive)
+            encoder_->setAudioFormat(audioEnc_->makeFormat());
         encoder_->expectAudio(audioActive);
         encoder_->setOrientation(captureOrientation());   // tag this clip with the current device tilt
         if (!encoder_->beginClip(path)) {
@@ -1556,14 +1572,11 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
                 audioEnc_.reset();
             return false;
         }
-        attachAudio();
         applyControls(recordRequest_);
         camera_status_t rcs = ACameraCaptureSession_setRepeatingRequest(
             captureSession_, nullptr, 1, &recordRequest_, nullptr);
         if (rcs != ACAMERA_OK) {
             lastError_ = fmt("switch to record request failed (status %d)", (int)rcs);
-            if (audioActive)
-                audioEnc_->detach();
             encoder_->endClip();
             return false;
         }
@@ -1676,15 +1689,15 @@ void CameraSession::stopRecording()
                                                       &previewRequest_, nullptr);
             activeRequest_ = previewRequest_;
         }
-        if (audioEnc_) {
-            audioEnc_->detach();
-            if (!audioPrewarmed_) {
-                audioEnc_->stop();
-                audioEnc_.reset();
-            }
+        // The mic keeps running — its sink keeps filling the pre-record ring for the
+        // next clip (no detach).  endClip finalizes the muxer; the sink's live writes
+        // then no-op until the next beginClip.  Only a non-pre-warmed mic is torn down.
+        if (audioEnc_ && !audioPrewarmed_) {
+            audioEnc_->stop();
+            audioEnc_.reset();
         }
         if (encoder_)
-            encoder_->endClip();   // soft-drain + finalize; encoder stays open
+            encoder_->endClip();   // finalize; encoder + mic stay live for the next clip
         recording_ = false;
         return;
     }

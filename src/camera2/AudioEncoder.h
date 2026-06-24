@@ -37,6 +37,10 @@ public:
     using AddTrackFn = std::function<ssize_t(AMediaFormat*)>;
     // Write one encoded AAC sample (data valid only for the call's duration).
     using WriteFn    = std::function<void(const uint8_t*, AMediaCodecBufferInfo)>;
+    // Persistent sink: called for EVERY sample once the format is known (data valid
+    // only for the call).  Used by the pre-record ring path — the consumer buffers
+    // samples itself and decides when to mux them.  Mutually exclusive with attach().
+    using SinkFn     = std::function<void(const uint8_t* data, int size, int64_t ptsUs)>;
 
     AudioEncoder() = default;
     ~AudioEncoder();
@@ -66,6 +70,12 @@ public:
     // Blocks until any in-flight write completes, so the muxer can then be
     // destroyed safely.
     void detach();
+
+    // Pre-record ring path: deliver every sample to this sink (set null to stop).
+    // Takes precedence over attach()'s callbacks.  Build the AAC track format from
+    // the cached caps (nullptr until the first sample); caller owns the result.
+    void setSink(SinkFn sink);
+    AMediaFormat* makeFormat() const;
 
     const std::string& lastError() const { return lastError_; }
     int  framesProduced() const;

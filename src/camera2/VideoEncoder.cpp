@@ -133,6 +133,7 @@ bool VideoEncoder::beginClip(const std::string& path)
         firstAudioPtsUs_ = -1;
         keyframeWallUs_        = -1;   // ring: set when we flush the start keyframe
         lastFlushedVideoPtsUs_ = -1;   // ring: high-water mark for live frames
+        lastFlushedAudioPtsUs_ = -1;
         lastOutputMs_    = nowMs();
         framesWritten_.store(0);
         audioFramesWritten_.store(0);
@@ -142,8 +143,12 @@ bool VideoEncoder::beginClip(const std::string& path)
         if (cachedFormat_) {
             trackIdx_        = AMediaMuxer_addTrack(muxer_, cachedFormat_);
             videoTrackReady_ = (trackIdx_ >= 0);
-            maybeStartMuxerLocked();
         }
+        // Add the AAC track up front too (its format was captured while pre-warming),
+        // so the muxer can start with both tracks and flush the pre-roll immediately.
+        if (audioExpected_ && cachedAudioFormat_ && audioTrackIdx_ < 0)
+            audioTrackIdx_ = AMediaMuxer_addTrack(muxer_, cachedAudioFormat_);
+        maybeStartMuxerLocked();
     }
 
     // Force an IDR so this clip's file starts on a keyframe (decodable alone).
@@ -274,6 +279,7 @@ void VideoEncoder::finalizeClipLocked()
     firstAudioPtsUs_ = -1;
     keyframeWallUs_        = -1;
     lastFlushedVideoPtsUs_ = -1;
+    lastFlushedAudioPtsUs_ = -1;
 }
 
 void VideoEncoder::close()
@@ -300,6 +306,10 @@ void VideoEncoder::close()
         AMediaFormat_delete(cachedFormat_);
         cachedFormat_ = nullptr;
     }
+    if (cachedAudioFormat_) {
+        AMediaFormat_delete(cachedAudioFormat_);
+        cachedAudioFormat_ = nullptr;
+    }
 }
 
 void VideoEncoder::maybeStartMuxerLocked()
@@ -313,10 +323,13 @@ void VideoEncoder::maybeStartMuxerLocked()
     if (AMediaMuxer_start(muxer_) == AMEDIA_OK) {
         muxerStarted_ = true;
         // Pre-record buffer: write the most recent keyframe-aligned GOP from the ring
-        // so the clip starts INSTANTLY from a keyframe already on hand.  If nothing
-        // was flushed (ring off/empty), fall back to forcing a fresh IDR and waiting
-        // for it (the next natural GOP boundary on a HAL that ignores the request).
-        if (!flushVideoRingLocked()) {
+        // so the clip starts INSTANTLY from a keyframe already on hand, then the
+        // matching buffered audio so the pre-roll has sound.  If nothing was flushed
+        // (ring off/empty), fall back to forcing a fresh IDR and waiting for it (the
+        // next natural GOP boundary on a HAL that ignores the request).
+        if (flushVideoRingLocked()) {
+            flushAudioRingLocked();
+        } else {
             AMediaFormat* p = AMediaFormat_new();
             AMediaFormat_setInt32(p, KEY_REQUEST_SYNC, 0);
             AMediaCodec_setParameters(codec_, p);
@@ -377,6 +390,89 @@ bool VideoEncoder::flushVideoRingLocked()
     return true;
 }
 
+// ── Pre-record audio ─────────────────────────────────────────────────────────
+void VideoEncoder::setAudioFormat(AMediaFormat* fmt)
+{
+    std::lock_guard<std::mutex> lk(muxerMutex_);
+    if (cachedAudioFormat_)
+        AMediaFormat_delete(cachedAudioFormat_);
+    cachedAudioFormat_ = fmt;   // takes ownership (may be nullptr)
+}
+
+void VideoEncoder::pruneAudioRingLocked(int64_t nowU)
+{
+    while (audioRing_.size() > 1 && audioRing_.front().wallUs < nowU - ringWindowUs_)
+        audioRing_.pop_front();
+}
+
+void VideoEncoder::bufferAudioSample(const uint8_t* data, int size, int64_t ptsUs)
+{
+    if (!data || size <= 0)
+        return;
+    const int64_t wallU = nowUs();
+    std::lock_guard<std::mutex> lk(muxerMutex_);
+
+    if (ringEnabled_) {
+        audioRing_.push_back(AudioFrame{
+            std::vector<uint8_t>(data, data + size), ptsUs, wallU});
+        pruneAudioRingLocked(wallU);
+    }
+
+    // Live write: hold until the first video frame is muxed (so the soundtrack's zero
+    // aligns with the picture), then write samples past the flush high-water mark.
+    if (muxer_ && muxerStarted_ && audioTrackIdx_ >= 0 && firstVideoPtsUs_ >= 0
+        && ptsUs > lastFlushedAudioPtsUs_) {
+        if (firstAudioPtsUs_ < 0) {
+            // No pre-roll audio was flushed (e.g. ring off): align this first sample
+            // to the video start keyframe via the wall clock (a brief silent lead-in),
+            // or to itself when there's no keyframe reference (legacy/no-ring).
+            int64_t offset = (keyframeWallUs_ >= 0) ? (wallU - keyframeWallUs_) : 0;
+            if (offset < 0) offset = 0;
+            firstAudioPtsUs_ = ptsUs - offset;
+        }
+        AMediaCodecBufferInfo info{};
+        info.offset            = 0;
+        info.size              = size;
+        info.flags             = 0;
+        info.presentationTimeUs = ptsUs - firstAudioPtsUs_;
+        if (info.presentationTimeUs < 0)
+            info.presentationTimeUs = 0;
+        AMediaMuxer_writeSampleData(muxer_, (size_t)audioTrackIdx_, data, &info);
+        audioFramesWritten_.fetch_add(1, std::memory_order_relaxed);
+        lastFlushedAudioPtsUs_ = ptsUs;
+    }
+}
+
+// Write buffered AAC from the video start keyframe's wall time onward, aligned so the
+// first such sample lands at its true offset after the keyframe — filling the video
+// pre-roll with sound.  Caller holds muxerMutex_ and has already flushed the video.
+void VideoEncoder::flushAudioRingLocked()
+{
+    if (!ringEnabled_ || keyframeWallUs_ < 0 || audioTrackIdx_ < 0 || audioRing_.empty())
+        return;
+    size_t startIdx = audioRing_.size();
+    for (size_t i = 0; i < audioRing_.size(); ++i)
+        if (audioRing_[i].wallUs >= keyframeWallUs_) { startIdx = i; break; }
+    if (startIdx >= audioRing_.size())
+        return;   // no buffered audio overlaps the pre-roll yet
+
+    const AudioFrame& a0 = audioRing_[startIdx];
+    firstAudioPtsUs_ = a0.ptsUs - (a0.wallUs - keyframeWallUs_);
+    for (size_t i = startIdx; i < audioRing_.size(); ++i) {
+        const AudioFrame& a = audioRing_[i];
+        AMediaCodecBufferInfo info{};
+        info.offset            = 0;
+        info.size              = (int32_t)a.data.size();
+        info.flags             = 0;
+        info.presentationTimeUs = a.ptsUs - firstAudioPtsUs_;
+        if (info.presentationTimeUs < 0)
+            info.presentationTimeUs = 0;
+        AMediaMuxer_writeSampleData(muxer_, (size_t)audioTrackIdx_, a.data.data(), &info);
+        audioFramesWritten_.fetch_add(1, std::memory_order_relaxed);
+        lastFlushedAudioPtsUs_ = a.ptsUs;
+    }
+}
+
 void VideoEncoder::cancelAudioExpectation()
 {
     std::lock_guard<std::mutex> lk(muxerMutex_);
@@ -405,23 +501,10 @@ void VideoEncoder::writeAudioSample(const uint8_t* data, AMediaCodecBufferInfo i
         return;   // drop pre-roll / between-clip audio until both tracks are live
     if (firstVideoPtsUs_ < 0)
         return;   // hold audio until the first (key)frame is muxed, so the
-                  // soundtrack's zero aligns with the picture.  The muxer starts
-                  // when the video TRACK is added (before its first frame), and the
-                  // hot mic would otherwise write ~0.7s of audio ahead of the video.
-    if (firstAudioPtsUs_ < 0) {
-        // Place this first audio sample at its true offset after the video start
-        // keyframe.  With the pre-record ring the clip's video begins up to one GOP
-        // before the record button, so audio (which starts at the button) must land
-        // at that pre-roll offset — bridging the two clocks via the wall clock.  The
-        // pre-roll's leading [0..offset] has video but no audio (a brief silent
-        // lead-in).  Without the ring keyframeWallUs_ is -1 → offset 0 (unchanged).
-        int64_t offsetUs = 0;
-        if (keyframeWallUs_ >= 0) {
-            offsetUs = nowUs() - keyframeWallUs_;   // ~ (button - keyframe) = pre-roll
-            if (offsetUs < 0) offsetUs = 0;
-        }
-        firstAudioPtsUs_ = info.presentationTimeUs - offsetUs;
-    }
+                  // soundtrack's zero aligns with the picture.  (Legacy record-only
+                  // path; the ring path uses bufferAudioSample() instead.)
+    if (firstAudioPtsUs_ < 0)
+        firstAudioPtsUs_ = info.presentationTimeUs;
     info.presentationTimeUs -= firstAudioPtsUs_;
     if (info.presentationTimeUs < 0)
         info.presentationTimeUs = 0;

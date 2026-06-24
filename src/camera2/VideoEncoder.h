@@ -106,6 +106,14 @@ public:
     // clip then begins up to one GOP before the record button (a tight pre-roll).
     void enableRing(bool on) { ringEnabled_ = on; }
 
+    // Pre-record AUDIO: set the AAC track format (from AudioEncoder::makeFormat(),
+    // takes ownership) before beginClip(), then feed every encoded AAC sample via
+    // bufferAudioSample().  Pre-warm samples are buffered alongside the video GOPs so
+    // the pre-roll has sound too (no silent lead-in).  These replace the attach()/
+    // addAudioTrack()/writeAudioSample() path used by the legacy record-only flow.
+    void setAudioFormat(AMediaFormat* fmt);
+    void bufferAudioSample(const uint8_t* data, int size, int64_t ptsUs);
+
     // The audio source could not start — stop waiting for it (video-only).
     void cancelAudioExpectation();
 
@@ -130,6 +138,8 @@ private:
     // Ring-buffer helpers (caller holds muxerMutex_).
     void pruneVideoRingLocked(int64_t nowU);   // drop history past the window, keep a leading IDR
     bool flushVideoRingLocked();               // write [last keyframe..now] to the muxer; false if no keyframe
+    void pruneAudioRingLocked(int64_t nowU);
+    void flushAudioRingLocked();               // write buffered AAC from the video start keyframe onward
 
     // One encoded H.264 access unit retained for the pre-record buffer.
     struct RingFrame {
@@ -137,6 +147,12 @@ private:
         int64_t              ptsUs;    // encoder (sensor-clock) PTS
         int64_t              wallUs;   // dequeue wall time (steady clock)
         bool                 key;      // IDR keyframe
+    };
+    // One encoded AAC sample retained for the pre-record buffer.
+    struct AudioFrame {
+        std::vector<uint8_t> data;
+        int64_t              ptsUs;    // GStreamer-clock PTS
+        int64_t              wallUs;   // delivery wall time (steady clock)
     };
 
     // Persistent codec + surface.
@@ -165,6 +181,9 @@ private:
     int64_t               ringWindowUs_          = 1500000;   // ~1.5s of history
     int64_t               keyframeWallUs_        = -1;        // start keyframe's wall time (audio pre-roll align)
     int64_t               lastFlushedVideoPtsUs_ = -1;        // high-water mark; live frames must exceed it
+    std::deque<AudioFrame> audioRing_;
+    AMediaFormat*         cachedAudioFormat_     = nullptr;   // AAC track format (owned)
+    int64_t               lastFlushedAudioPtsUs_ = -1;        // high-water mark for audio
 
     std::thread        drainThread_;
     std::atomic<bool>  stopDrain_     {false};

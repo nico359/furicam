@@ -71,6 +71,7 @@ struct AudioEncoder::Impl {
     bool                 trackAdded = false;
     AddTrackFn           addTrack;
     WriteFn              write;
+    SinkFn               sampleSink; // pre-record ring path; takes precedence over attach
 };
 
 AudioEncoder::~AudioEncoder()
@@ -182,6 +183,30 @@ void AudioEncoder::detach()
     d_->write      = nullptr;
 }
 
+void AudioEncoder::setSink(SinkFn sink)
+{
+    if (!d_)
+        return;
+    std::lock_guard<std::mutex> lk(d_->mtx);
+    d_->sampleSink = std::move(sink);
+}
+
+AMediaFormat* AudioEncoder::makeFormat() const
+{
+    if (!d_)
+        return nullptr;
+    std::lock_guard<std::mutex> lk(d_->mtx);
+    if (!d_->formatReady)
+        return nullptr;
+    AMediaFormat* fmt = AMediaFormat_new();
+    AMediaFormat_setString(fmt, "mime", "audio/mp4a-latm");
+    AMediaFormat_setInt32(fmt, "sample-rate", d_->rate);
+    AMediaFormat_setInt32(fmt, "channel-count", d_->channels);
+    AMediaFormat_setInt32(fmt, "aac-profile", 2);   // AOT_LC
+    AMediaFormat_setBuffer(fmt, "csd-0", d_->asc.data(), d_->asc.size());
+    return fmt;
+}
+
 void AudioEncoder::pullLoop()
 {
     while (!d_->stopping.load()) {
@@ -228,7 +253,10 @@ void AudioEncoder::pullLoop()
                 GST_BUFFER_PTS_IS_VALID(buf) ? (int64_t)(GST_BUFFER_PTS(buf) / 1000) : 0;
 
             std::lock_guard<std::mutex> lk(d_->mtx);
-            if (d_->active) {
+            if (d_->sampleSink) {
+                // Pre-record ring path: the consumer buffers + muxes the sample itself.
+                d_->sampleSink(map.data, (int)map.size, info.presentationTimeUs);
+            } else if (d_->active) {
                 if (!d_->trackAdded && d_->addTrack && d_->formatReady) {
                     AMediaFormat* fmt = AMediaFormat_new();
                     AMediaFormat_setString(fmt, "mime", "audio/mp4a-latm");
@@ -294,6 +322,8 @@ bool AudioEncoder::start(int, int, int)
 
 void AudioEncoder::attach(AddTrackFn, WriteFn) {}
 void AudioEncoder::detach()  {}
+void AudioEncoder::setSink(SinkFn) {}
+AMediaFormat* AudioEncoder::makeFormat() const { return nullptr; }
 void AudioEncoder::stop()    {}
 void AudioEncoder::pullLoop() {}
 
