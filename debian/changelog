@@ -1,3 +1,22 @@
+furicam2 (2.4.0-1) unstable; urgency=medium
+
+  * Video recording now starts instantly.  The encoder is fed continuously
+    while you're in video mode, and the most recent ~1.5s of encoded video and
+    AAC audio is kept in a pre-record ring buffer, so a clip begins from a
+    keyframe (and matching sound) already in hand instead of waiting for the
+    encoder/mic to spin up.  Record-start latency dropped from ~0.6-1.2s to
+    ~40ms, and each clip includes a short (~0.5s) pre-roll of the moment just
+    before you pressed record.
+  * Pre-warm the microphone on entering video mode (frames discarded until
+    recording) so the audio track is ready in a few ms at record instead of
+    cold-starting the GStreamer/AAC pipeline (~0.5-1.2s) on the button press;
+    the pre-roll audio is aligned to the start keyframe so it stays in sync.
+  * Known: a faint crackle can be heard at the very start and end of clips - an
+    inherent artifact of slicing the AAC stream at arbitrary cut points, not a
+    timing error (the packet stream is exactly spaced).
+
+ -- Sean Pollard <spollard08@gmail.com>  Wed, 24 Jun 2026 16:27:20 -0400
+
 furicam2 (2.3.2-1) unstable; urgency=medium
 
   * Fix audio/video sync: recorded clips had the soundtrack ~0.7s ahead
