@@ -183,6 +183,7 @@ ApplicationWindow {
         property real colorCorrectionBlue:  1.00
         property real colorCorrectionSaturation: 1.20
         property bool hdrEnabled: false
+        property bool rawEnabled: false     // RAW (DNG) capture alongside JPEG
         property bool manualExposureEnabled: false
         property int  manualIso: 200
         property int  manualExposureMs: 33
@@ -1781,6 +1782,29 @@ ApplicationWindow {
                         icon.color: settings.levelEnabled === 1 ? "white" : "grey"
                         background: Rectangle { color: "transparent" }
                         onClicked: { settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1 }
+                    }
+
+                    // RAW (DNG): save a color-accurate raw alongside each JPEG
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        contentItem: Text {
+                            text: "RAW"
+                            color: settings.rawEnabled ? "#f0c040" : "grey"
+                            font.pixelSize: 13 * window.scalingRatio
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle { color: "transparent" }
+
+                        onClicked: {
+                            settings.rawEnabled = !settings.rawEnabled
+                            if (cameraLoader.item)
+                                cameraLoader.item.handleSetRaw(settings.rawEnabled)
+                        }
                     }
                 }
 
