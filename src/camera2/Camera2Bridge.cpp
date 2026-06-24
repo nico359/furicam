@@ -882,6 +882,22 @@ void Camera2Bridge::setJpegQuality(int quality)
         session_->setJpegQuality(quality);
 }
 
+void Camera2Bridge::setRawEnabled(bool on)
+{
+    if (session_)
+        session_->setRawEnabled(on);
+}
+
+bool Camera2Bridge::rawSupported() const
+{
+    return session_ && session_->rawSupported();
+}
+
+bool Camera2Bridge::isRawEnabled() const
+{
+    return session_ && session_->isRawEnabled();
+}
+
 void Camera2Bridge::qrDecode(const uint8_t* y, int w, int h, int stride)
 {
     if (!y || w <= 0 || h <= 0)

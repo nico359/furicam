@@ -239,6 +239,12 @@ public:
     Q_INVOKABLE void setResolution(int width, int height);
     Q_INVOKABLE void setJpegQuality(int quality);   // 1..100; HAL encodes at this directly
 
+    // RAW/DNG capture — toggle DNG alongside JPEG.  When on, each shot saves a
+    // .dng next to the .jpg.  No-op if the camera lacks RAW capability.
+    Q_INVOKABLE void setRawEnabled(bool on);
+    Q_INVOKABLE bool rawSupported() const;
+    Q_INVOKABLE bool isRawEnabled() const;
+
     // Video recording size (e.g. 3840x2160, 1920x1080).  Applied to the encoder;
     // if already in video mode (and not recording) the session is rebuilt at the
     // new size.  Bind to the app's video-resolution setting.

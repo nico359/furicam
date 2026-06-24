@@ -16,11 +16,14 @@
 #define FURICAM_CAMERA_SESSION_H
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "Camera2NDK.h"
@@ -58,6 +61,21 @@ public:
         bool manualSensor      = false;  // derived: MANUAL_SENSOR capability present
         float minFocusDistance = 0.0f;   // 0 = fixed focus; diopters (>0 = closest focus distance)
         int   focusDistanceCalibration = 0;  // LENS_INFO_FOCUS_DISTANCE_CALIBRATION: 0=UNCALIBRATED, 1=APPROXIMATE, 2=CALIBRATED
+        // ── RAW/DNG characteristics ───────────────────────────────────────
+        bool  rawSupported  = false;     // RAW capability + a RAW16 output size present
+        int   raw16W        = 0;         // largest RAW16 output size
+        int   raw16H        = 0;
+        int   whiteLevel    = 1023;
+        int   blackLevel[4] = {64, 64, 64, 64};
+        int   cfaArrangement = 0;        // 0=RGGB 1=GRBG 2=GBRG 3=BGGR
+        int   refIlluminant1 = 21, refIlluminant2 = 17;
+        bool  haveColor2  = false;       // dual-illuminant calibration present
+        bool  haveForward = false;       // forward matrices present
+        double colorMatrix1[9]   = {0};  // SENSOR_COLOR_TRANSFORM1 (XYZ->camera)
+        double colorMatrix2[9]   = {0};
+        double forwardMatrix1[9] = {0};  // SENSOR_FORWARD_MATRIX1  (camera->XYZ D50)
+        double forwardMatrix2[9] = {0};
+        double neutralColorPoint[3] = {1, 1, 1};  // AsShotNeutral fallback
         std::vector<int>          capabilities;  // ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_*
         std::vector<StreamConfig> outputs;       // output stream configs only
     };
@@ -136,6 +154,14 @@ public:
     // so the HAL encodes at the chosen quality directly (no on-disk re-encode).
     void setJpegQuality(int q) { jpegQuality_ = q < 1 ? 1 : (q > 100 ? 100 : q); }
 
+    // ── RAW/DNG capture ─────────────────────────────────────────────────
+    // When enabled, each shot also saves a color-accurate .dng (the RAW16
+    // stream replaces the live-QR stream — 3-stream HAL limit).  Toggling
+    // rebuilds the preview session.  No-op if the camera lacks RAW capability.
+    void setRawEnabled(bool on);
+    bool isRawEnabled() const { return rawEnabled_; }
+    bool rawSupported() const;
+
     // ── Video recording (Milestone 5) ────────────────────────────────────────
     // Record hardware H.264 to an MP4 at `path`.  Reconfigures the camera into a
     // dedicated recording session whose output is the H.264 encoder's input
@@ -193,8 +219,10 @@ public:
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
     int   aeState() const { return lastAeState_.load(); }  // ACAMERA_CONTROL_AE_STATE_* (result)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
-    float maxZoomRatio() const { return 4.0f; }            // this device reports 4x
+    float maxZoomRatio() const { return 4.0f; }            // ponytail: override value from HAL later
 
+    // Look up the CameraInfo for the currently open camera (DNG metadata).
+    const CameraInfo* activeInfo() const;            // this device reports 4x
     // Drain the reader from the *calling* thread (cross-check for whether frames
     // are arriving independently of the image-available callback).  Returns the
     // number of frames drained this call; also updates frameCount()/last*.
@@ -242,8 +270,13 @@ private:
     void freeSessionKeepReaders();          // free session/outputs/requests, keep readers
     bool buildSessionFromReaders(bool withEncoder, int targetFps);  // (re)build the session
     bool maxJpegSize(int* w, int* h) const;  // largest JPEG output of the open camera
+    bool ensureRawReader();                  // create the RAW16 reader/window (lazily)
     void applyControls(ACaptureRequest* req) const;  // write control state into a request
     bool applyControlsToActive();                    // re-submit the active repeating request
+
+    // Background writer thread for serializing JPEG/DNG to disk (fast shot-to-shot).
+    void enqueueWrite(std::function<void()> job);
+    void stopWriter();
 
     // ACameraDevice_StateCallbacks targets (context is the CameraSession*).
     static void onDeviceDisconnected(void* ctx, ACameraDevice* device);
@@ -252,6 +285,7 @@ private:
     // Streaming callbacks (context is the CameraSession*).
     static void onImageAvailable(void* ctx, AImageReader* reader);
     static void onJpegImageAvailable(void* ctx, AImageReader* reader);
+    static void onRawImageAvailable(void* ctx, AImageReader* reader);
     static void onAnalysisImageAvailable(void* ctx, AImageReader* reader);
     static void onSessionActive(void* ctx, ACameraCaptureSession* session);
     static void onSessionReady(void* ctx, ACameraCaptureSession* session);
@@ -280,6 +314,11 @@ private:
     ACameraCaptureSession_stateCallbacks sessionCb_{};
     ACameraCaptureSession_captureCallbacks resultCb_{};   // reads AE_STATE off results
     std::atomic<int>                     lastAeState_{0};
+    std::mutex                           resultMutex_;
+    float                                resultGains_[4] = {1, 1, 1, 1};
+    bool                                 haveResultGains_ = false;
+    int32_t                              resultIso_        = 0;
+    int64_t                              resultExposureNs_ = 0;
     bool                                 streaming_ = false;
     int                                  previewFps_ = 30;
 
@@ -304,6 +343,19 @@ private:
     std::mutex                 photoMutex_;
     std::string                pendingPhotoPath_;
     std::function<void(const std::string&, bool)> photoCallback_;
+
+    // RAW16 output for DNG capture — swaps in for the analysis stream when raw is
+    // enabled.  rawStillTarget_ is added to the still capture request so both a
+    // JPEG and a RAW16 arrive per shot; onRawImageAvailable writes a .dng.
+    bool                       rawEnabled_     = false;
+    AImageReader*              rawReader_      = nullptr;
+    ANativeWindow*             rawWindow_      = nullptr;
+    ACaptureSessionOutput*     rawOutput_      = nullptr;
+    ACameraOutputTarget*       rawStillTarget_ = nullptr;
+    AImageReader_ImageListener rawListener_{};
+    int                        rawW_           = 0;
+    int                        rawH_           = 0;
+    std::string                pendingRawPath_;          // set under photoMutex_
 
     // Analysis YUV output (CPU-readable luma) for QR/barcode scanning — added to
     // the preview-only session (not video mode).  The listener hands the Y plane
@@ -350,6 +402,14 @@ private:
     std::atomic<int64_t> lastTimestampNs_   {0};
     std::atomic<int>     callbackCount_     {0};
     std::atomic<int>     lastAcquireStatus_ {0};
+
+    // Background writer thread — lazily started on first enqueueWrite.
+    std::thread                       writerThread_;
+    std::mutex                        writerMutex_;
+    std::condition_variable           writerCv_;
+    std::deque<std::function<void()>> writerJobs_;
+    bool                              writerStop_    = false;
+    bool                              writerStarted_ = false;
 };
 
 } // namespace furicam

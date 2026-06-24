@@ -7,9 +7,13 @@
 #include "CameraSession.h"
 #include "VideoEncoder.h"
 #include "AudioEncoder.h"   // gst-free header; a stub backs it when audio is off
+#include "DngWriter.h"      // dependency-free DNG (TIFF/EP) writer for RAW16 capture
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
+#include <condition_variable>
+#include <deque>
 #include <thread>
 #include <utility>
 
@@ -92,6 +96,51 @@ std::string fmt(const char* f, ...)
 
 } // namespace
 
+// ── Background writer thread ───────────────────────────────────────────────
+// Lazy-start a single worker that serializes JPEG/DNG disk writes so camera
+// buffers free quickly (fast shot-to-shot).  Runs jobs serially; on stop it
+// drains the remaining queue (so pending photos finish) then exits.
+
+void CameraSession::enqueueWrite(std::function<void()> job)
+{
+    {
+        std::lock_guard<std::mutex> lk(writerMutex_);
+        if (!writerStarted_) {
+            writerStarted_ = true;
+            writerStop_    = false;
+            writerThread_  = std::thread([this]() {
+                for (;;) {
+                    std::function<void()> j;
+                    {
+                        std::unique_lock<std::mutex> lk(writerMutex_);
+                        writerCv_.wait(lk, [this] { return writerStop_ || !writerJobs_.empty(); });
+                        if (writerJobs_.empty()) return;   // woken to stop, nothing left
+                        j = std::move(writerJobs_.front());
+                        writerJobs_.pop_front();
+                    }
+                    j();
+                }
+            });
+        }
+        writerJobs_.push_back(std::move(job));
+    }
+    writerCv_.notify_one();
+}
+
+void CameraSession::stopWriter()
+{
+    if (!writerStarted_)
+        return;
+    {
+        std::lock_guard<std::mutex> lk(writerMutex_);
+        writerStop_ = true;
+    }
+    writerCv_.notify_all();
+    if (writerThread_.joinable())
+        writerThread_.join();
+    writerStarted_ = false;
+}
+
 CameraSession::CameraSession(LogFn log)
     : logFn_(std::move(log))
 {
@@ -105,6 +154,7 @@ CameraSession::CameraSession(LogFn log)
 
 CameraSession::~CameraSession()
 {
+    stopWriter();     // drain queued JPEG/DNG writes while members are alive
     stopRecording();
     close();
     if (manager_) {
@@ -234,6 +284,75 @@ bool CameraSession::readInfo(const std::string& id, CameraInfo* out)
         }
     }
 
+    // ── RAW/DNG characteristics ─────────────────────────────────────────
+    // RAW capability check: look for RAW capability + the largest RAW16 output.
+    info.rawSupported = false;
+    for (int cap : info.capabilities)
+        if (cap == ACAMERA_REQUEST_AVAILABLE_CAPABILITIES_RAW)
+            info.rawSupported = true;
+    if (info.rawSupported) {
+        // Find the largest RAW16 output
+        for (const auto& s : info.outputs) {
+            if (s.format == AIMAGE_FORMAT_RAW16) {
+                long area = (long)s.width * s.height;
+                if (area > (long)info.raw16W * info.raw16H) {
+                    info.raw16W = s.width;
+                    info.raw16H = s.height;
+                }
+            }
+        }
+        if (info.raw16W <= 0) info.rawSupported = false;  // no RAW16 size found
+    }
+
+    // White level (DNG WhiteLevel tag)
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_INFO_WHITE_LEVEL, &e) == ACAMERA_OK && e.count >= 1)
+        info.whiteLevel = e.data.i32[0];
+    // Black level per Bayer channel (DNG BlackLevel tag; 4 elements: R,Gr,Gb,B or
+    // a single element repeated).
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_BLACK_LEVEL_PATTERN, &e) == ACAMERA_OK && e.count >= 4) {
+        for (int k = 0; k < 4; ++k) info.blackLevel[k] = e.data.i32[k];
+    } else if (e.count == 1) {
+        for (int k = 0; k < 4; ++k) info.blackLevel[k] = e.data.i32[0];
+    }
+    // Color filter array arrangement (DNG CFAPattern: 0=RGGB 1=GRBG 2=GBRG 3=BGGR)
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_INFO_COLOR_FILTER_ARRANGEMENT, &e) == ACAMERA_OK && e.count >= 1)
+        info.cfaArrangement = (int)e.data.u8[0];
+    // Reference illuminants for the two color matrices
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_REFERENCE_ILLUMINANT1, &e) == ACAMERA_OK && e.count >= 1)
+        info.refIlluminant1 = e.data.i32[0];
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_REFERENCE_ILLUMINANT2, &e) == ACAMERA_OK && e.count >= 1)
+        info.refIlluminant2 = e.data.i32[0];
+    // Color transform matrices (XYZ → camera raw; 9-element rationals)
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_COLOR_TRANSFORM1, &e) == ACAMERA_OK && e.count >= 18) {
+        for (int k = 0; k < 9; ++k)
+            info.colorMatrix1[k] = (e.data.r[k].denominator != 0)
+                ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
+    }
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_COLOR_TRANSFORM2, &e) == ACAMERA_OK && e.count >= 18) {
+        for (int k = 0; k < 9; ++k)
+            info.colorMatrix2[k] = (e.data.r[k].denominator != 0)
+                ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
+        info.haveColor2 = true;
+    }
+    // Forward matrices (camera raw → XYZ D50; 9-element rationals)
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_FORWARD_MATRIX1, &e) == ACAMERA_OK && e.count >= 18) {
+        for (int k = 0; k < 9; ++k)
+            info.forwardMatrix1[k] = (e.data.r[k].denominator != 0)
+                ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
+    }
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_FORWARD_MATRIX2, &e) == ACAMERA_OK && e.count >= 18) {
+        for (int k = 0; k < 9; ++k)
+            info.forwardMatrix2[k] = (e.data.r[k].denominator != 0)
+                ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
+        info.haveForward = true;
+    }
+    // Neutral color point (AsShotNeutral fallback when no WB gains cached)
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_NEUTRAL_COLOR_POINT, &e) == ACAMERA_OK && e.count >= 3) {
+        for (int k = 0; k < 3; ++k)
+            info.neutralColorPoint[k] = (e.data.r[k].denominator != 0)
+                ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 1.0;
+    }
+
     ACameraMetadata_free(meta);
     *out = std::move(info);
     return true;
@@ -302,6 +421,11 @@ void CameraSession::close()
         encoder_.reset();
     }
     freeStreamResources();
+    // Long-lived RAW reader persists across preview rebuilds; clean it up on close.
+    if (rawStillTarget_) { ACameraOutputTarget_free(rawStillTarget_); rawStillTarget_ = nullptr; }
+    if (rawOutput_)      { ACaptureSessionOutput_free(rawOutput_);      rawOutput_ = nullptr; }
+    if (rawWindow_)      { ANativeWindow_release(rawWindow_);           rawWindow_ = nullptr; }
+    if (rawReader_)      { AImageReader_delete(rawReader_);             rawReader_ = nullptr; }
     openId_.clear();
 }
 
@@ -378,9 +502,17 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         }
     }
 
+    // RAW16 output for DNG capture — takes the third stream slot when raw is on,
+    // displacing the live-QR stream (preview + JPEG + RAW = the 3-stream limit).
+    if (withStill && rawEnabled_ && ensureRawReader() && rawWindow_) {
+        if (ACaptureSessionOutput_create(rawWindow_, &rawOutput_) == ACAMERA_OK)
+            ACaptureSessionOutputContainer_add(outputContainer_, rawOutput_);
+    }
+
     // Analysis YUV output (CPU-readable luma) for live QR/barcode scanning.
-    // Present only while previewing (photo mode); excluded in video mode.
-    if (withStill) {
+    // Present only while previewing (photo mode); excluded when raw is on
+    // (no free stream slot) and in video mode.
+    if (withStill && !rawEnabled_) {
         // Match the analysis aspect to the preview so QR overlay coords align with
         // the on-screen preview; cap width at 1280 to bound CPU decode cost.
         int aw = width, ah = height;
@@ -525,6 +657,11 @@ void CameraSession::freeStreamResources()
         AImageReader_delete(analysisReader_);
         analysisReader_ = nullptr;
     }
+    // RAW session output (the reader persists across preview rebuilds).
+    if (rawOutput_) {
+        ACaptureSessionOutput_free(rawOutput_);
+        rawOutput_ = nullptr;
+    }
     // Recording sets its own active request *after* startRecording()'s
     // stopPreview() call, so clearing here can never drop a live record request.
     activeSession_ = nullptr;
@@ -556,6 +693,7 @@ void CameraSession::freeSessionKeepReaders()
     if (sessionOutput_)       { ACaptureSessionOutput_free(sessionOutput_);       sessionOutput_ = nullptr; }
     if (jpegOutput_)          { ACaptureSessionOutput_free(jpegOutput_);          jpegOutput_ = nullptr; }
     if (analysisOutput_)      { ACaptureSessionOutput_free(analysisOutput_);      analysisOutput_ = nullptr; }
+    if (rawOutput_)           { ACaptureSessionOutput_free(rawOutput_);           rawOutput_ = nullptr; }
     if (recordOutput_)        { ACaptureSessionOutput_free(recordOutput_);        recordOutput_ = nullptr; }
     if (outputContainer_)     { ACaptureSessionOutputContainer_free(outputContainer_); outputContainer_ = nullptr; }
     activeSession_ = nullptr;
@@ -587,8 +725,13 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         cs = ACaptureSessionOutput_create(jpegWindow_, &jpegOutput_);
         if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, jpegOutput_);
     }
-    // QR analysis stream only in preview mode (not while recording video).
-    if (cs == ACAMERA_OK && !withEncoder && analysisWindow_) {
+    // RAW16 output for DNG — swaps in for analysis stream (3-stream limit).
+    if (cs == ACAMERA_OK && !withEncoder && rawEnabled_ && rawWindow_) {
+        cs = ACaptureSessionOutput_create(rawWindow_, &rawOutput_);
+        if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, rawOutput_);
+    }
+    // QR analysis stream only in preview mode, and only when raw isn't taking the slot.
+    if (cs == ACAMERA_OK && !withEncoder && !rawEnabled_ && analysisWindow_) {
         cs = ACaptureSessionOutput_create(analysisWindow_, &analysisOutput_);
         if (cs == ACAMERA_OK) cs = ACaptureSessionOutputContainer_add(outputContainer_, analysisOutput_);
     }
@@ -623,8 +766,11 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         lastError_ = fmt("preview request setup failed (status %d)", (int)cs);
         return false;
     }
-    if (!withEncoder && analysisWindow_
+    if (!withEncoder && analysisWindow_ && !rawEnabled_
         && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
+        ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
+    if (!withEncoder && rawWindow_ && rawEnabled_
+        && ACameraOutputTarget_create(rawWindow_, &analysisTarget_) == ACAMERA_OK)
         ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
     if (targetFps > 0) {
         int32_t r[2] = { targetFps, targetFps };
@@ -822,6 +968,18 @@ void CameraSession::onCaptureResult(void* ctx, ACameraCaptureSession* /*session*
     ACameraMetadata_const_entry e{};
     if (ACameraMetadata_getConstEntry(result, ACAMERA_CONTROL_AE_STATE, &e) == ACAMERA_OK && e.count >= 1)
         self->lastAeState_.store(e.data.u8[0]);
+    // Cache WB gains / ISO / exposure for DNG AsShotNeutral metadata
+    {
+        std::lock_guard<std::mutex> lk(self->resultMutex_);
+        if (ACameraMetadata_getConstEntry(result, ACAMERA_COLOR_CORRECTION_GAINS, &e) == ACAMERA_OK && e.count >= 4) {
+            for (int k = 0; k < 4; ++k) self->resultGains_[k] = e.data.f[k];
+            self->haveResultGains_ = true;
+        }
+        if (ACameraMetadata_getConstEntry(result, ACAMERA_SENSOR_SENSITIVITY, &e) == ACAMERA_OK && e.count >= 1)
+            self->resultIso_ = e.data.i32[0];
+        if (ACameraMetadata_getConstEntry(result, ACAMERA_SENSOR_EXPOSURE_TIME, &e) == ACAMERA_OK && e.count >= 1)
+            self->resultExposureNs_ = e.data.i64[0];
+    }
 }
 
 bool CameraSession::maxJpegSize(int* w, int* h) const
@@ -873,6 +1031,14 @@ bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
     {
         std::lock_guard<std::mutex> lk(photoMutex_);
         pendingPhotoPath_ = path;
+        // DNG path: replace .jpg extension with .dng
+        if (rawEnabled_) {
+            std::string dngPath = path;
+            size_t dot = dngPath.rfind('.');
+            if (dot != std::string::npos) dngPath.replace(dot, std::string::npos, ".dng");
+            else dngPath += ".dng";
+            pendingRawPath_ = dngPath;
+        }
     }
 
     ACaptureRequest* req = nullptr;
@@ -882,13 +1048,21 @@ bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
         return false;
     }
 
-    ACameraOutputTarget* target = nullptr;
-    cs = ACameraOutputTarget_create(jpegWindow_, &target);
+    // ponytail: two local target pointers, freed before the request
+    ACameraOutputTarget* jpegTarget = nullptr;
+    ACameraOutputTarget* rawTarget = nullptr;
+
+    cs = ACameraOutputTarget_create(jpegWindow_, &jpegTarget);
     if (cs == ACAMERA_OK)
-        cs = ACaptureRequest_addTarget(req, target);
+        cs = ACaptureRequest_addTarget(req, jpegTarget);
+    if (cs == ACAMERA_OK && rawEnabled_ && rawWindow_) {
+        cs = ACameraOutputTarget_create(rawWindow_, &rawTarget);
+        if (cs == ACAMERA_OK)
+            cs = ACaptureRequest_addTarget(req, rawTarget);
+    }
     if (cs != ACAMERA_OK) {
-        if (target)
-            ACameraOutputTarget_free(target);
+        if (jpegTarget) ACameraOutputTarget_free(jpegTarget);
+        if (rawTarget)  ACameraOutputTarget_free(rawTarget);
         ACaptureRequest_free(req);
         lastError_ = fmt("still request target failed (status %d)", (int)cs);
         return false;
@@ -922,8 +1096,9 @@ bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
 
     int seqId = 0;
     cs = ACameraCaptureSession_capture(captureSession_, nullptr, 1, &req, &seqId);
-    // The NDK copies the request on submit, so the request/target can be freed now.
-    ACameraOutputTarget_free(target);
+    // The NDK copies the request on submit, so targets/request can be freed now.
+    ACameraOutputTarget_free(jpegTarget);
+    if (rawTarget) ACameraOutputTarget_free(rawTarget);
     ACaptureRequest_free(req);
     if (cs != ACAMERA_OK) {
         lastError_ = fmt("ACameraCaptureSession_capture failed (status %d)", (int)cs);
@@ -948,29 +1123,36 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
         path = self->pendingPhotoPath_;
     }
 
-    bool ok = false;
+    // Copy trimmed JPEG bytes out so the camera buffer can be released NOW;
+    // the actual disk write happens on the background writer thread.
+    std::vector<uint8_t> bytes;
     uint8_t* data = nullptr;
     int len = 0;
     if (!path.empty()
         && AImage_getPlaneData(img, 0, &data, &len) == AMEDIA_OK && data && len > 0) {
-        // The buffer is sized to the max JPEG; trim to the End-Of-Image marker.
-        int actual = len;
+        int actual = len;   // buffer is sized to the max JPEG; trim to End-Of-Image.
         for (int i = len - 2; i >= 0; --i) {
-            if (data[i] == 0xFF && data[i + 1] == 0xD9) {
-                actual = i + 2;
-                break;
-            }
+            if (data[i] == 0xFF && data[i + 1] == 0xD9) { actual = i + 2; break; }
         }
-        if (FILE* f = std::fopen(path.c_str(), "wb")) {
-            ok = std::fwrite(data, 1, (size_t)actual, f) == (size_t)actual;
-            std::fclose(f);
-        }
-        self->log(fmt("photo saved: %s (%d bytes)", path.c_str(), actual));
+        bytes.assign(data, data + actual);
     }
     AImage_delete(img);
 
-    if (self->photoCallback_)
-        self->photoCallback_(path, ok);
+    if (path.empty() || bytes.empty()) {
+        if (self->photoCallback_)
+            self->photoCallback_(path, false);
+        return;
+    }
+    self->enqueueWrite([self, path, bytes = std::move(bytes)]() {
+        bool ok = false;
+        if (FILE* f = std::fopen(path.c_str(), "wb")) {
+            ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+            std::fclose(f);
+        }
+        self->log(fmt("photo saved: %s (%d bytes)", path.c_str(), (int)bytes.size()));
+        if (self->photoCallback_)
+            self->photoCallback_(path, ok);
+    });
 }
 
 bool CameraSession::startRecording(const std::string& path, int width, int height,
@@ -1527,6 +1709,161 @@ const char* CameraSession::formatName(int format)
         case AIMAGE_FORMAT_RGBA_8888:   return "RGBA_8888";
         default:                        return "other-format";
     }
+}
+
+// ── RAW/DNG ─────────────────────────────────────────────────────────────────
+
+const CameraSession::CameraInfo* CameraSession::activeInfo() const
+{
+    for (const auto& c : cameras_)
+        if (c.id == openId_)
+            return &c;
+    return nullptr;
+}
+
+bool CameraSession::rawSupported() const
+{
+    const CameraInfo* ci = activeInfo();
+    return ci && ci->rawSupported;
+}
+
+bool CameraSession::ensureRawReader()
+{
+    if (rawReader_)
+        return true;
+    const CameraInfo* ci = activeInfo();
+    if (!ci || !ci->rawSupported) {
+        lastError_ = "ensureRawReader: no RAW capability on this camera";
+        return false;
+    }
+    rawW_ = ci->raw16W;
+    rawH_ = ci->raw16H;
+    media_status_t ms = AImageReader_new(rawW_, rawH_, AIMAGE_FORMAT_RAW16, /*maxImages*/ 2, &rawReader_);
+    if (ms != AMEDIA_OK || !rawReader_) {
+        rawReader_ = nullptr;
+        lastError_ = fmt("AImageReader_new(RAW16 %dx%d) failed (status %d)", rawW_, rawH_, (int)ms);
+        return false;
+    }
+    rawListener_.context          = this;
+    rawListener_.onImageAvailable = &CameraSession::onRawImageAvailable;
+    AImageReader_setImageListener(rawReader_, &rawListener_);
+    if (AImageReader_getWindow(rawReader_, &rawWindow_) != AMEDIA_OK || !rawWindow_) {
+        lastError_ = "ensureRawReader: getWindow failed";
+        AImageReader_delete(rawReader_); rawReader_ = nullptr; rawWindow_ = nullptr;
+        return false;
+    }
+    ANativeWindow_acquire(rawWindow_);
+    log(fmt("RAW capture enabled: RAW16 %dx%d", rawW_, rawH_));
+    return true;
+}
+
+void CameraSession::setRawEnabled(bool on)
+{
+    if (on == rawEnabled_)
+        return;
+    if (on && !rawSupported()) {
+        log("setRawEnabled: no RAW capability — ignoring");
+        return;
+    }
+    rawEnabled_ = on;
+    if (on)
+        ensureRawReader();
+    // Rebuild the live session to add/remove the RAW stream (skip mid-record/video/off).
+    if (streaming_ && !videoMode_ && !recording_)
+        buildSessionFromReaders(/*withEncoder*/ false, previewFps_);
+}
+
+void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
+{
+    auto* self = static_cast<CameraSession*>(ctx);
+    if (!self || !reader)
+        return;
+
+    AImage* img = nullptr;
+    if (AImageReader_acquireNextImage(reader, &img) != AMEDIA_OK || !img)
+        return;
+
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lk(self->photoMutex_);
+        path = self->pendingRawPath_;
+    }
+
+    // Copy RAW16 pixels into a tight buffer so the camera buffer can be freed now.
+    std::vector<uint16_t> pixels;
+    int w = 0, h = 0, stride = 0, len = 0;
+    uint8_t* data = nullptr;
+    AImage_getWidth(img, &w);
+    AImage_getHeight(img, &h);
+    AImage_getPlaneRowStride(img, 0, &stride);
+    bool got = (AImage_getPlaneData(img, 0, &data, &len) == AMEDIA_OK && data && len > 0);
+
+    if (!path.empty() && got && w > 0 && h > 0) {
+        const size_t rowBytes = (size_t)w * 2;
+        const size_t srcStride = stride > 0 ? (size_t)stride : rowBytes;
+        pixels.resize((size_t)w * h);
+        for (int y = 0; y < h; ++y)
+            std::memcpy(reinterpret_cast<uint8_t*>(pixels.data()) + (size_t)y * rowBytes,
+                        data + (size_t)y * srcStride, rowBytes);
+    }
+    AImage_delete(img);
+
+    if (path.empty() || pixels.empty() || w <= 0 || h <= 0)
+        return;
+
+    // Populate DNG parameters from camera characteristics + cached AE results.
+    const CameraInfo* ci = self->activeInfo();
+    DngParams p;
+    p.width = w; p.height = h;
+    p.rowStrideBytes = w * 2;
+    p.orientationDeg = self->openSensorOrientation_;
+    if (ci) {
+        p.whiteLevel     = ci->whiteLevel;
+        for (int k = 0; k < 4; ++k) p.blackLevel[k] = ci->blackLevel[k];
+        p.cfaArrangement = ci->cfaArrangement;
+        p.illuminant1    = ci->refIlluminant1;
+        p.illuminant2    = ci->refIlluminant2;
+        p.haveColor2     = ci->haveColor2;
+        p.haveForward    = ci->haveForward;
+        for (int k = 0; k < 9; ++k) {
+            p.colorMatrix1[k]   = ci->colorMatrix1[k];
+            p.colorMatrix2[k]   = ci->colorMatrix2[k];
+            p.forwardMatrix1[k] = ci->forwardMatrix1[k];
+            p.forwardMatrix2[k] = ci->forwardMatrix2[k];
+        }
+        if (ci->activeArray[2] > 0 && ci->activeArray[3] > 0) {
+            p.activeLeft   = ci->activeArray[0];
+            p.activeTop    = ci->activeArray[1];
+            p.activeRight  = ci->activeArray[0] + ci->activeArray[2];
+            p.activeBottom = ci->activeArray[1] + ci->activeArray[3];
+        }
+    }
+    // AsShotNeutral from latest preview WB gains, else sensor neutral color point.
+    {
+        std::lock_guard<std::mutex> lk(self->resultMutex_);
+        if (self->haveResultGains_) {
+            float gr = self->resultGains_[0];
+            float gg = 0.5f * (self->resultGains_[1] + self->resultGains_[2]);
+            float gb = self->resultGains_[3];
+            if (gr > 0 && gg > 0 && gb > 0) {
+                p.asShotNeutral[0] = gg / gr;  // normalize so green = 1
+                p.asShotNeutral[1] = 1.0;
+                p.asShotNeutral[2] = gg / gb;
+            }
+        } else if (ci) {
+            for (int k = 0; k < 3; ++k) p.asShotNeutral[k] = ci->neutralColorPoint[k];
+        }
+        p.iso        = self->resultIso_;
+        p.exposureNs = self->resultExposureNs_;
+    }
+
+    // Write DNG on the background writer thread — camera buffer is already freed.
+    self->enqueueWrite([self, path, p, pixels = std::move(pixels)]() {
+        std::string e2;
+        bool ok = writeDng(path, pixels.data(), p, &e2);
+        self->log(ok ? fmt("DNG saved: %s (%dx%d)", path.c_str(), p.width, p.height)
+                     : fmt("DNG write failed: %s — %s", path.c_str(), e2.c_str()));
+    });
 }
 
 } // namespace furicam
