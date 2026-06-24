@@ -237,6 +237,7 @@ public:
     // the camera to recreate the still output at that size.
     Q_INVOKABLE QVariantList availableResolutions();
     Q_INVOKABLE void setResolution(int width, int height);
+    Q_INVOKABLE void setJpegQuality(int quality);   // 1..100; HAL encodes at this directly
 
     // Video recording size (e.g. 3840x2160, 1920x1080).  Applied to the encoder;
     // if already in video mode (and not recording) the session is rebuilt at the

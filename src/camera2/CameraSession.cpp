@@ -901,8 +901,12 @@ bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
     // rotation convention on this device.
     int32_t orientation = ((openSensorOrientation_ + deviceRotation) % 360);
     ACaptureRequest_setEntry_i32(req, ACAMERA_JPEG_ORIENTATION, 1, &orientation);
-    uint8_t quality = 95;
+    uint8_t quality = (uint8_t)jpegQuality_;
     ACaptureRequest_setEntry_u8(req, ACAMERA_JPEG_QUALITY, 1, &quality);
+
+    // Cancel mains-light flicker banding (50/60 Hz); AUTO lets the HAL detect which.
+    uint8_t antiband = (uint8_t)ACAMERA_CONTROL_AE_ANTIBANDING_MODE_AUTO;
+    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_ANTIBANDING_MODE, 1, &antiband);
 
     // Apply manual exposure controls (ISO, shutter, focus, WB, etc.) to still
     applyControls(req);
@@ -1228,6 +1232,9 @@ void CameraSession::applyControls(ACaptureRequest* req) const
     if (ctlAeMode_ != ACAMERA_CONTROL_AE_MODE_OFF && flashMode_ == 2)
         ae = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
     ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &ae);
+    // Cancel mains-light flicker banding (50/60 Hz); AUTO lets the HAL detect which.
+    uint8_t antiband = (uint8_t)ACAMERA_CONTROL_AE_ANTIBANDING_MODE_AUTO;
+    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_ANTIBANDING_MODE, 1, &antiband);
     if (ctlAeMode_ == ACAMERA_CONTROL_AE_MODE_OFF) {
         int64_t exp = ctlExposureNs_;
         int32_t iso = ctlIso_;

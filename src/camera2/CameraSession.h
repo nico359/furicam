@@ -132,6 +132,9 @@ public:
     // the next startPreview (the caller restarts the camera to take effect).
     void setJpegSize(int width, int height) { reqJpegW_ = width; reqJpegH_ = height; }
     void jpegSize(int* width, int* height) const { *width = jpegW_; *height = jpegH_; }
+    // Still JPEG quality [1,100] (default 95).  Set from the app's quality setting
+    // so the HAL encodes at the chosen quality directly (no on-disk re-encode).
+    void setJpegQuality(int q) { jpegQuality_ = q < 1 ? 1 : (q > 100 ? 100 : q); }
 
     // ── Video recording (Milestone 5) ────────────────────────────────────────
     // Record hardware H.264 to an MP4 at `path`.  Reconfigures the camera into a
@@ -294,6 +297,7 @@ private:
     AImageReader_ImageListener jpegListener_{};
     int                        jpegW_        = 0;   // actual JPEG reader size
     int                        jpegH_        = 0;
+    int                        jpegQuality_  = 95;       // still JPEG quality [1,100]
     int                        reqJpegW_     = 0;   // requested capture size (0 = max)
     int                        reqJpegH_     = 0;
     int                        openSensorOrientation_ = 0;
