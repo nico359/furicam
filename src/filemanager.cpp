@@ -16,6 +16,8 @@
 #include <QFile>
 #include <QProcess>
 #include <QDateTime>
+#include <QFileInfo>
+#include <QUrl>
 #include <QDebug>
 #include <iomanip>
 #include <exiv2/exiv2.hpp>
@@ -158,6 +160,53 @@ void FileManager::appendGPSMetadata(const QString &fileUrl) {
     image->writeMetadata();
 }
 
+// Record the app's capture settings into the file's EXIF UserComment (works for
+// JPEG and, via exiv2's TIFF support, DNG).  Read back by getCaptureSettings().
+void FileManager::writeCaptureSettings(const QString &fileUrl, const QString &summary) {
+    QString path = fileUrl;
+    const QUrl u(fileUrl);
+    if (u.isLocalFile())
+        path = u.toLocalFile();
+    try {
+        std::unique_ptr<Exiv2::Image> image = Exiv2::ImageFactory::open(path.toStdString());
+        if (!image)
+            return;   // file not present yet (e.g. DNG still being written) — skip
+        image->readMetadata();
+        Exiv2::ExifData& exif = image->exifData();
+        exif["Exif.Photo.UserComment"] = ("charset=Ascii " + summary).toStdString();
+        exif["Exif.Image.Software"] = "furicam";
+        image->writeMetadata();
+    } catch (const std::exception &e) {
+        qWarning() << "writeCaptureSettings:" << path << e.what();
+    }
+}
+
+QString FileManager::getCaptureSettings(const QString &fileUrl) {
+    QString path = fileUrl;
+    const QUrl u(fileUrl);
+    if (u.isLocalFile())
+        path = u.toLocalFile();
+    try {
+        std::unique_ptr<Exiv2::Image> image = Exiv2::ImageFactory::open(path.toStdString());
+        if (!image)
+            return QString();
+        image->readMetadata();
+        Exiv2::ExifData& exif = image->exifData();
+        auto it = exif.findKey(Exiv2::ExifKey("Exif.Photo.UserComment"));
+        if (it == exif.end())
+            return QString();
+        QString v = QString::fromStdString(it->toString()).trimmed();
+        if (v.startsWith("charset=")) {            // drop the exiv2 charset prefix
+            const int sp = v.indexOf(' ');
+            if (sp >= 0) v = v.mid(sp + 1).trimmed();
+        }
+        return v;
+    } catch (const std::exception &e) {
+        qWarning() << "getCaptureSettings:" << path << e.what();
+        return QString();
+    }
+}
+
 QString FileManager::getFileSize(const QString &fileUrl) {
     const qint64 kilobyte = 1024;
     const qint64 megabyte = 1024 * kilobyte;
@@ -249,9 +298,9 @@ QString FileManager::getPictureDate(const QString &fileUrl) {
     QString timeFormat = getTimeFormat();
 
     if (timeFormat == "'24h'") {
-        strftime(buffer, sizeof(buffer), "%b %d, %Y \n %H:%M", &tm);
+        strftime(buffer, sizeof(buffer), "%b %d, %Y · %H:%M", &tm);
     } else {
-        strftime(buffer, sizeof(buffer), "%b %d, %Y \n %I:%M %p", &tm);
+        strftime(buffer, sizeof(buffer), "%b %d, %Y · %I:%M %p", &tm);
     }
 
     return QString::fromStdString(buffer);
@@ -450,9 +499,9 @@ QString FileManager::runMkvInfo(const QString &fileUrl) {
 }
 
 // Re-mux the file through mkvmerge so the EBML header gets a proper
-// Duration / SeekHead / Cues. matroskamux in the recording pipeline never
-// receives EOS on stop, so the on-disk file is left unfinalized and most
-// players reject it. mkvmerge rebuilds the container in place.
+// Duration / SeekHead / Cues. matroskamux in our recording pipeline never
+// receives EOS on stop, so the on-disk file is left unfinalized and players
+// reject it. mkvmerge rebuilds the container in place.
 void FileManager::finalizeMkv(const QString &fileUrl) {
     QString path = fileUrl;
     int colonIndex = path.indexOf(':');
@@ -496,28 +545,66 @@ void FileManager::finalizeMkv(const QString &fileUrl) {
 }
 
 QString FileManager::getVideoDate(const QString &fileUrl) {
-    QString output = runMkvInfo(fileUrl);
-    QStringList outputLines = output.split('\n');
+    const QString path = QUrl(fileUrl).isLocalFile() ? QUrl(fileUrl).toLocalFile() : fileUrl;
 
-    for (const QString &line : outputLines) {
-        if (line.contains("Date")) {
-            QString dateLine = line.trimmed();
-            QString dateTimeStr = dateLine.section(':', 1).trimmed();
-            QDateTime dateTime = QDateTime::fromString(dateTimeStr, "yyyy-MM-dd HH:mm:ss t");
-            if (dateTime.isValid()) {
-                QString timeFormat = getTimeFormat();
-                if (timeFormat == "'24h'") {
-                    // 24-hour format
-                    return dateTime.toString("MMM d, yyyy \n HH:mm");
-                } else {
-                    // AM/PM format
-                    return dateTime.toString("MMM d, yyyy \n h:mm AP");
-                }
+    // Read the container's creation_time via ffprobe (works for both .mp4 and
+    // .mkv); fall back to the file's modification time.  The previous mkvinfo
+    // path only reads Matroska, so the Camera2 .mp4 files showed "Date not found".
+    QDateTime dateTime;
+    QProcess probe;
+    probe.start("ffprobe", QStringList()
+                << "-v" << "error"
+                << "-show_entries" << "format_tags=creation_time"
+                << "-of" << "default=noprint_wrappers=1:nokey=1"
+                << path);
+    if (probe.waitForFinished(3000)) {
+        const QString out = QString::fromUtf8(probe.readAllStandardOutput()).trimmed();
+        if (out.length() >= 19) {
+            // e.g. "2026-06-23T02:45:06.000000Z" — parse the seconds-precision
+            // UTC instant and present it in local time.
+            QDateTime utc = QDateTime::fromString(out.left(19), "yyyy-MM-ddTHH:mm:ss");
+            if (utc.isValid()) {
+                utc.setTimeSpec(Qt::UTC);
+                dateTime = utc.toLocalTime();
             }
-            break;
         }
     }
-    return QString("Date not found.");
+    if (!dateTime.isValid())
+        dateTime = QFileInfo(path).lastModified();
+
+    if (!dateTime.isValid())
+        return QString("Date not found.");
+
+    QString timeFormat = getTimeFormat();
+    if (timeFormat == "'24h'")
+        return dateTime.toString("MMM d, yyyy · HH:mm");
+    else
+        return dateTime.toString("MMM d, yyyy · h:mm AP");
+}
+
+int FileManager::getVideoRotation(const QString &fileUrl) {
+    // The Camera2 muxer stores the device orientation as a rotation hint rather
+    // than baking it into the frames, and the QML VideoOutput doesn't apply it
+    // on this backend — so portrait clips play sideways.  Read the rotation
+    // (signed degrees, e.g. -90) so the gallery can correct the display.
+    const QString path = QUrl(fileUrl).isLocalFile() ? QUrl(fileUrl).toLocalFile() : fileUrl;
+    QProcess probe;
+    probe.start("ffprobe", QStringList()
+                << "-v" << "error"
+                << "-select_streams" << "v:0"
+                << "-show_entries" << "stream_side_data=rotation:stream_tags=rotate"
+                << "-of" << "default=noprint_wrappers=1:nokey=1"
+                << path);
+    if (probe.waitForFinished(3000)) {
+        const QStringList lines = QString::fromUtf8(probe.readAllStandardOutput()).split('\n');
+        for (const QString &line : lines) {
+            bool ok = false;
+            const int rot = line.trimmed().toInt(&ok);
+            if (ok)
+                return rot;
+        }
+    }
+    return 0;
 }
 
 QString FileManager::getVideoDimensions(const QString &fileUrl) {
@@ -724,7 +811,7 @@ void FileManager::reencodeJpeg(const QString &filePath, int quality) {
     }
 }
 
-void FileManager::applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation)
+void FileManager::applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation, int quality)
 {
     if (qFuzzyCompare(redScale, 1.0) && qFuzzyCompare(greenScale, 1.0) && qFuzzyCompare(blueScale, 1.0) && qFuzzyCompare(saturation, 1.0))
         return;
@@ -766,7 +853,7 @@ void FileManager::applyColorCorrection(const QString &filePath, double redScale,
         }
     }
 
-    if (!image.save(path, "JPEG", 100)) {
+    if (!image.save(path, "JPEG", quality)) {
         qDebug() << "Error: Could not save color-corrected image:" << path;
         return;
     }

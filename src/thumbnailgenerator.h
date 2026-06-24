@@ -11,11 +11,9 @@
 #define THUMBNAILGENERATOR_H
 
 #include <QObject>
-#include <QMediaPlayer>
-#include <QVideoProbe>
-#include <QVideoFrame>
 #include <QImage>
 #include <QBuffer>
+#include <QProcess>
 
 class ThumbnailGenerator : public QObject
 {
@@ -28,12 +26,13 @@ public:
 signals:
     void thumbnailGenerated(const QImage &image);
 
-private slots:
-    void processFrame(const QVideoFrame &frame);
-
 private:
-    QMediaPlayer m_mediaPlayer;
-    QVideoProbe m_probe;
+    // Frames are extracted with ffmpeg (software decode) rather than
+    // QMediaPlayer/QVideoProbe: the latter hands back native YUV frames that
+    // QImage can't construct from, and on the libhybris hardware-codec path the
+    // frames may not even be CPU-mappable — both produce a black thumbnail.
+    QProcess *m_proc = nullptr;
+    QString m_outPath;
 };
 
 #endif // THUMBNAILGENERATOR_H

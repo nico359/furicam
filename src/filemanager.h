@@ -46,6 +46,7 @@ public:
     Q_INVOKABLE QString runMkvInfo(const QString &fileUrl);
     Q_INVOKABLE void finalizeMkv(const QString &fileUrl);
     Q_INVOKABLE QString getVideoDate(const QString &fileUrl);
+    Q_INVOKABLE int getVideoRotation(const QString &fileUrl);
     Q_INVOKABLE QString getVideoDimensions(const QString &fileUrl);
     Q_INVOKABLE QString getDuration(const QString &fileUrl);
     Q_INVOKABLE QString getMultiplexingApplication(const QString &fileUrl);
@@ -61,8 +62,10 @@ public:
     Q_INVOKABLE QString getTimeFormat();
     void restartGps();
     Q_INVOKABLE void appendGPSMetadata(const QString &fileUrl);
+    Q_INVOKABLE void writeCaptureSettings(const QString &fileUrl, const QString &summary);
+    Q_INVOKABLE QString getCaptureSettings(const QString &fileUrl);
     Q_INVOKABLE void reencodeJpeg(const QString &filePath, int quality);
-    Q_INVOKABLE void applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation);
+    Q_INVOKABLE void applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation, int quality = 95);
     QStringList decimalToDMS(double decimal, bool isLongitude = false);
 
 signals:

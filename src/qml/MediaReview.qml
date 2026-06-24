@@ -33,8 +33,10 @@ Rectangle {
     property var vCenterOffsetValue: 0
     property var textSize: viewRect.height * 0.018
     property var mediaState: MediaPlayer.StoppedState
+    // Display rotation (deg) for the current video; the muxer stores it as a hint
+    // the QML VideoOutput doesn't auto-apply on this backend.
+    property int videoRotation: 0
     property var videoAudio: false
-    function isVideo(url) { var u = url.toString(); return u.endsWith(".mkv") || u.endsWith(".mp4"); }
     signal playbackRequest()
     signal scanImageComponent()
     signal closed
@@ -43,6 +45,8 @@ Rectangle {
 
     onCurrentFileUrlChanged: {
         viewRect.scanImageComponent()
+        viewRect.videoRotation = isVideoFile(currentFileUrl)
+                                 ? fileManager.getVideoRotation(currentFileUrl) : 0
     }
 
     function openPopup(title, body, buttons, data) {
@@ -67,6 +71,14 @@ Rectangle {
         _refreshRestoreTimer.start()
     }
 
+    // Video files may be .mp4 (current encoder) or .mkv (older recordings);
+    // treat both as video throughout the gallery.
+    function isVideoFile(u) {
+        if (!u) return false
+        u = u.toString()
+        return u.endsWith(".mp4") || u.endsWith(".mkv")
+    }
+
     onVisibleChanged: {
         if (!visible) qrCodeComponent.lastValidResult =  null
     }
@@ -85,14 +97,19 @@ Rectangle {
         // when it returns to false (needed because inotify is unavailable on device).
         folder: viewRect._refreshClearing ? "" : viewRect.folder
         showDirs: false
-        nameFilters: cslate.state == "VideoCapture" ? ["*.mkv", "*.mp4"] : ["*.jpg"]
+        nameFilters: cslate.state == "VideoCapture" ? ["*.mp4", "*.mkv"] : ["*.jpg"]
+        // Sort by modification time, newest LAST, so onStatusChanged's
+        // `count - 1` is the most recent capture.  (Name sort is wrong here:
+        // it's case-sensitive, so legacy lowercase "image*" files sort after
+        // the engine's "IMG_*" files and the newest-looking entry got stuck on
+        // an old legacy photo.)
         sortField: FolderListModel.Time
         sortReversed: true
 
         onStatusChanged: {
             if (imgModel.status == FolderListModel.Ready) {
                 viewRect.index = imgModel.count - 1
-                if (cslate.state == "VideoCapture" && isVideo(viewRect.currentFileUrl)) {
+                if (cslate.state == "VideoCapture" && viewRect.isVideoFile(viewRect.currentFileUrl)) {
                     thumbnailGenerator.setVideoSource(viewRect.currentFileUrl)
                 } else {
                     viewRect.lastImg = viewRect.currentFileUrl
@@ -114,7 +131,7 @@ Rectangle {
             } else if (imgModel.get(viewRect.index, "fileUrl") === undefined) {
                 loadedComponentType = "null";
                 return null;
-            } else if (isVideo(imgModel.get(viewRect.index, "fileUrl").toString())) {
+            } else if (viewRect.isVideoFile(imgModel.get(viewRect.index, "fileUrl"))) {
                 loadedComponentType = "video";
                 return videoOutputComponent;
             } else {
@@ -164,7 +181,9 @@ Rectangle {
                 viewRect.vCenterOffsetValue = 0
             } else {
                 if (metadataDrawer.y <= 600) {
-                    viewRect.scaleRatio = 0.5
+                    // Match the swipe-up "peek" size (was 0.5 here, 0.7 there),
+                    // so toggling the widgets returns the photo to the same size.
+                    viewRect.scaleRatio = 0.7
                     viewRect.vCenterOffsetValue = -(viewRect.height * 0.19)
                 }
             }
@@ -248,9 +267,33 @@ Rectangle {
                 scale: viewRect.scaleRatio
                 fillMode: Image.PreserveAspectFit
                 smooth: true
-                source: (viewRect.currentFileUrl && !isVideo(viewRect.currentFileUrl)) ? viewRect.currentFileUrl : ""
+                source: (viewRect.currentFileUrl && !viewRect.isVideoFile(viewRect.currentFileUrl)) ? viewRect.currentFileUrl : ""
 
-                y: parent.height / 2 - height / 2 + viewRect.vCenterOffsetValue
+                // Pan offsets (px), applied when zoomed in.  x is otherwise 0 and y
+                // keeps the image vertically centred (plus the metadata-drawer peek).
+                property real panX: 0
+                property real panY: 0
+                x: image.panX
+                y: parent.height / 2 - height / 2 + viewRect.vCenterOffsetValue + image.panY
+
+                // Largest pan that still keeps the scaled image covering the view.
+                function clampPanX(v) {
+                    var m = Math.max(0, (paintedWidth * scale - viewRect.width) / 2)
+                    return Math.max(-m, Math.min(m, v))
+                }
+                function clampPanY(v) {
+                    var m = Math.max(0, (paintedHeight * scale - viewRect.height) / 2)
+                    return Math.max(-m, Math.min(m, v))
+                }
+
+                // New photo: clear pinch-zoom and pan, but keep the metadata "peek"
+                // (scaleRatio / vCenterOffset) so the half-height + open-properties
+                // view persists when swiping between photos.
+                onSourceChanged: {
+                    image.scale = Qt.binding(function() { return viewRect.scaleRatio })
+                    image.panX = 0
+                    image.panY = 0
+                }
 
                 Behavior on scale {
                     NumberAnimation {
@@ -259,6 +302,8 @@ Rectangle {
                     }
                 }
                 Behavior on y {
+                    // Don't animate while the user is dragging to pan.
+                    enabled: !galleryDragArea.panning
                     NumberAnimation{
                         duration: 300
                         easing.type: Easing.InOutQuad
@@ -316,13 +361,14 @@ Rectangle {
                 pinch.maximumScale: 4
                 pinch.minimumScale: 1
                 enabled: viewRect.visible
-                property real initialX: 0
-                property real initialY: 0
 
                 onPinchUpdated: {
-                    if (pinchArea.pinch.center !== undefined) {
+                    if (pinchArea.pinch.center !== undefined)
                         image.scale = pinchArea.pinch.scale
-                    }
+                }
+                onPinchFinished: {
+                    image.panX = image.clampPanX(image.panX)
+                    image.panY = image.clampPanY(image.panY)
                 }
 
                 MouseArea {
@@ -332,18 +378,40 @@ Rectangle {
                     enabled: deletePopUp === "closed"
                     property real startX: 0
                     property real startY: 0
+                    property real panStartX: 0
+                    property real panStartY: 0
+                    property bool panning: false
                     property int swipeThreshold: 30
 
                     onPressed: {
                         startX = mouse.x
                         startY = mouse.y
+                        panStartX = image.panX
+                        panStartY = image.panY
+                        panning = false
+                    }
+
+                    // While zoomed in, dragging pans the photo instead of swiping to
+                    // the next/previous one, so the two gestures don't collide.
+                    onPositionChanged: {
+                        if (!pinchArea.pinch.active && image.scale > 1.01) {
+                            panning = true
+                            image.panX = image.clampPanX(panStartX + (mouse.x - startX))
+                            image.panY = image.clampPanY(panStartY + (mouse.y - startY))
+                        }
                     }
 
                     onPressAndHold: {
-                        scanImageURL()
+                        if (image.scale <= 1.01)
+                            scanImageURL()
                     }
 
                     onReleased: {
+                        if (panning) {
+                            panning = false
+                            return
+                        }
+
                         var deltaX = mouse.x - startX
                         var deltaY = mouse.y - startY
 
@@ -457,7 +525,9 @@ Rectangle {
             VideoOutput {
                 anchors.fill: parent
                 source: mediaPlayer
-                visible: viewRect.currentFileUrl && isVideo(viewRect.currentFileUrl)
+                // Apply the clip's stored rotation hint (the backend won't).
+                orientation: viewRect.videoRotation
+                visible: viewRect.currentFileUrl && viewRect.isVideoFile(viewRect.currentFileUrl)
             }
 
             function playbackStateChangeHandler() {
@@ -517,7 +587,7 @@ Rectangle {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
-                        if (isVideo(viewRect.currentFileUrl)) {
+                        if (viewRect.isVideoFile(viewRect.currentFileUrl)) {
                             viewRect.mediaState = MediaPlayer.PlayingState
                             parent.visible = parent.visible ? false : true
                             playbackRequest()
@@ -677,7 +747,7 @@ Rectangle {
                         spacing: 10
 
                         Text {
-                            text: isVideo(viewRect.currentFileUrl) ? "  Delete Video?": "  Delete Photo?"
+                            text: viewRect.isVideoFile(viewRect.currentFileUrl) ? "  Delete Video?": "  Delete Photo?"
                             horizontalAlignment: parent.AlignHCenter
 
                             anchors.margins: 5 * viewRect.scalingRatio
@@ -702,7 +772,7 @@ Rectangle {
                                 onClicked: {
                                     var tempCurrUrl = viewRect.currentFileUrl
                                     fileManager.deleteImage(tempCurrUrl)
-                                    viewRect.refresh()
+                                    viewRect.index = imgModel.count
                                     deletePopUp = "closed"
                                     confirmationPopup.close()
                                 }
@@ -854,7 +924,7 @@ Rectangle {
                 if (!viewRect.visible || viewRect.index === -1) {
                     return "None"
                 } else {
-                    if (isVideo(viewRect.currentFileUrl)) {
+                    if (viewRect.isVideoFile(viewRect.currentFileUrl)) {
                         return fileManager.getVideoDate(viewRect.currentFileUrl)
                     } else {
                         return fileManager.getPictureDate(viewRect.currentFileUrl)
