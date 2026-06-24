@@ -173,7 +173,7 @@ ApplicationWindow {
         property int jpegQuality: 100
         property int gridEnabled: 0
         property int levelEnabled: 0
-        property int videoBitrate: 8000
+        property int videoBitrate: 20000
         property int videoResWidth: 1920
         property int videoResHeight: 1080
         property int whiteBalanceMode: 0
@@ -2079,6 +2079,8 @@ ApplicationWindow {
                         onClicked: {
                             settings.videoResWidth  = model.resWidth;
                             settings.videoResHeight = model.resHeight;
+                            if (cameraLoader.item)
+                                cameraLoader.item.handleSetVideoResolution(model.resWidth, model.resHeight);
                         }
                     }
                 }
@@ -2160,12 +2162,14 @@ ApplicationWindow {
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
                 from: 2000
-                to: 16000
+                to: 50000
                 stepSize: 1000
                 value: settings.videoBitrate
 
                 onMoved: {
                     settings.videoBitrate = value;
+                    if (cameraLoader.item)
+                        cameraLoader.item.handleSetVideoBitrate(value);
                 }
 
                 background: Rectangle {

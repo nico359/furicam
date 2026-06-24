@@ -249,6 +249,7 @@ public:
     // if already in video mode (and not recording) the session is rebuilt at the
     // new size.  Bind to the app's video-resolution setting.
     Q_INVOKABLE void setVideoResolution(int width, int height);
+    Q_INVOKABLE void setVideoBitrate(int kbps);   // H.264 bitrate in kbps
     int  videoWidth()  const { return videoW_; }
     int  videoHeight() const { return videoH_; }
     void setVideoWidth(int width);
@@ -316,6 +317,7 @@ private:
     bool                 videoModeDesired_   = false;   // GUI's photo/video toggle
     int                  videoW_             = 1920;     // recording size
     int                  videoH_             = 1080;
+    int                  videoBitrate_       = 0;        // kbps; 0 = resolution-scaled default
     int                  captureW_           = 0;        // chosen still size (0 = sensor max)
     int                  captureH_           = 0;
     int                  previewStreamW_     = 1280;     // preview stream size; its aspect

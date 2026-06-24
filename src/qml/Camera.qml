@@ -46,6 +46,8 @@ Item {
     function setFocusDistance(diopters) { cam2.setFocusDistance(diopters) }
     function setJpegQuality(q) { cam2.setJpegQuality(q) }
     function handleSetRaw(on) { cam2.setRawEnabled(on) }
+    function handleSetVideoBitrate(kbps) { cam2.setVideoBitrate(kbps) }
+    function handleSetVideoResolution(w, h) { cam2.setVideoResolution(w, h) }
 
     // Zoom is exposed in the legacy "slider value" model main.qml expects:
     //   maxZoom is the slider range, currentZoom is the slider value, and the
@@ -371,6 +373,8 @@ Item {
                 focusState.state = "Default"
                 cameraItem.fnAspectRatio()
                 cam2.setRawEnabled(settings.rawEnabled)   // restore RAW (DNG) capture
+                cam2.setVideoBitrate(settings.videoBitrate)   // restore chosen bitrate
+                cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)   // restore chosen resolution
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
                 // Sync GUI position state to the camera that actually opened (bridge
                 // ground truth) — the flash button and other UI gate on

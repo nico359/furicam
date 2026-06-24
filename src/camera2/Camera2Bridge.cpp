@@ -492,8 +492,9 @@ void Camera2Bridge::enterVideoMode()
 {
     if (!session_)
         return;
-    // Scale bitrate roughly with resolution so 4K isn't starved.
-    const int bitrate = (videoW_ >= 3000) ? 40000000 : 20000000;
+    // Use the user's bitrate (kbps from the slider) if set; else a sane default.
+    const int bitrate = videoBitrate_ > 0 ? videoBitrate_ * 1000
+                       : (videoW_ >= 3000) ? 40000000 : 20000000;
     session_->enterVideoMode(videoW_, videoH_, 30, bitrate);
 }
 
@@ -511,6 +512,16 @@ void Camera2Bridge::rebuildVideoIfActive()
         session_->exitVideoMode();
         enterVideoMode();
     }
+}
+
+// Set the H.264 video bitrate (kbps).  Rebuilds the video session if it's up
+// (and not recording) so the new bitrate takes effect immediately.
+void Camera2Bridge::setVideoBitrate(int kbps)
+{
+    if (kbps <= 0 || kbps == videoBitrate_)
+        return;
+    videoBitrate_ = kbps;
+    rebuildVideoIfActive();
 }
 
 void Camera2Bridge::setVideoWidth(int width)
