@@ -766,13 +766,17 @@ void Camera2Bridge::setManualExposure(int iso, int exposureMs)
 
 void Camera2Bridge::setExposureCompensation(float ev)
 {
-    // ev in [0,1] (0=most under, 0.5=neutral, 1=most over) → AE comp steps.
-    // This device's compensation range is -4..+4 at 0.5 EV/step.
-    int steps = (int)std::lround((ev - 0.5f) * 8.0f);
-    if (steps < -4) steps = -4;
-    else if (steps > 4) steps = 4;
-    if (session_)
-        session_->setExposureCompensation(steps);
+    if (!session_)
+        return;
+    // ev in [0,1] (0=most under, 0.5=neutral, 1=most over) → the open camera's AE
+    // compensation index range, read from CONTROL_AE_COMPENSATION_RANGE (no
+    // device-specific hardcode).  For a symmetric range 0.5 maps to 0 (neutral).
+    const int mn = session_->evCompMin();
+    const int mx = session_->evCompMax();
+    int steps = mn + (int)std::lround(ev * (mx - mn));
+    if (steps < mn) steps = mn;
+    else if (steps > mx) steps = mx;
+    session_->setExposureCompensation(steps);
 }
 
 void Camera2Bridge::setFocusDistance(float diopters)

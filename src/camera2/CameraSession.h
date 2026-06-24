@@ -61,6 +61,13 @@ public:
         bool manualSensor      = false;  // derived: MANUAL_SENSOR capability present
         float minFocusDistance = 0.0f;   // 0 = fixed focus; diopters (>0 = closest focus distance)
         int   focusDistanceCalibration = 0;  // LENS_INFO_FOCUS_DISTANCE_CALIBRATION: 0=UNCALIBRATED, 1=APPROXIMATE, 2=CALIBRATED
+        // Capability ranges read from the open camera (not hardcoded).
+        float zoomRatioMin     = 1.0f;   // CONTROL_ZOOM_RATIO_RANGE
+        float zoomRatioMax     = 0.0f;   // 0 = range absent (fall back to a default)
+        int   evCompMin        = 0;      // CONTROL_AE_COMPENSATION_RANGE
+        int   evCompMax        = 0;      // max==min = range absent
+        float evCompStep       = 0.0f;   // CONTROL_AE_COMPENSATION_STEP (EV per index)
+        bool  videoStabSupported = false;// CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES has ON
         // ── RAW/DNG characteristics ───────────────────────────────────────
         bool  rawSupported  = false;     // RAW capability + a RAW16 output size present
         int   raw16W        = 0;         // largest RAW16 output size
@@ -219,7 +226,15 @@ public:
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
     int   aeState() const { return lastAeState_.load(); }  // ACAMERA_CONTROL_AE_STATE_* (result)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
-    float maxZoomRatio() const { return 4.0f; }            // ponytail: override value from HAL later
+    float maxZoomRatio() const { return openZoomMax_; }    // from open camera characteristics
+    // AE-compensation index range of the open camera.
+    int   evCompMin()    const { return openEvMin_; }
+    int   evCompMax()    const { return openEvMax_; }
+    float evCompStep()   const { return openEvStep_; }
+    // Electronic video stabilization (EIS). Default on; applied to recording
+    // request + idle video preview when the camera supports it.
+    bool  videoStabSupported() const { return openVideoStab_; }
+    void  setVideoStabilization(bool on) { videoStabEnabled_ = on; }
 
     // Look up the CameraInfo for the currently open camera (DNG metadata).
     const CameraInfo* activeInfo() const;            // this device reports 4x
@@ -273,6 +288,7 @@ private:
     bool ensureRawReader();                  // create the RAW16 reader/window (lazily)
     void applyControls(ACaptureRequest* req) const;  // write control state into a request
     bool applyControlsToActive();                    // re-submit the active repeating request
+    void applyVideoStabilization(ACaptureRequest* req) const;  // EIS on/off for a record request
 
     // Background writer thread for serializing JPEG/DNG to disk (fast shot-to-shot).
     void enqueueWrite(std::function<void()> job);
@@ -395,6 +411,12 @@ private:
     int     ctlTorch_      = 0;
     int     flashMode_     = 0;   // per-shot flash: 0=off, 1=on, 2=auto
     int     openActiveArray_[4] = {0, 0, 0, 0};
+    float   openZoomMax_  = 4.0f; // CONTROL_ZOOM_RATIO_RANGE max (fallback 4x)
+    int     openEvMin_    = -4;   // AE comp range (fallback ±4 @ 0.5 EV/step)
+    int     openEvMax_    = 4;
+    float   openEvStep_   = 0.5f;
+    bool    openVideoStab_ = false;   // EIS supported by the open camera
+    bool    videoStabEnabled_ = true; // user toggle (default on)
 
     std::atomic<int>     frameCount_        {0};
     std::atomic<int>     lastFrameW_        {0};

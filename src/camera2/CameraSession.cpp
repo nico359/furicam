@@ -261,6 +261,24 @@ bool CameraSession::readInfo(const std::string& id, CameraInfo* out)
                 info.manualSensor = true;
         }
     }
+    // Capability ranges used to drive zoom / exposure-comp / EIS without
+    // hardcoding device-specific constants (read per camera).
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_CONTROL_ZOOM_RATIO_RANGE, &e) == ACAMERA_OK && e.count >= 2) {
+        info.zoomRatioMin = e.data.f[0];
+        info.zoomRatioMax = e.data.f[1];
+    }
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_CONTROL_AE_COMPENSATION_RANGE, &e) == ACAMERA_OK && e.count >= 2) {
+        info.evCompMin = e.data.i32[0];
+        info.evCompMax = e.data.i32[1];
+    }
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_CONTROL_AE_COMPENSATION_STEP, &e) == ACAMERA_OK
+        && e.count >= 1 && e.data.r[0].denominator != 0)
+        info.evCompStep = (float)e.data.r[0].numerator / (float)e.data.r[0].denominator;
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES, &e) == ACAMERA_OK)
+        for (uint32_t k = 0; k < e.count; ++k)
+            if (e.data.u8[k] == ACAMERA_CONTROL_VIDEO_STABILIZATION_MODE_ON)
+                info.videoStabSupported = true;
+
     if (ACameraMetadata_getConstEntry(meta, ACAMERA_LENS_INFO_MINIMUM_FOCUS_DISTANCE, &e) == ACAMERA_OK && e.count >= 1) {
         info.minFocusDistance = e.data.f[0];   // diopters; 0 = fixed focus
     }
@@ -382,6 +400,13 @@ bool CameraSession::open(const std::string& id)
             openSensorOrientation_ = c.sensorOrientation;
             for (int k = 0; k < 4; ++k)
                 openActiveArray_[k] = c.activeArray[k];
+            // Cache the open camera's capability ranges (fall back to the prior
+            // hardcodes when a tag is absent, e.g. on a LIMITED secondary camera).
+            openZoomMax_   = (c.zoomRatioMax > 1.0f) ? c.zoomRatioMax : 4.0f;
+            openEvMin_     = (c.evCompMax > c.evCompMin) ? c.evCompMin : -4;
+            openEvMax_     = (c.evCompMax > c.evCompMin) ? c.evCompMax :  4;
+            openEvStep_    = (c.evCompStep > 0.0f) ? c.evCompStep : 0.5f;
+            openVideoStab_ = c.videoStabSupported;
             break;
         }
     return true;
@@ -777,6 +802,12 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
     }
     applyControls(previewRequest_);
+    // In video mode, stabilize the idle (not-yet-recording) preview too, so its
+    // framing matches the EIS-cropped recording (WYSIWYG).  Photo mode keeps the
+    // full sensor FOV (no EIS).  During recording the preview rides recordRequest_,
+    // which already carries EIS.
+    if (withEncoder)
+        applyVideoStabilization(previewRequest_);
 
     // Record request (targets the preview reader AND the encoder surface) so the
     // preview keeps updating while the encoder records.
@@ -795,6 +826,7 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
             ACaptureRequest_setEntry_i32(recordRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
         }
         applyControls(recordRequest_);
+        applyVideoStabilization(recordRequest_);   // EIS while recording (if supported)
     }
 
     cs = ACameraCaptureSession_setRepeatingRequest(captureSession_, &resultCb_, 1, &previewRequest_, nullptr);
@@ -1211,6 +1243,7 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
         }
         attachAudio();
         applyControls(recordRequest_);
+        applyVideoStabilization(recordRequest_);   // EIS while recording (if supported)
         camera_status_t rcs = ACameraCaptureSession_setRepeatingRequest(
             captureSession_, nullptr, 1, &recordRequest_, nullptr);
         if (rcs != ACAMERA_OK) {
@@ -1284,6 +1317,7 @@ bool CameraSession::startRecording(const std::string& path, int width, int heigh
     activeSession_ = recordSession_;
     activeRequest_ = recordRequest_;
     applyControls(recordRequest_);
+    applyVideoStabilization(recordRequest_);   // EIS while recording (if supported)
 
     cs = ACameraCaptureSession_setRepeatingRequest(recordSession_, nullptr, 1, &recordRequest_, nullptr);
     if (cs != ACAMERA_OK) {
@@ -1448,6 +1482,19 @@ void CameraSession::applyControls(ACaptureRequest* req) const
     }
 }
 
+// Electronic video stabilization for a recording request.  ON only when the open
+// camera advertises it and the toggle is on; otherwise explicitly OFF (some HALs
+// default TEMPLATE_RECORD to ON, so we set it deterministically either way).
+void CameraSession::applyVideoStabilization(ACaptureRequest* req) const
+{
+    if (!req)
+        return;
+    uint8_t mode = (openVideoStab_ && videoStabEnabled_)
+                       ? (uint8_t)ACAMERA_CONTROL_VIDEO_STABILIZATION_MODE_ON
+                       : (uint8_t)ACAMERA_CONTROL_VIDEO_STABILIZATION_MODE_OFF;
+    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_VIDEO_STABILIZATION_MODE, 1, &mode);
+}
+
 bool CameraSession::applyControlsToActive()
 {
     if (!activeSession_ || !activeRequest_)
@@ -1576,6 +1623,10 @@ void CameraSession::dumpSummary(const CameraInfo& info) const
             info.isoMin, info.isoMax,
             info.exposureMinNs / 1.0e6, info.exposureMaxNs / 1.0e6,
             info.manualSensor ? "YES" : "no"));
+    log(fmt("  zoom %.1f-%.1fx   EV comp %d..%d @ %.3g EV/step   EIS: %s",
+            info.zoomRatioMin, info.zoomRatioMax,
+            info.evCompMin, info.evCompMax, info.evCompStep,
+            info.videoStabSupported ? "YES" : "no"));
 
     std::string caps;
     for (int c : info.capabilities) {
