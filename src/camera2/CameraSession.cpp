@@ -918,7 +918,7 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
         // i-frame-interval (1s) for the next natural keyframe (the encoder ignores
         // request-sync-frame on this HAL).  Leaving it OFF lets the cold-but-open
         // encoder emit a fresh IDR as its first fed frame → instant clip start.
-        if (getenv("FC2_PREFEED")
+        if (preRecordRing_
             && ACameraOutputTarget_create(ew, &previewEncoderTarget_) == ACAMERA_OK)
             ACaptureRequest_addTarget(previewRequest_, previewEncoderTarget_);
     }
@@ -990,6 +990,7 @@ bool CameraSession::enterVideoMode(int width, int height, int fps, int bitrate)
         lastError_ = "enterVideoMode: no open camera";
         return false;
     }
+    preRecordRing_ = (getenv("FC2_NORING") == nullptr);   // default on; opt-out for A/B
     if (!streaming_ || !reader_) {
         lastError_ = "enterVideoMode: preview not running";
         return false;
@@ -1018,6 +1019,7 @@ bool CameraSession::enterVideoMode(int width, int height, int fps, int bitrate)
         return false;   // enc destroyed here (open failed; no drain thread running)
     }
     encoder_ = std::move(enc);
+    encoder_->enableRing(preRecordRing_);   // buffer encoded GOPs for an instant clip start
 
     const int sessFps = fps > 0 ? fps : previewFps_;
     if (!buildSessionFromReaders(/*withEncoder*/ true, sessFps)) {

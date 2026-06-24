@@ -483,13 +483,15 @@ private:
     ACaptureSessionOutput*               recordOutput_    = nullptr;
     ACaptureRequest*                     recordRequest_   = nullptr;
     ACameraOutputTarget*                 recordTarget_    = nullptr;
-    // Prefeed (env-gated FC2_PREFEED, default OFF): when set, the encoder surface is
-    // also targeted by the *preview* request so the camera feeds the codec while idle
-    // in video mode.  It caches the output format early, but keeps the encoder mid-GOP
-    // so at record the clip waits up to one i-frame-interval for a natural keyframe
-    // (this HAL ignores request-sync-frame).  Kept as the basis for the planned
-    // pre-record ring buffer; default-OFF is the lower-latency path for now.
+    // Prefeed (enabled with preRecordRing_): the encoder surface is also targeted by
+    // the *preview* request so the camera feeds the codec continuously while in video
+    // mode.  The drain loop buffers those encoded GOPs (the pre-record ring) so a clip
+    // starts instantly from the last keyframe instead of waiting for the next one.
     ACameraOutputTarget*                 previewEncoderTarget_ = nullptr;
+    // Pre-record ring buffer: prefeed the encoder through preview AND keep the recent
+    // encoded GOPs so a clip starts instantly from the last buffered keyframe (tight
+    // pre-roll).  On by default; set FC2_NORING to fall back to the cold-encoder path.
+    bool                                 preRecordRing_ = true;
     ACameraCaptureSession_stateCallbacks recordCb_{};
     bool                                 recording_ = false;
 

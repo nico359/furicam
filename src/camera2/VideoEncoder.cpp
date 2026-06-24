@@ -32,6 +32,11 @@ int64_t nowMs()
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
+int64_t nowUs()
+{
+    using namespace std::chrono;
+    return duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
+}
 } // namespace
 
 VideoEncoder::~VideoEncoder()
@@ -60,7 +65,12 @@ bool VideoEncoder::open(int width, int height, int fps, int bitrate, int orienta
     AMediaFormat_setInt32(fmt, KEY_COLOR_FORMAT, COLOR_FormatSurface);
     AMediaFormat_setInt32(fmt, KEY_BIT_RATE, bitrate);
     AMediaFormat_setInt32(fmt, KEY_FRAME_RATE, fps);
-    AMediaFormat_setInt32(fmt, KEY_I_FRAME_INTERVAL, 1);
+    // Request a short GOP so the pre-record ring's last keyframe is recent → a tighter
+    // pre-roll.  NOTE: this HAL ignores sub-second i-frame-intervals (measured: it
+    // pins keyframes at ~0.9s regardless, and it also ignores request-sync-frame), so
+    // the pre-roll lands ~0.5s on average.  Left at the smallest value in case a
+    // future HAL honours it; nothing shorter is achievable on this encoder today.
+    AMediaFormat_setFloat(fmt, KEY_I_FRAME_INTERVAL, 0.3f);
     media_status_t ms = AMediaCodec_configure(codec_, fmt, nullptr, nullptr,
                                               AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
     AMediaFormat_delete(fmt);
@@ -121,8 +131,9 @@ bool VideoEncoder::beginClip(const std::string& path)
         audioTrackIdx_   = -1;
         firstVideoPtsUs_ = -1;
         firstAudioPtsUs_ = -1;
+        keyframeWallUs_        = -1;   // ring: set when we flush the start keyframe
+        lastFlushedVideoPtsUs_ = -1;   // ring: high-water mark for live frames
         lastOutputMs_    = nowMs();
-        clipBeginMs_     = lastOutputMs_;
         framesWritten_.store(0);
         audioFramesWritten_.store(0);
         clipActive_.store(true);
@@ -133,8 +144,6 @@ bool VideoEncoder::beginClip(const std::string& path)
             videoTrackReady_ = (trackIdx_ >= 0);
             maybeStartMuxerLocked();
         }
-        fprintf(stderr, "[fc2] beginClip: encoder was %s pre-fed (cachedFormat=%s)\n",
-                cachedFormat_ ? "ALREADY" : "NOT", cachedFormat_ ? "yes" : "no");
     }
 
     // Force an IDR so this clip's file starts on a keyframe (decodable alone).
@@ -159,20 +168,31 @@ void VideoEncoder::drainLoop()
             if (info.size > 0) {
                 size_t outSize = 0;
                 uint8_t* buf = AMediaCodec_getOutputBuffer(codec_, (size_t)idx, &outSize);
+                const bool    isKey = (info.flags & BUFFER_FLAG_KEY_FRAME) != 0;
+                const int64_t wallU = nowUs();
                 std::lock_guard<std::mutex> lk(muxerMutex_);
                 lastOutputMs_ = nowMs();
-                if (buf && muxer_ && muxerStarted_ && trackIdx_ >= 0) {
-                    // Drop output until this clip's first IDR so the file is
-                    // independently decodable, then normalize the PTS to zero.
-                    if (!sawKeyFrame_ && (info.flags & BUFFER_FLAG_KEY_FRAME))
+
+                // Pre-record buffer: keep recent encoded frames so a clip can start
+                // from the last keyframe already on hand (set up in flushVideoRingLocked).
+                if (buf && ringEnabled_) {
+                    videoRing_.push_back(RingFrame{
+                        std::vector<uint8_t>(buf + info.offset, buf + info.offset + info.size),
+                        info.presentationTimeUs, wallU, isKey});
+                    pruneVideoRingLocked(wallU);
+                }
+
+                // Live write — only frames produced AFTER this clip's flush point
+                // (pts beyond the high-water mark), once the muxer is running.  For
+                // the no-ring path lastFlushedVideoPtsUs_ stays -1 (all frames pass)
+                // and we still require a keyframe start.
+                if (buf && muxer_ && muxerStarted_ && trackIdx_ >= 0
+                    && info.presentationTimeUs > lastFlushedVideoPtsUs_) {
+                    if (!sawKeyFrame_ && isKey)
                         sawKeyFrame_ = true;
                     if (sawKeyFrame_) {
-                        if (firstVideoPtsUs_ < 0) {
+                        if (firstVideoPtsUs_ < 0)
                             firstVideoPtsUs_ = info.presentationTimeUs;
-                            fprintf(stderr, "[fc2] record-start latency: first video "
-                                    "frame muxed %lldms after beginClip\n",
-                                    (long long)(nowMs() - clipBeginMs_));
-                        }
                         AMediaCodecBufferInfo wi = info;
                         wi.presentationTimeUs = info.presentationTimeUs - firstVideoPtsUs_;
                         AMediaMuxer_writeSampleData(muxer_, (size_t)trackIdx_, buf, &wi);
@@ -186,9 +206,6 @@ void VideoEncoder::drainLoop()
             AMediaFormat* of = AMediaCodec_getOutputFormat(codec_);
             if (of) {
                 std::lock_guard<std::mutex> lk(muxerMutex_);
-                if (!cachedFormat_)
-                    fprintf(stderr, "[fc2] encoder produced first output (format known) "
-                            "— clipActive=%d\n", (int)clipActive_.load());
                 if (cachedFormat_)
                     AMediaFormat_delete(cachedFormat_);
                 cachedFormat_ = of;   // owned; re-used to add the track per clip
@@ -208,19 +225,26 @@ void VideoEncoder::endClip()
     if (!clipActive_.load())
         return;
 
-    // The caller has already stopped the camera feeding the input surface, so the
-    // codec's output goes quiet once its pipeline tail is drained.  Wait for that.
-    using namespace std::chrono;
-    auto deadline = steady_clock::now() + milliseconds(2000);
-    while (steady_clock::now() < deadline) {
-        bool quiet;
-        {
-            std::lock_guard<std::mutex> lk(muxerMutex_);
-            quiet = (nowMs() - lastOutputMs_) > 250;
+    // With the pre-record ring the encoder is fed CONTINUOUSLY (the prefeed keeps the
+    // preview request targeting it), so it never goes quiet — the soft-drain below
+    // would hang the full deadline.  The clip is already complete up to the latest
+    // dequeued frame (the drain loop wrote it live); any frame still in the codec's
+    // output queue is post-stop and belongs to the ring, not this clip.  Finalize now.
+    if (!ringEnabled_) {
+        // No-ring path: the caller has stopped the camera feeding the input surface,
+        // so wait for the codec's tail to drain quiet before finalizing.
+        using namespace std::chrono;
+        auto deadline = steady_clock::now() + milliseconds(2000);
+        while (steady_clock::now() < deadline) {
+            bool quiet;
+            {
+                std::lock_guard<std::mutex> lk(muxerMutex_);
+                quiet = (nowMs() - lastOutputMs_) > 250;
+            }
+            if (quiet)
+                break;
+            std::this_thread::sleep_for(milliseconds(20));
         }
-        if (quiet)
-            break;
-        std::this_thread::sleep_for(milliseconds(20));
     }
 
     std::lock_guard<std::mutex> lk(muxerMutex_);
@@ -248,6 +272,8 @@ void VideoEncoder::finalizeClipLocked()
     audioTrackIdx_   = -1;
     firstVideoPtsUs_ = -1;
     firstAudioPtsUs_ = -1;
+    keyframeWallUs_        = -1;
+    lastFlushedVideoPtsUs_ = -1;
 }
 
 void VideoEncoder::close()
@@ -286,16 +312,69 @@ void VideoEncoder::maybeStartMuxerLocked()
         return;   // still waiting for the audio track to be added
     if (AMediaMuxer_start(muxer_) == AMEDIA_OK) {
         muxerStarted_ = true;
-        // The clip's keyframe request in beginClip() may have already fired and been
-        // discarded while we waited for the audio track (the encoder is pre-fed and
-        // runs continuously through preview).  Force a fresh IDR now that both tracks
-        // are live, so the clip starts on the very next frame instead of waiting for
-        // the next natural GOP boundary (which made record-start latency jittery).
-        AMediaFormat* p = AMediaFormat_new();
-        AMediaFormat_setInt32(p, KEY_REQUEST_SYNC, 0);
-        AMediaCodec_setParameters(codec_, p);
-        AMediaFormat_delete(p);
+        // Pre-record buffer: write the most recent keyframe-aligned GOP from the ring
+        // so the clip starts INSTANTLY from a keyframe already on hand.  If nothing
+        // was flushed (ring off/empty), fall back to forcing a fresh IDR and waiting
+        // for it (the next natural GOP boundary on a HAL that ignores the request).
+        if (!flushVideoRingLocked()) {
+            AMediaFormat* p = AMediaFormat_new();
+            AMediaFormat_setInt32(p, KEY_REQUEST_SYNC, 0);
+            AMediaCodec_setParameters(codec_, p);
+            AMediaFormat_delete(p);
+        }
     }
+}
+
+// Drop ring frames older than the window, but never below the most recent keyframe
+// (a clip must always be able to start on an IDR).  Caller holds muxerMutex_.
+void VideoEncoder::pruneVideoRingLocked(int64_t nowU)
+{
+    while (videoRing_.size() > 1 && videoRing_.front().wallUs < nowU - ringWindowUs_) {
+        if (videoRing_.front().key) {
+            bool laterKey = false;
+            for (size_t i = 1; i < videoRing_.size(); ++i)
+                if (videoRing_[i].key) { laterKey = true; break; }
+            if (!laterKey)
+                break;   // this is the only keyframe left — keep it
+        }
+        videoRing_.pop_front();
+    }
+}
+
+// Write the buffered GOP from the most recent keyframe to the muxer, normalizing
+// PTS so that keyframe becomes time zero.  Sets the high-water mark + the keyframe's
+// wall time (for audio pre-roll alignment).  Returns false if no keyframe is buffered
+// (ring disabled/empty), in which case the caller takes the legacy path.
+bool VideoEncoder::flushVideoRingLocked()
+{
+    if (!ringEnabled_ || videoRing_.empty())
+        return false;
+    ssize_t startIdx = -1;
+    for (ssize_t i = (ssize_t)videoRing_.size() - 1; i >= 0; --i)
+        if (videoRing_[i].key) { startIdx = i; break; }
+    if (startIdx < 0)
+        return false;
+
+    const RingFrame& kf = videoRing_[(size_t)startIdx];
+    firstVideoPtsUs_ = kf.ptsUs;
+    keyframeWallUs_  = kf.wallUs;
+    sawKeyFrame_     = true;
+    for (size_t i = (size_t)startIdx; i < videoRing_.size(); ++i) {
+        const RingFrame& f = videoRing_[i];
+        AMediaCodecBufferInfo wi{};
+        wi.offset            = 0;
+        wi.size              = (int32_t)f.data.size();
+        wi.presentationTimeUs = f.ptsUs - firstVideoPtsUs_;
+        wi.flags             = f.key ? BUFFER_FLAG_KEY_FRAME : 0;
+        AMediaMuxer_writeSampleData(muxer_, (size_t)trackIdx_, f.data.data(), &wi);
+        framesWritten_.fetch_add(1, std::memory_order_relaxed);
+        lastFlushedVideoPtsUs_ = f.ptsUs;
+    }
+    fprintf(stderr, "[fc2] pre-record: clip starts from buffered keyframe "
+            "(pre-roll %lldms, %zu frames)\n",
+            (long long)((videoRing_.back().wallUs - kf.wallUs) / 1000),
+            videoRing_.size() - (size_t)startIdx);
+    return true;
 }
 
 void VideoEncoder::cancelAudioExpectation()
@@ -313,8 +392,6 @@ ssize_t VideoEncoder::addAudioTrack(AMediaFormat* fmt)
     if (!muxer_ || muxerStarted_)
         return -1;   // too late — the muxer was already started
     audioTrackIdx_ = AMediaMuxer_addTrack(muxer_, fmt);
-    fprintf(stderr, "[fc2] audio track added %lldms after beginClip\n",
-            (long long)(nowMs() - clipBeginMs_));
     maybeStartMuxerLocked();
     return audioTrackIdx_;
 }
@@ -331,8 +408,20 @@ void VideoEncoder::writeAudioSample(const uint8_t* data, AMediaCodecBufferInfo i
                   // soundtrack's zero aligns with the picture.  The muxer starts
                   // when the video TRACK is added (before its first frame), and the
                   // hot mic would otherwise write ~0.7s of audio ahead of the video.
-    if (firstAudioPtsUs_ < 0)
-        firstAudioPtsUs_ = info.presentationTimeUs;
+    if (firstAudioPtsUs_ < 0) {
+        // Place this first audio sample at its true offset after the video start
+        // keyframe.  With the pre-record ring the clip's video begins up to one GOP
+        // before the record button, so audio (which starts at the button) must land
+        // at that pre-roll offset — bridging the two clocks via the wall clock.  The
+        // pre-roll's leading [0..offset] has video but no audio (a brief silent
+        // lead-in).  Without the ring keyframeWallUs_ is -1 → offset 0 (unchanged).
+        int64_t offsetUs = 0;
+        if (keyframeWallUs_ >= 0) {
+            offsetUs = nowUs() - keyframeWallUs_;   // ~ (button - keyframe) = pre-roll
+            if (offsetUs < 0) offsetUs = 0;
+        }
+        firstAudioPtsUs_ = info.presentationTimeUs - offsetUs;
+    }
     info.presentationTimeUs -= firstAudioPtsUs_;
     if (info.presentationTimeUs < 0)
         info.presentationTimeUs = 0;

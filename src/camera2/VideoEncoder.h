@@ -31,9 +31,11 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "Camera2NDK.h"
 
@@ -97,6 +99,13 @@ public:
     // track before it starts (an MP4 track cannot be added after start).
     void expectAudio(bool yes) { audioExpected_ = yes; }
 
+    // ── Pre-record ring buffer ───────────────────────────────────────────────
+    // When enabled (and the encoder is being fed during preview), the drain loop
+    // keeps the most recent ~1.5s of encoded frames so a clip can start INSTANTLY
+    // from the last buffered keyframe instead of waiting for the next one.  The
+    // clip then begins up to one GOP before the record button (a tight pre-roll).
+    void enableRing(bool on) { ringEnabled_ = on; }
+
     // The audio source could not start — stop waiting for it (video-only).
     void cancelAudioExpectation();
 
@@ -118,6 +127,18 @@ private:
     void maybeStartMuxerLocked();
     void finalizeClipLocked();   // stop+free the muxer, close the file
 
+    // Ring-buffer helpers (caller holds muxerMutex_).
+    void pruneVideoRingLocked(int64_t nowU);   // drop history past the window, keep a leading IDR
+    bool flushVideoRingLocked();               // write [last keyframe..now] to the muxer; false if no keyframe
+
+    // One encoded H.264 access unit retained for the pre-record buffer.
+    struct RingFrame {
+        std::vector<uint8_t> data;
+        int64_t              ptsUs;    // encoder (sensor-clock) PTS
+        int64_t              wallUs;   // dequeue wall time (steady clock)
+        bool                 key;      // IDR keyframe
+    };
+
     // Persistent codec + surface.
     AMediaCodec*   codec_        = nullptr;
     ANativeWindow* inputWindow_  = nullptr;
@@ -137,7 +158,13 @@ private:
     int64_t        firstVideoPtsUs_ = -1;
     int64_t        firstAudioPtsUs_ = -1;
     int64_t        lastOutputMs_    = 0;       // for the soft-stop drain wait
-    int64_t        clipBeginMs_     = 0;       // beginClip() wall time, for record-start latency log
+
+    // Pre-record ring buffer (all guarded by muxerMutex_).
+    bool                  ringEnabled_           = false;
+    std::deque<RingFrame> videoRing_;
+    int64_t               ringWindowUs_          = 1500000;   // ~1.5s of history
+    int64_t               keyframeWallUs_        = -1;        // start keyframe's wall time (audio pre-roll align)
+    int64_t               lastFlushedVideoPtsUs_ = -1;        // high-water mark; live frames must exceed it
 
     std::thread        drainThread_;
     std::atomic<bool>  stopDrain_     {false};
