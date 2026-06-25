@@ -117,6 +117,10 @@ Item {
                     settings.cameras = cams // pony: force serialization, var arrays don't auto-detect nested change
                 }
             }
+            // Apply the restored resolution to the camera engine.
+            // Without this, JPEGs always use max sensor size because the
+            // session starts with reqJpegW_/H_ = 0 (default).
+            cam2.setResolution(currentResWidth, currentResHeight)
         }
     }
 
