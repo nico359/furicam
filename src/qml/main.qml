@@ -723,10 +723,11 @@ ApplicationWindow {
             id: zoomSliderH
             width: parent.width - 100 * window.scalingRatio
             anchors.verticalCenter: parent.verticalCenter
-            from: 0
-            to: cameraLoader.item ? cameraLoader.item.maxZoom : 0
-            value: cameraLoader.item ? cameraLoader.item.currentZoom : 0
-            stepSize: 1
+            from: 1.0
+            // ponytail: to (int max) → to (float nearest ×1) to keep step ratio sensible
+            to: cameraLoader.item ? cameraLoader.item.maxZoom : 1.0
+            value: cameraLoader.item ? Math.max(1.0, cameraLoader.item.currentZoom) : 1.0
+            stepSize: 0.1
             live: true
 
             onMoved: {
@@ -756,10 +757,8 @@ ApplicationWindow {
 
         Text {
             text: {
-                var max = cameraLoader.item ? cameraLoader.item.maxZoom : 1;
-                var z = cameraLoader.item ? cameraLoader.item.currentZoom : 0;
-                var mag = max > 0 ? (1.0 + (z / max) * 3.0) : 1.0;
-                return mag.toFixed(1) + "×";
+                var z = cameraLoader.item ? cameraLoader.item.currentZoom : 1.0;
+                return z.toFixed(1) + "×";
             }
             color: "white"
             font.pixelSize: 12 * window.scalingRatio

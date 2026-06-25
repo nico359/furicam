@@ -49,11 +49,10 @@ Item {
     function handleSetVideoBitrate(kbps) { cam2.setVideoBitrate(kbps) }
     function handleSetVideoResolution(w, h) { cam2.setVideoResolution(w, h) }
 
-    // Zoom is exposed in the legacy "slider value" model main.qml expects:
-    //   maxZoom is the slider range, currentZoom is the slider value, and the
-    //   magnification label main.qml shows is 1 + (currentZoom/maxZoom)*3.
-    property real currentZoom: 0
-    property real maxZoom: cam2.ready ? cam2.maxZoom() : 0
+    // Zoom: currentZoom is the actual zoom ratio (1.0..maxZoom). The slider
+    // in main.qml directly sets currentZoom and calls cam2.setZoom().
+    property real currentZoom: 1.0
+    property real maxZoom: cam2.ready ? cam2.maxZoom() : 1.0
 
     property int  colorTemperature: 0
     property bool frontActive: false
@@ -210,10 +209,9 @@ Item {
     }
 
     function handleSetZoom(zoomLevel) {
-        var z = Math.max(0, Math.min(zoomLevel, maxZoom))
+        var z = Math.max(1.0, Math.min(zoomLevel, maxZoom))
         currentZoom = z
-        var ratio = 1.0 + (maxZoom > 0 ? (z / maxZoom) : 0) * (cam2.maxZoom() - 1.0)
-        cam2.setZoom(ratio)
+        cam2.setZoom(z)
     }
 
     // Populate the camera selector from the engine's full list (incl. the
