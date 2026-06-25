@@ -1,3 +1,22 @@
+furicam (1.3.0-1) unstable; urgency=medium
+
+  * Port to Camera2 NDK API for full manual sensor control
+  * HDR burst capture with manual-exposure bracketing (OpenCV Mertens fusion)
+  * Fix AE lock: do not lock auto-exposure on tap-to-focus
+  * Fix JPEG capture resolution always using max sensor size
+  * Zoom slider with 0.1× steps and direct-ratio model
+  * DNG/RAW capture pipeline fixes (color matrix, preview)
+  * Orientation fixes: portrait-locked preview, correct capture orientation
+  * EXIF UserComment wiring for capture settings after each shot
+  * Video bitrate slider and resolution picker with C++ + QML wiring
+  * EIS (video stabilization) toggle
+  * Top bar reorganized into two logical rows with consistent button styling
+  * Resolution pickers replaced with ComboBox dropdowns
+  * Defaults updated: JPEG quality 90%, neutral color correction
+  * Build system: Debian packaging via distrobox container
+
+ -- nico359 <124350776+nico359@users.noreply.github.com>  Wed, 25 Jun 2026 15:36:00 +0000
+
 furicam (1.2.0-1) unstable; urgency=medium
 
   * Add HDR burst photography using OpenCV Mertens fusion
