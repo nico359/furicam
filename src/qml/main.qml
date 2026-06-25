@@ -170,7 +170,7 @@ ApplicationWindow {
         property int soundOn: 1
         property int gpsOn: 0
         property int cameraPosition: Camera.FrontFace
-        property int jpegQuality: 100
+        property int jpegQuality: 90
         property int gridEnabled: 0
         property int levelEnabled: 0
         property int videoBitrate: 20000
@@ -178,8 +178,8 @@ ApplicationWindow {
         property int videoResHeight: 1080
         property int whiteBalanceMode: 0
         property bool colorCorrectionEnabled: true
-        property real colorCorrectionRed:   0.98
-        property real colorCorrectionGreen: 1.02
+        property real colorCorrectionRed:   1.00
+        property real colorCorrectionGreen: 1.00
         property real colorCorrectionBlue:  1.00
         property real colorCorrectionSaturation: 1.20
         property bool hdrEnabled: false
