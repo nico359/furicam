@@ -769,6 +769,34 @@ ApplicationWindow {
         }
     }
 
+    // HDR capture/processing indicator — sits just above the control bar.
+    // "Hold still…" during burst capture, "Processing…" during OpenCV merge.
+    Rectangle {
+        id: hdrBadge
+        anchors.bottom: mainBar.top
+        anchors.bottomMargin: 8
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: hdrBadgeText.implicitWidth + 32
+        height: hdrBadgeText.implicitHeight + 16
+        radius: 6
+        color: "#CC333333"
+        visible: cameraLoader.item ? cameraLoader.item.hdrBusy : false
+        z: 500
+
+        Text {
+            id: hdrBadgeText
+            anchors.centerIn: parent
+            text: {
+                if (!cameraLoader.item) return "";
+                if (cameraLoader.item.hdrCapturing) return "Hold still…";
+                return "Processing…";
+            }
+            color: "#f0c040"
+            font.pixelSize: 14
+            font.bold: true
+        }
+    }
+
     Item {
         id: mainBar
         anchors.bottom: parent.bottom

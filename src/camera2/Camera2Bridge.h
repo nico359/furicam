@@ -89,6 +89,8 @@ class Camera2Bridge
     // HDR mode — bind to the GUI's HDR toggle.  When on, capturePhoto() takes a
     // short burst and fuses it (HdrProcessor); the GUI stays a one-line binding.
     Q_PROPERTY(bool    hdrEnabled          READ hdrEnabled WRITE setHdrEnabled NOTIFY hdrEnabledChanged)
+    Q_PROPERTY(bool    hdrBusy             READ hdrBusy                         NOTIFY hdrBusyChanged)
+    Q_PROPERTY(bool    hdrCapturing        READ hdrCapturing                    NOTIFY hdrCapturingChanged)
 
     // Per-shot flash mode (0=off 1=on 2=auto).  Bind to the GUI's flash setting so
     // it's applied on startup and on every change (not only via a signal on tap).
@@ -119,6 +121,8 @@ public:
     int     focusDistanceCalibration() const { return focusDistanceCalibration_.load(); }
     qreal   previewAspectRatio()  const { return previewAspectRatio_.load(); }
     bool    hdrEnabled()          const { return hdrEnabled_.load(); }
+    bool    hdrBusy()             const { return hdrBurstActive_ || hdrProcessing_; }
+    bool    hdrCapturing()        const { return hdrBurstActive_; }
     void    setHdrEnabled(bool on);
     int     flashMode()           const { return flashMode_; }
     QString lastPhotoPath()       const { QMutexLocker lk(&lastPhotoMutex_); return lastPhotoPath_; }
@@ -267,6 +271,8 @@ signals:
     void videoModeChanged();
     void videoSizeChanged();
     void hdrEnabledChanged();
+    void hdrBusyChanged();
+    void hdrCapturingChanged();
     void flashModeChanged();
 
     // One-shot signals for outcomes.
@@ -290,8 +296,9 @@ private:
     void doSingleCapture(const QString& outputPath);      // one still (after any precapture)
     void fixExifDateTime(const QString& path);            // shift UTC EXIF → local time
     void beginAutoFlashCapture(const QString& outputPath, int attempt);  // poll AE then shoot
-    void captureNextHdrFrame();
     void finishHdrBurst();            // fuse the burst on a worker thread
+    void captureSequentialHdrFrame(); // ponytail: one frame at a time with per-frame EV
+    int64_t readExposureNs(const QString& path);  // EXIF exposure time for HDR base
     void claimAccelerometer();        // claim iio-sensor-proxy so orientation is live
     int  queryDeviceRotation();       // on-demand device tilt (0/90/180/270) for capture tagging
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
@@ -345,8 +352,12 @@ private:
     static constexpr int kHdrFrames = 3;
     std::atomic<bool> hdrEnabled_     {false};
     bool              hdrBurstActive_ = false;
+    bool              hdrProcessing_  = false;
     QStringList       hdrPaths_;
     QString           hdrFinalPath_;
+    std::vector<int>  hdrEvBrackets_;     // EV steps for sequential HDR
+    size_t            hdrNextFrameIdx_ = 0;
+    int64_t           hdrBaseExpNs_ = 0;   // read from middle frame EXIF
     int               flashMode_      = 0;   // 0=off 1=on 2=auto (mirrors the engine)
 
     // Photo / video bookkeeping.

@@ -1139,6 +1139,138 @@ bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
     return true;
 }
 
+// Burst capture: submit N still-capture requests in a single HAL call.
+// Each frame gets a different AE compensation step if evBrackets is
+// provided (used for HDR: underexposed / neutral / overexposed).
+// Paths are queued in pendingPhotoPaths_ (and pendingRawPaths_ for DNG);
+// callbacks pop from the front in order.
+// ponytail: ACameraCaptureSession_capture(numRequests=N) IS the NDK burst.
+bool CameraSession::captureBurst(const std::vector<std::string>& paths,
+                                 int deviceRotation,
+                                 const std::vector<int>& evBrackets)
+{
+    if (!captureSession_ || !jpegWindow_) {
+        lastError_ = "captureBurst: no JPEG output (start preview with still capture)";
+        return false;
+    }
+    if (paths.empty()) {
+        lastError_ = "captureBurst: empty path list";
+        return false;
+    }
+    if (!evBrackets.empty() && evBrackets.size() != paths.size()) {
+        lastError_ = "captureBurst: evBrackets size must match paths size";
+        return false;
+    }
+
+    // Queue paths only AFTER we know the burst will be submitted, so a failed
+    // attempt doesn't leave stale paths that get popped by unrelated callbacks.
+    {
+        std::lock_guard<std::mutex> lk(photoMutex_);
+        for (const auto& p : paths)
+            pendingPhotoPaths_.push_back(p);
+        if (rawEnabled_) {
+            for (const auto& p : paths) {
+                std::string dngPath = p;
+                size_t dot = dngPath.rfind('.');
+                if (dot != std::string::npos) dngPath.replace(dot, std::string::npos, ".dng");
+                else dngPath += ".dng";
+                pendingRawPaths_.push_back(dngPath);
+            }
+        }
+    }
+
+    // RAII cleanup for targets & requests on early exit.
+    struct ReqGuard {
+        std::vector<ACaptureRequest*> reqs;
+        std::vector<ACameraOutputTarget*> jpegTargets;
+        std::vector<ACameraOutputTarget*> rawTargets;
+        ~ReqGuard() {
+            for (auto* r : reqs)  { if (r) ACaptureRequest_free(r); }
+            for (auto* t : jpegTargets) { if (t) ACameraOutputTarget_free(t); }
+            for (auto* t : rawTargets)  { if (t) ACameraOutputTarget_free(t); }
+        }
+    } guard;
+
+    const size_t N = paths.size();
+    guard.reqs.resize(N, nullptr);
+    guard.jpegTargets.resize(N, nullptr);
+    guard.rawTargets.resize(N, nullptr);
+
+    int32_t orientation = captureOrientation();
+    uint8_t quality = (uint8_t)jpegQuality_;
+    uint8_t antiband = (uint8_t)ACAMERA_CONTROL_AE_ANTIBANDING_MODE_AUTO;
+
+    for (size_t i = 0; i < N; ++i) {
+        ACaptureRequest* req = nullptr;
+        camera_status_t cs = ACameraDevice_createCaptureRequest(device_, TEMPLATE_STILL_CAPTURE, &req);
+        if (cs != ACAMERA_OK || !req) {
+            lastError_ = fmt("captureBurst: createCaptureRequest[%zu] failed (status %d)", i, (int)cs);
+            return false;
+        }
+        guard.reqs[i] = req;
+
+        ACameraOutputTarget* jt = nullptr;
+        cs = ACameraOutputTarget_create(jpegWindow_, &jt);
+        if (cs == ACAMERA_OK)
+            cs = ACaptureRequest_addTarget(req, jt);
+        if (cs != ACAMERA_OK) {
+            lastError_ = fmt("captureBurst: jpeg target[%zu] failed (status %d)", i, (int)cs);
+            return false;
+        }
+        guard.jpegTargets[i] = jt;
+
+        if (rawEnabled_ && rawWindow_) {
+            ACameraOutputTarget* rt = nullptr;
+            cs = ACameraOutputTarget_create(rawWindow_, &rt);
+            if (cs == ACAMERA_OK)
+                cs = ACaptureRequest_addTarget(req, rt);
+            if (cs != ACAMERA_OK) {
+                lastError_ = fmt("captureBurst: raw target[%zu] failed (status %d)", i, (int)cs);
+                return false;
+            }
+            guard.rawTargets[i] = rt;
+        }
+
+        ACaptureRequest_setEntry_i32(req, ACAMERA_JPEG_ORIENTATION, 1, &orientation);
+        ACaptureRequest_setEntry_u8(req, ACAMERA_JPEG_QUALITY, 1, &quality);
+        ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_ANTIBANDING_MODE, 1, &antiband);
+
+        applyControls(req);
+
+        // Per-frame AE exposure compensation for EV bracketing (HDR).
+        if (!evBrackets.empty()) {
+            int32_t evStep = evBrackets[i];
+            ACaptureRequest_setEntry_i32(req, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION,
+                                         1, &evStep);
+            log(fmt("captureBurst: frame %zu EV step %d", i, evStep));
+        }
+
+        // Flash — same logic as capturePhoto.
+        if (ctlAeMode_ != ACAMERA_CONTROL_AE_MODE_OFF) {
+            uint8_t aeFlash = ACAMERA_CONTROL_AE_MODE_ON;
+            if (flashMode_ == 1)      aeFlash = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
+            else if (flashMode_ == 2) aeFlash = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
+            ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &aeFlash);
+        }
+    }
+
+    // Submit all requests in one call — the NDK copies them so we can free.
+    int seqId = 0;
+    camera_status_t cs = ACameraCaptureSession_capture(captureSession_, nullptr,
+                                                       (int)N, guard.reqs.data(), &seqId);
+    if (cs != ACAMERA_OK) {
+        // On failure, scrub the queued paths so callbacks don't pop stale entries.
+        std::lock_guard<std::mutex> lk(photoMutex_);
+        for (size_t i = 0; i < N; ++i) {
+            if (!pendingPhotoPaths_.empty()) pendingPhotoPaths_.pop_back();
+            if (rawEnabled_ && !pendingRawPaths_.empty()) pendingRawPaths_.pop_back();
+        }
+        lastError_ = fmt("captureBurst: ACameraCaptureSession_capture failed (status %d)", (int)cs);
+        return false;
+    }
+    return true;
+}
+
 void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
 {
     auto* self = static_cast<CameraSession*>(ctx);
@@ -1152,7 +1284,10 @@ void CameraSession::onJpegImageAvailable(void* ctx, AImageReader* reader)
     std::string path;
     {
         std::lock_guard<std::mutex> lk(self->photoMutex_);
-        path = self->pendingPhotoPath_;
+        if (!self->pendingPhotoPaths_.empty()) {
+            path = self->pendingPhotoPaths_.front();
+            self->pendingPhotoPaths_.pop_front();
+        }
     }
 
     // Copy trimmed JPEG bytes out so the camera buffer can be released NOW;
@@ -1839,7 +1974,10 @@ void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
     std::string path;
     {
         std::lock_guard<std::mutex> lk(self->photoMutex_);
-        path = self->pendingRawPath_;
+        if (!self->pendingRawPaths_.empty()) {
+            path = self->pendingRawPaths_.front();
+            self->pendingRawPaths_.pop_front();
+        }
     }
 
     // Copy RAW16 into a tight buffer so the camera buffer can be freed now.

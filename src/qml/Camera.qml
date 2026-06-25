@@ -56,6 +56,8 @@ Item {
 
     property int  colorTemperature: 0
     property bool frontActive: false
+    property bool hdrBusy: cam2.hdrBusy
+    property bool hdrCapturing: cam2.hdrCapturing
 
     // Emitted whenever a final photo has been saved and is ready for the gallery.
     signal photoSaved()

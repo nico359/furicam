@@ -138,6 +138,16 @@ public:
     // callback (if set) fires.  Returns false if the request could not be
     // submitted.
     bool capturePhoto(const std::string& path, int deviceRotation = 0);
+
+    // Burst capture: submit N still-capture requests in a single HAL call,
+    // each writing to the corresponding path.  Much more efficient than N
+    // sequential captures — the HAL pipelines them as one batch.  The photo
+    // callback fires once per frame (in order).  HDR burst uses this.
+    // When evBrackets is provided (same size as paths), each request gets a
+    // different AE exposure compensation step (e.g. {-4, 0, +4} for ±2 EV).
+    // ponytail: ACameraCaptureSession_capture(numRequests=N) IS the NDK burst.
+    bool captureBurst(const std::vector<std::string>& paths, int deviceRotation = 0,
+                      const std::vector<int>& evBrackets = {});
     void setPhotoCallback(std::function<void(const std::string& path, bool ok)> cb)
     {
         photoCallback_ = std::move(cb);
@@ -376,7 +386,7 @@ private:
     }
 
     std::mutex                 photoMutex_;
-    std::string                pendingPhotoPath_;
+    std::deque<std::string>    pendingPhotoPaths_;       // queue for burst — pop front on each callback
     std::function<void(const std::string&, bool)> photoCallback_;
 
     // RAW16 output for DNG capture — swaps in for the analysis stream when raw is
@@ -390,7 +400,7 @@ private:
     AImageReader_ImageListener rawListener_{};
     int                        rawW_           = 0;
     int                        rawH_           = 0;
-    std::string                pendingRawPath_;          // set under photoMutex_
+    std::deque<std::string>    pendingRawPaths_;           // queue — pop front on each raw callback
 
     // Analysis YUV output (CPU-readable luma) for QR/barcode scanning — added to
     // the preview-only session (not video mode).  The listener hands the Y plane
