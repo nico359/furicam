@@ -227,7 +227,10 @@ void Camera2Bridge::startCamera()
     if (hasFrontCamera_.exchange(haveFront) != haveFront)
         emit hasFrontCameraChanged();
     updateDisplayRotation();   // also recomputes previewAspectRatio_ from the stream size
-    setupOrientationMonitor();
+    // Claim the accelerometer so orientation stays live; we read it on-demand
+    // at capture time to tag photos/videos with the device tilt.  The preview
+    // stays portrait-locked — updateDisplayRotation ignores device rotation.
+    claimAccelerometer();
     // Re-apply a pending video-mode request now that preview is streaming (also
     // re-enters video mode after a camera switch, which reopens the session).
     applyVideoMode();
@@ -301,12 +304,12 @@ void Camera2Bridge::setDeviceRotation(int degrees)
     update();
 }
 
-void Camera2Bridge::setupOrientationMonitor()
+void Camera2Bridge::claimAccelerometer()
 {
-    // Subscribe to iio-sensor-proxy (the auto-rotate service) and feed the device
-    // rotation into setDeviceRotation(), so the preview counter-rotates and stays
-    // world-upright.  A host app (FuriCam) may also drive setDeviceRotation()
-    // itself — last writer wins, and both read the same physical orientation.
+    // Claim iio-sensor-proxy (the auto-rotate service) once so it keeps the
+    // AccelerometerOrientation property live.  We do NOT poll/feed the preview —
+    // the preview is portrait-locked — we just read it on demand at capture time
+    // (queryDeviceRotation) to tag photos/videos with the device tilt.
     if (orientationMonitorStarted_)
         return;
     orientationMonitorStarted_ = true;
@@ -315,40 +318,41 @@ void Camera2Bridge::setupOrientationMonitor()
                           QStringLiteral("/net/hadess/SensorProxy"),
                           QStringLiteral("net.hadess.SensorProxy"),
                           QDBusConnection::systemBus());
-    if (!sensor.isValid())
-        return;
-    sensor.call(QStringLiteral("ClaimAccelerometer"));
+    if (sensor.isValid())
+        sensor.call(QStringLiteral("ClaimAccelerometer"));
+}
 
-    auto* timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, [this] {
-        QDBusInterface props(QStringLiteral("net.hadess.SensorProxy"),
-                             QStringLiteral("/net/hadess/SensorProxy"),
-                             QStringLiteral("org.freedesktop.DBus.Properties"),
-                             QDBusConnection::systemBus());
-        QDBusReply<QDBusVariant> r = props.call(QStringLiteral("Get"),
-                                                QStringLiteral("net.hadess.SensorProxy"),
-                                                QStringLiteral("AccelerometerOrientation"));
-        if (!r.isValid())
-            return;
-        const QString o = r.value().variant().toString();
-        const int dev = (o == QLatin1String("left-up"))   ? 90
-                      : (o == QLatin1String("bottom-up"))  ? 180
-                      : (o == QLatin1String("right-up"))   ? 270
-                      :                                       0;
-        setDeviceRotation(dev);
-    });
-    timer->start(400);
+// Read the current device orientation from iio-sensor-proxy and map it to degrees
+// clockwise from natural portrait (0/90/180/270).  Defaults to 0 (portrait) when
+// the sensor is unavailable.
+int Camera2Bridge::queryDeviceRotation()
+{
+    QDBusInterface props(QStringLiteral("net.hadess.SensorProxy"),
+                         QStringLiteral("/net/hadess/SensorProxy"),
+                         QStringLiteral("org.freedesktop.DBus.Properties"),
+                         QDBusConnection::systemBus());
+    QDBusReply<QDBusVariant> r = props.call(QStringLiteral("Get"),
+                                            QStringLiteral("net.hadess.SensorProxy"),
+                                            QStringLiteral("AccelerometerOrientation"));
+    if (!r.isValid())
+        return 0;
+    const QString o = r.value().variant().toString();
+    return (o == QLatin1String("left-up"))  ? 90
+         : (o == QLatin1String("bottom-up")) ? 180
+         : (o == QLatin1String("right-up"))  ? 270
+         :                                     0;   // "normal" / unknown
 }
 
 void Camera2Bridge::updateDisplayRotation()
 {
-    // Back camera: rotate the sensor image opposite the device rotation.  The
-    // +180 corrects the texcoord-rotation convention in the renderer (verified
-    // on-device: back camera, portrait).  Front-camera mirroring and the full
-    // per-orientation matrix are finished in M8 against the app's rotation plumb.
+    // Preview is portrait-locked: rotation depends only on the sensor mount angle,
+    // never device rotation (turning the phone must NOT counter-rotate the preview
+    // because the UI is portrait-only for now).  The +180 corrects the texcoord-
+    // rotation convention in the renderer (verified on-device: back camera, portrait).
+    // deviceRotation_ is still tracked via setDeviceRotation() as the hook for a
+    // future rotating UI; wire it back in here when the UI elements rotate.
     const int sensor = sensorOrientation_.load();
-    const int device = deviceRotation_.load();
-    displayRotation_.store(((sensor - device + 180) % 360 + 360) % 360);
+    displayRotation_.store(((sensor + 180) % 360 + 360) % 360);
     recomputePreviewAspect();
 }
 
@@ -452,6 +456,9 @@ void Camera2Bridge::startRecording(const QString& outputPath)
     }
     if (recording_.load())
         return;
+    // Tag this clip with how the phone is held as recording starts (preview stays
+    // portrait); the session applies it to the MP4 rotation hint per clip.
+    session_->setDeviceRotation(queryDeviceRotation());
     recordingPath_ = outputPath.isEmpty() ? defaultVideoPath() : outputPath;
     QDir().mkpath(QFileInfo(recordingPath_).absolutePath());
     // Make sure the combined preview+record session is up at the current size so
@@ -652,6 +659,8 @@ void Camera2Bridge::doSingleCapture(const QString& outputPath)
         return;
     const QString path = outputPath.isEmpty() ? defaultPhotoPath() : outputPath;
     QDir().mkpath(QFileInfo(path).absolutePath());
+    // Tag this shot with how the phone is currently held.
+    session_->setDeviceRotation(queryDeviceRotation());
     if (!session_->capturePhoto(path.toStdString(), deviceRotation_.load()))
         emit cameraError(QString::fromStdString(session_->lastError()));
 }
@@ -660,6 +669,7 @@ void Camera2Bridge::doSingleCapture(const QString& outputPath)
 void Camera2Bridge::captureNextHdrFrame()
 {
     const QString p = QDir::tempPath() + QStringLiteral("/furicam_hdr_%1.jpg").arg(hdrPaths_.size());
+    session_->setDeviceRotation(queryDeviceRotation());
     if (!session_->capturePhoto(p.toStdString(), deviceRotation_.load())) {
         hdrBurstActive_ = false;
         emit cameraError(QString::fromStdString(session_->lastError()));

@@ -292,7 +292,8 @@ private:
     void beginAutoFlashCapture(const QString& outputPath, int attempt);  // poll AE then shoot
     void captureNextHdrFrame();
     void finishHdrBurst();            // fuse the burst on a worker thread
-    void setupOrientationMonitor();   // poll iio-sensor-proxy -> setDeviceRotation
+    void claimAccelerometer();        // claim iio-sensor-proxy so orientation is live
+    int  queryDeviceRotation();       // on-demand device tilt (0/90/180/270) for capture tagging
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
     void rebuildVideoIfActive();      // re-enter video mode at a new size if active
     void qrDecode(const uint8_t* y, int width, int height, int rowStride);  // on a camera thread
