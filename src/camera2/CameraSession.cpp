@@ -341,24 +341,24 @@ bool CameraSession::readInfo(const std::string& id, CameraInfo* out)
     if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_REFERENCE_ILLUMINANT2, &e) == ACAMERA_OK && e.count >= 1)
         info.refIlluminant2 = e.data.i32[0];
     // Color transform matrices (XYZ → camera raw; 9-element rationals)
-    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_COLOR_TRANSFORM1, &e) == ACAMERA_OK && e.count >= 18) {
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_COLOR_TRANSFORM1, &e) == ACAMERA_OK && e.count >= 9) {
         for (int k = 0; k < 9; ++k)
             info.colorMatrix1[k] = (e.data.r[k].denominator != 0)
                 ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
     }
-    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_COLOR_TRANSFORM2, &e) == ACAMERA_OK && e.count >= 18) {
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_COLOR_TRANSFORM2, &e) == ACAMERA_OK && e.count >= 9) {
         for (int k = 0; k < 9; ++k)
             info.colorMatrix2[k] = (e.data.r[k].denominator != 0)
                 ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
         info.haveColor2 = true;
     }
     // Forward matrices (camera raw → XYZ D50; 9-element rationals)
-    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_FORWARD_MATRIX1, &e) == ACAMERA_OK && e.count >= 18) {
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_FORWARD_MATRIX1, &e) == ACAMERA_OK && e.count >= 9) {
         for (int k = 0; k < 9; ++k)
             info.forwardMatrix1[k] = (e.data.r[k].denominator != 0)
                 ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
     }
-    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_FORWARD_MATRIX2, &e) == ACAMERA_OK && e.count >= 18) {
+    if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_FORWARD_MATRIX2, &e) == ACAMERA_OK && e.count >= 9) {
         for (int k = 0; k < 9; ++k)
             info.forwardMatrix2[k] = (e.data.r[k].denominator != 0)
                 ? (double)e.data.r[k].numerator / (double)e.data.r[k].denominator : 0.0;
@@ -796,9 +796,9 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
     if (!withEncoder && analysisWindow_ && !rawEnabled_
         && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
         ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
-    if (!withEncoder && rawWindow_ && rawEnabled_
-        && ACameraOutputTarget_create(rawWindow_, &analysisTarget_) == ACAMERA_OK)
-        ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
+    // ponytail: RAW16 is targeted only by the still-capture request (rawStillTarget_),
+    // NEVER by the repeating preview — producing 20 MP RAW on every preview frame
+    // saturates the ISP and starves the preview pipeline.
     if (targetFps > 0) {
         int32_t r[2] = { targetFps, targetFps };
         ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
@@ -1789,7 +1789,7 @@ bool CameraSession::ensureRawReader()
     }
     rawW_ = ci->raw16W;
     rawH_ = ci->raw16H;
-    media_status_t ms = AImageReader_new(rawW_, rawH_, AIMAGE_FORMAT_RAW16, /*maxImages*/ 2, &rawReader_);
+    media_status_t ms = AImageReader_new(rawW_, rawH_, AIMAGE_FORMAT_RAW16, /*maxImages*/ 1, &rawReader_);
     if (ms != AMEDIA_OK || !rawReader_) {
         rawReader_ = nullptr;
         lastError_ = fmt("AImageReader_new(RAW16 %dx%d) failed (status %d)", rawW_, rawH_, (int)ms);
@@ -1840,7 +1840,7 @@ void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
         path = self->pendingRawPath_;
     }
 
-    // Copy RAW16 pixels into a tight buffer so the camera buffer can be freed now.
+    // Copy RAW16 into a tight buffer so the camera buffer can be freed now.
     std::vector<uint16_t> pixels;
     int w = 0, h = 0, stride = 0, len = 0;
     uint8_t* data = nullptr;
@@ -1867,7 +1867,7 @@ void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
     DngParams p;
     p.width = w; p.height = h;
     p.rowStrideBytes = w * 2;
-    p.orientationDeg = self->openSensorOrientation_;
+    p.orientationDeg = self->captureOrientation();
     if (ci) {
         p.whiteLevel     = ci->whiteLevel;
         for (int k = 0; k < 4; ++k) p.blackLevel[k] = ci->blackLevel[k];
@@ -1897,7 +1897,7 @@ void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
             float gg = 0.5f * (self->resultGains_[1] + self->resultGains_[2]);
             float gb = self->resultGains_[3];
             if (gr > 0 && gg > 0 && gb > 0) {
-                p.asShotNeutral[0] = gg / gr;  // normalize so green = 1
+                p.asShotNeutral[0] = gg / gr;
                 p.asShotNeutral[1] = 1.0;
                 p.asShotNeutral[2] = gg / gb;
             }
@@ -1908,7 +1908,6 @@ void CameraSession::onRawImageAvailable(void* ctx, AImageReader* reader)
         p.exposureNs = self->resultExposureNs_;
     }
 
-    // Write DNG on the background writer thread — camera buffer is already freed.
     self->enqueueWrite([self, path, p, pixels = std::move(pixels)]() {
         std::string e2;
         bool ok = writeDng(path, pixels.data(), p, &e2);
