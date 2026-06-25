@@ -1718,7 +1718,7 @@ ApplicationWindow {
                 anchors.rightMargin: 10 * window.scalingRatio
                 spacing: 0
 
-                // ── Row 1: AWB, Sound, GPS, Grid, Level ──────────────────
+                // ── Row 1: Pro, RAW, HDR, Level, Grid ──────────────────
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -1730,8 +1730,8 @@ ApplicationWindow {
                         Layout.fillHeight: true
 
                         contentItem: Text {
-                            text: "Pro"
-                            color: settings.proModeEnabled ? "#f0c040" : "white"
+                            text: "PRO"
+                            color: settings.proModeEnabled ? "#f0c040" : "grey"
                             font.pixelSize: 13 * window.scalingRatio
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
@@ -1747,68 +1747,6 @@ ApplicationWindow {
                                 cameraLoader.item.setAutoExposure();
                             }
                         }
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        icon.source: settings.soundOn === 1 ? "icons/audioOn.svg" : "icons/audioOff.svg"
-                        icon.height: configBarDrawer.height * 0.25
-                        icon.width: configBarDrawer.height * 0.25
-                        icon.color: settings.soundOn === 1 ? "white" : "grey"
-                        background: Rectangle { color: "transparent" }
-                        onClicked: { settings.soundOn = settings.soundOn === 1 ? 0 : 1 }
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        icon.source: window.gps_icon_source
-                        icon.height: configBarDrawer.height * 0.25
-                        icon.width: configBarDrawer.height * 0.25
-                        icon.color: window.locationAvailable === 1 ? "white" : "grey"
-                        background: Rectangle { color: "transparent" }
-
-                        Connections {
-                            target: fileManager
-                            function onGpsDataReady() {
-                                window.gps_icon_source = "icons/gpsOn.svg"
-                                window.locationAvailable = 1
-                            }
-                        }
-
-                        onClicked: {
-                            settings.gpsOn = settings.gpsOn === 1 ? 0 : 1
-                            if (settings.gpsOn === 1) {
-                                fileManager.turnOnGps()
-                            } else {
-                                fileManager.turnOffGps()
-                                window.gps_icon_source = "icons/gpsOff.svg"
-                                window.locationAvailable = 0
-                            }
-                        }
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        icon.source: "icons/grid.svg"
-                        icon.height: configBarDrawer.height * 0.25
-                        icon.width: configBarDrawer.height * 0.25
-                        icon.color: settings.gridEnabled === 1 ? "white" : "grey"
-                        background: Rectangle { color: "transparent" }
-                        onClicked: { settings.gridEnabled = settings.gridEnabled === 1 ? 0 : 1 }
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        icon.source: "icons/level.svg"
-                        icon.height: configBarDrawer.height * 0.25
-                        icon.width: configBarDrawer.height * 0.25
-                        icon.color: settings.levelEnabled === 1 ? "white" : "grey"
-                        background: Rectangle { color: "transparent" }
-                        onClicked: { settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1 }
                     }
 
                     // RAW (DNG): save a color-accurate raw alongside each JPEG
@@ -1833,9 +1771,49 @@ ApplicationWindow {
                                 cameraLoader.item.handleSetRaw(settings.rawEnabled)
                         }
                     }
+
+                    // HDR toggle
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        contentItem: Text {
+                            text: "HDR"
+                            color: settings.hdrEnabled ? "#f0c040" : "grey"
+                            font.pixelSize: 13 * window.scalingRatio
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.hdrEnabled = !settings.hdrEnabled }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/level.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: settings.levelEnabled === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.levelEnabled = settings.levelEnabled === 1 ? 0 : 1 }
+                    }
+
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: "icons/grid.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: settings.gridEnabled === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.gridEnabled = settings.gridEnabled === 1 ? 0 : 1 }
+                    }
                 }
 
-                // ── Row 2: Timer, Settings, Menu ─────────────────────────
+                // ── Row 2: Timer, Sound, Location, Settings, Camera ──────
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -1887,24 +1865,44 @@ ApplicationWindow {
                         }
                     }
 
-                    Item { Layout.fillWidth: true; Layout.fillHeight: true }
-
-                    // HDR toggle — styled like the AWB button
                     Button {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        icon.source: settings.soundOn === 1 ? "icons/audioOn.svg" : "icons/audioOff.svg"
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: settings.soundOn === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+                        onClicked: { settings.soundOn = settings.soundOn === 1 ? 0 : 1 }
+                    }
 
-                        contentItem: Text {
-                            text: "HDR"
-                            color: settings.hdrEnabled ? "#f0c040" : "white"
-                            font.pixelSize: 13 * window.scalingRatio
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                    Button {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        icon.source: window.gps_icon_source
+                        icon.height: configBarDrawer.height * 0.25
+                        icon.width: configBarDrawer.height * 0.25
+                        icon.color: window.locationAvailable === 1 ? "white" : "grey"
+                        background: Rectangle { color: "transparent" }
+
+                        Connections {
+                            target: fileManager
+                            function onGpsDataReady() {
+                                window.gps_icon_source = "icons/gpsOn.svg"
+                                window.locationAvailable = 1
+                            }
                         }
 
-                        background: Rectangle { color: "transparent" }
-                        onClicked: { settings.hdrEnabled = !settings.hdrEnabled }
+                        onClicked: {
+                            settings.gpsOn = settings.gpsOn === 1 ? 0 : 1
+                            if (settings.gpsOn === 1) {
+                                fileManager.turnOnGps()
+                            } else {
+                                fileManager.turnOffGps()
+                                window.gps_icon_source = "icons/gpsOff.svg"
+                                window.locationAvailable = 0
+                            }
+                        }
                     }
 
                     Button {
@@ -2025,40 +2023,79 @@ ApplicationWindow {
                 topPadding: 4 * window.scalingRatio
             }
 
-            ListView {
-                id: resolutionList
-                width: parent.width
-                height: settingsDrawer.height * 0.5
-                clip: true
+            ComboBox {
+                id: photoResCombo
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
                 model: cameraLoader.item ? cameraLoader.item.resolutionModel : null
-                spacing: 2 * window.scalingRatio
+                textRole: "label"
+                font.pixelSize: 15 * window.scalingRatio
 
-                delegate: Rectangle {
-                    width: resolutionList.width
-                    height: 44 * window.scalingRatio
-                    color: {
-                        if (cameraLoader.item && cameraLoader.item.currentResWidth === model.resWidth && cameraLoader.item.currentResHeight === model.resHeight) {
-                            return "#444";
-                        }
-                        return "transparent";
+                onActivated: {
+                    if (cameraLoader.item) {
+                        var m = cameraLoader.item.resolutionModel.get(index)
+                        cameraLoader.item.setResolution(m.resWidth, m.resHeight)
                     }
-                    radius: 4 * window.scalingRatio
+                }
 
-                    Text {
+                contentItem: Text {
+                    leftPadding: 14 * window.scalingRatio
+                    rightPadding: 36 * window.scalingRatio
+                    text: {
+                        var cam = cameraLoader.item
+                        if (!cam || !cam.resolutionModel) return ""
+                        for (var i = 0; i < cam.resolutionModel.count; i++) {
+                            var m = cam.resolutionModel.get(i)
+                            if (m.resWidth === cam.currentResWidth && m.resHeight === cam.currentResHeight)
+                                return m.label
+                        }
+                        return ""
+                    }
+                    color: "white"
+                    font: photoResCombo.font
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+                background: Rectangle {
+                    implicitHeight: 46 * window.scalingRatio
+                    color: "#222"; border.color: "#555"; border.width: 1
+                    radius: 8 * window.scalingRatio
+                }
+                indicator: Text {
+                    x: photoResCombo.width - width - 14 * window.scalingRatio
+                    y: (photoResCombo.height - height) / 2
+                    text: "▾"; color: "#aaa"; font.pixelSize: 16 * window.scalingRatio
+                }
+                delegate: ItemDelegate {
+                    width: photoResCombo.width
+                    height: 44 * window.scalingRatio
+                    highlighted: photoResCombo.highlightedIndex === index
+                    contentItem: Text {
+                        leftPadding: 14 * window.scalingRatio
                         text: model.label
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
-                        anchors.verticalCenter: parent.verticalCenter
-                        leftPadding: 16 * window.scalingRatio
+                        verticalAlignment: Text.AlignVCenter
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            if (cameraLoader.item) {
-                                cameraLoader.item.setResolution(model.resWidth, model.resHeight);
-                            }
-                        }
+                    background: Rectangle {
+                        color: highlighted ? "#444"
+                             : (cameraLoader.item && cameraLoader.item.currentResWidth === model.resWidth
+                                && cameraLoader.item.currentResHeight === model.resHeight) ? "#333" : "#262626"
+                    }
+                }
+                popup: Popup {
+                    y: photoResCombo.height + 2
+                    width: photoResCombo.width
+                    implicitHeight: Math.min(listView.contentHeight + 2, 360 * window.scalingRatio)
+                    padding: 1
+                    background: Rectangle { color: "#262626"; border.color: "#555"; radius: 8 * window.scalingRatio }
+                    contentItem: ListView {
+                        id: listView
+                        clip: true
+                        implicitHeight: contentHeight
+                        model: photoResCombo.popup.visible ? photoResCombo.delegateModel : null
+                        currentIndex: photoResCombo.highlightedIndex
+                        ScrollIndicator.vertical: ScrollIndicator {}
                     }
                 }
             }
@@ -2079,36 +2116,77 @@ ApplicationWindow {
                 topPadding: 4 * window.scalingRatio
             }
 
-            ListView {
-                id: videoResolutionList
-                width: parent.width
-                height: videoResolutionModel.count * 46 * window.scalingRatio
-                clip: true
+            ComboBox {
+                id: videoResCombo
+                width: parent.width - 32 * window.scalingRatio
+                anchors.horizontalCenter: parent.horizontalCenter
                 model: videoResolutionModel
-                spacing: 2 * window.scalingRatio
+                textRole: "label"
+                font.pixelSize: 15 * window.scalingRatio
 
-                delegate: Rectangle {
-                    width: videoResolutionList.width
+                onActivated: {
+                    var m = videoResolutionModel.get(index)
+                    settings.videoResWidth  = m.resWidth
+                    settings.videoResHeight = m.resHeight
+                    if (cameraLoader.item)
+                        cameraLoader.item.handleSetVideoResolution(m.resWidth, m.resHeight)
+                }
+
+                contentItem: Text {
+                    leftPadding: 14 * window.scalingRatio
+                    rightPadding: 36 * window.scalingRatio
+                    text: {
+                        for (var i = 0; i < videoResolutionModel.count; i++) {
+                            var m = videoResolutionModel.get(i)
+                            if (m.resWidth === settings.videoResWidth && m.resHeight === settings.videoResHeight)
+                                return m.label
+                        }
+                        return ""
+                    }
+                    color: "white"
+                    font: videoResCombo.font
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+                background: Rectangle {
+                    implicitHeight: 46 * window.scalingRatio
+                    color: "#222"; border.color: "#555"; border.width: 1
+                    radius: 8 * window.scalingRatio
+                }
+                indicator: Text {
+                    x: videoResCombo.width - width - 14 * window.scalingRatio
+                    y: (videoResCombo.height - height) / 2
+                    text: "▾"; color: "#aaa"; font.pixelSize: 16 * window.scalingRatio
+                }
+                delegate: ItemDelegate {
+                    width: videoResCombo.width
                     height: 44 * window.scalingRatio
-                    color: (settings.videoResWidth === model.resWidth && settings.videoResHeight === model.resHeight) ? "#444" : "transparent"
-                    radius: 4 * window.scalingRatio
-
-                    Text {
+                    highlighted: videoResCombo.highlightedIndex === index
+                    contentItem: Text {
+                        leftPadding: 14 * window.scalingRatio
                         text: model.label
                         color: "white"
                         font.pixelSize: 15 * window.scalingRatio
-                        anchors.verticalCenter: parent.verticalCenter
-                        leftPadding: 16 * window.scalingRatio
+                        verticalAlignment: Text.AlignVCenter
                     }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            settings.videoResWidth  = model.resWidth;
-                            settings.videoResHeight = model.resHeight;
-                            if (cameraLoader.item)
-                                cameraLoader.item.handleSetVideoResolution(model.resWidth, model.resHeight);
-                        }
+                    background: Rectangle {
+                        color: highlighted ? "#444"
+                             : (settings.videoResWidth === model.resWidth && settings.videoResHeight === model.resHeight) ? "#333" : "#262626"
+                    }
+                }
+                popup: Popup {
+                    y: videoResCombo.height + 2
+                    width: videoResCombo.width
+                    implicitHeight: Math.min(vList.contentHeight + 2, 250 * window.scalingRatio)
+                    padding: 1
+                    background: Rectangle { color: "#262626"; border.color: "#555"; radius: 8 * window.scalingRatio }
+                    contentItem: ListView {
+                        id: vList
+                        clip: true
+                        implicitHeight: contentHeight
+                        model: videoResCombo.popup.visible ? videoResCombo.delegateModel : null
+                        currentIndex: videoResCombo.highlightedIndex
+                        ScrollIndicator.vertical: ScrollIndicator {}
                     }
                 }
             }
