@@ -270,6 +270,26 @@ Item {
         }
     }
 
+    // One-line summary of app settings used for a shot, embedded in EXIF UserComment.
+    function captureSettingsSummary() {
+        var s = settings
+        var wb = ["Auto", "Daylight", "Cloudy", "Tungsten", "Fluorescent"]
+        var expo = s.manualExposureEnabled || s.proModeEnabled
+              ? "ISO" + s.manualIso + " " + (s.manualExposureMs < 1000
+                  ? "1/" + Math.round(1000 / s.manualExposureMs) + "s"
+                  : (s.manualExposureMs / 1000).toFixed(2) + "s")
+              : "AE"
+        return "furicam"
+             + " | JPEG:" + s.jpegQuality
+             + " | RAW:" + (s.rawEnabled ? "on" : "off")
+             + " | WB:" + (wb[s.whiteBalanceMode] || "Auto")
+             + " | Exp:" + expo
+             + (s.colorCorrectionEnabled ? " | CC:on" : "")
+             + (s.hdrEnabled ? " | HDR:on" : "")
+             + " | Flash:" + (s.flashMode === 1 ? "on" : "off")
+             + (s.gpsOn ? " | GPS:on" : "")
+    }
+
     // Post-process + announce a saved photo (fires on the GUI thread).
     function onCam2PhotoSaved(path) {
         if (settings.colorCorrectionEnabled) {
@@ -281,6 +301,11 @@ Item {
             fileManager.reencodeJpeg(path, settings.jpegQuality)
         if (window.locationAvailable === 1)
             fileManager.appendGPSMetadata(path)
+        // Write app settings into EXIF UserComment — after re-encode so it survives.
+        var summary = captureSettingsSummary()
+        fileManager.writeCaptureSettings(path, summary)
+        if (settings.rawEnabled)
+            fileManager.writeCaptureSettings(path.replace(/\.jpe?g$/i, ".dng"), summary)
         photoSaved()
     }
 
