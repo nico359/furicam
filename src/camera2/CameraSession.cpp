@@ -1064,14 +1064,14 @@ bool CameraSession::capturePhoto(const std::string& path, int deviceRotation)
     }
     {
         std::lock_guard<std::mutex> lk(photoMutex_);
-        pendingPhotoPath_ = path;
+        pendingPhotoPaths_.push_back(path);
         // DNG path: replace .jpg extension with .dng
         if (rawEnabled_) {
             std::string dngPath = path;
             size_t dot = dngPath.rfind('.');
             if (dot != std::string::npos) dngPath.replace(dot, std::string::npos, ".dng");
             else dngPath += ".dng";
-            pendingRawPath_ = dngPath;
+            pendingRawPaths_.push_back(dngPath);
         }
     }
 
@@ -1508,6 +1508,8 @@ bool CameraSession::applyControlsToActive()
 void CameraSession::setAutoExposure()
 {
     ctlAeMode_ = ACAMERA_CONTROL_AE_MODE_ON;
+    ctlAeLock_ = 0;
+    ctlEvComp_ = 0;
     applyControlsToActive();
 }
 

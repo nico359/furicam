@@ -179,14 +179,12 @@ Item {
     function handleStartCamera() { cam2.startCamera() }
 
     function handleSetFocusMode(focusMode) {
-        // FocusContinuous -> continuous AF + AE unlocked; FocusAuto (the app's
-        // "locked" state) -> hold focus + lock AE.
+        // FocusContinuous -> continuous AF; FocusAuto (the app's
+        // "locked" state) -> hold focus but leave AE unlocked.
         if (focusMode === Camera.FocusContinuous) {
             cam2.setAutoFocus()
-            cam2.setAELock(false)
         } else {
             cam2.setFocusLock(true)
-            cam2.setAELock(true)
         }
     }
 
