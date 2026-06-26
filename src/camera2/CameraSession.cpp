@@ -512,6 +512,13 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         int jw = reqJpegW_, jh = reqJpegH_;
         if (jw <= 0 || jh <= 0)
             maxJpegSize(&jw, &jh);
+        // Clamp requested size against the sensor's actual max JPEG output
+        // (e.g. switching from a 20 MP main cam to a 1.6 MP macro cam).
+        int mw = 0, mh = 0;
+        if (maxJpegSize(&mw, &mh) && mw > 0 && mh > 0) {
+            if (jw > mw) { jh = (int)((long)jh * mw / jw); jw = mw; }
+            if (jh > mh) { jw = (int)((long)jw * mh / jh); jh = mh; }
+        }
         if (jw > 0 && jh > 0
             && AImageReader_new(jw, jh, AIMAGE_FORMAT_JPEG, /*maxImages*/ 2, &jpegReader_) == AMEDIA_OK
             && jpegReader_) {
@@ -624,7 +631,19 @@ void CameraSession::closeSessionLocked()
         AImageReader_setImageListener(jpegReader_, nullptr);
     if (captureSession_) {
         ACameraCaptureSession_stopRepeating(captureSession_);
+        // Signal the async close and wait for onSessionClosed callback before
+        // returning — without this, a rapid close→open cycle (e.g. camera switch)
+        // can race against the HAL's async teardown and fail createCaptureSession.
+        {
+            std::lock_guard<std::mutex> lk(sessionCloseMutex_);
+            sessionCloseDone_ = false;
+        }
         ACameraCaptureSession_close(captureSession_);
+        {
+            std::unique_lock<std::mutex> lk(sessionCloseMutex_);
+            sessionCloseCv_.wait_for(lk, std::chrono::milliseconds(500),
+                                     [this] { return sessionCloseDone_; });
+        }
         captureSession_ = nullptr;
     }
 }
@@ -987,8 +1006,14 @@ void CameraSession::onSessionReady(void* /*ctx*/, ACameraCaptureSession* /*sessi
 
 void CameraSession::onSessionClosed(void* ctx, ACameraCaptureSession* /*session*/)
 {
-    if (auto* self = static_cast<CameraSession*>(ctx))
+    if (auto* self = static_cast<CameraSession*>(ctx)) {
         self->log("capture session closed");
+        {
+            std::lock_guard<std::mutex> lk(self->sessionCloseMutex_);
+            self->sessionCloseDone_ = true;
+        }
+        self->sessionCloseCv_.notify_one();
+    }
 }
 
 // Each completed result carries the AE state; cache it so the bridge can wait for

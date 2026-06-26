@@ -461,6 +461,12 @@ private:
     std::deque<std::function<void()>> writerJobs_;
     bool                              writerStop_    = false;
     bool                              writerStarted_ = false;
+
+    // Wait for async session close before opening a new session (HAL-specific;
+    // some implementations need the onClosed callback before re-open).
+    std::mutex              sessionCloseMutex_;
+    std::condition_variable sessionCloseCv_;
+    bool                    sessionCloseDone_ = false;
 };
 
 } // namespace furicam
