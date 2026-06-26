@@ -597,11 +597,11 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         && ACameraOutputTarget_create(analysisWindow_, &analysisTarget_) == ACAMERA_OK)
         ACaptureRequest_addTarget(previewRequest_, analysisTarget_);
 
-    // Pin the auto-exposure frame-rate range so the HAL targets a steady fps
-    // (TEMPLATE_PREVIEW otherwise lets AE drop the rate in low light).
+    // Let AE drop framerate as low as needed in dim scenes for brighter exposure.
+    // The HAL rounds {1, targetFps} to the nearest supported range (e.g. {7, 30}).
     previewFps_ = targetFps > 0 ? targetFps : previewFps_;
     if (targetFps > 0) {
-        int32_t fpsRange[2] = { targetFps, targetFps };
+        int32_t fpsRange[2] = { 1, targetFps };
         ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, fpsRange);
     }
 
@@ -819,7 +819,10 @@ bool CameraSession::buildSessionFromReaders(bool withEncoder, int targetFps)
     // NEVER by the repeating preview — producing 20 MP RAW on every preview frame
     // saturates the ISP and starves the preview pipeline.
     if (targetFps > 0) {
-        int32_t r[2] = { targetFps, targetFps };
+        // Photo preview: let AE drop framerate in low light (HAL rounds up to
+        // nearest supported range).  Video/encoder sessions pin both ends for
+        // steady recording fps.
+        int32_t r[2] = { withEncoder ? targetFps : 1, targetFps };
         ACaptureRequest_setEntry_i32(previewRequest_, ACAMERA_CONTROL_AE_TARGET_FPS_RANGE, 2, r);
     }
     applyControls(previewRequest_);
