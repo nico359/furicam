@@ -48,6 +48,7 @@ Item {
     function handleSetRaw(on) { cam2.setRawEnabled(on) }
     function handleSetVideoBitrate(kbps) { cam2.setVideoBitrate(kbps) }
     function handleSetVideoResolution(w, h) { cam2.setVideoResolution(w, h) }
+    function handleSetVideoStabilization(on) { cam2.setVideoStabilization(on) }
 
     // Zoom: currentZoom is the actual zoom ratio (1.0..maxZoom). The slider
     // in main.qml directly sets currentZoom and calls cam2.setZoom().
@@ -402,6 +403,7 @@ Item {
                 cam2.setRawEnabled(settings.rawEnabled)   // restore RAW (DNG) capture
                 cam2.setVideoBitrate(settings.videoBitrate)   // restore chosen bitrate
                 cam2.setVideoResolution(settings.videoResWidth, settings.videoResHeight)   // restore chosen resolution
+                cam2.setVideoStabilization(settings.eisEnabled === 1)   // restore EIS preference
                 cameraItem.applyVideoMode()   // enter video mode if starting on the video tab
                 // Sync GUI position state to the camera that actually opened (bridge
                 // ground truth) — the flash button and other UI gate on
@@ -411,6 +413,8 @@ Item {
                 settings.cameraPosition = frontActive ? Camera.FrontFace : Camera.BackFace
             }
         }
+        // Keep the bitrate slider in sync when resolution changes bump the floor.
+        onVideoBitrateChanged: settings.videoBitrate = videoBitrateKbps
         onCameraError: {
             cameraItem.errorBannerText = message
             cameraItem.errorBannerVisible = true

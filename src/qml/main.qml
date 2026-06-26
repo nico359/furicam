@@ -176,6 +176,7 @@ ApplicationWindow {
         property int videoBitrate: 20000
         property int videoResWidth: 1920
         property int videoResHeight: 1080
+        property int eisEnabled: 1
         property int whiteBalanceMode: 0
         property bool colorCorrectionEnabled: true
         property real colorCorrectionRed:   1.00
@@ -2302,6 +2303,31 @@ ApplicationWindow {
                     implicitHeight: 22 * window.scalingRatio
                     radius: 11 * window.scalingRatio
                     color: bitrateSlider.pressed ? "#ddd" : "white"
+                }
+            }
+
+            // ── EIS (video stabilization) ──────────────────────────────────
+            Row {
+                leftPadding: 16 * window.scalingRatio
+                spacing: 12 * window.scalingRatio
+
+                Text {
+                    text: "Video Stabilization (EIS)"
+                    color: "white"
+                    font.pixelSize: 18 * window.scalingRatio
+                    font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Switch {
+                    id: eisSwitch
+                    checked: settings.eisEnabled === 1
+                    onToggled: {
+                        settings.eisEnabled = checked ? 1 : 0
+                        if (cameraLoader.item)
+                            cameraLoader.item.handleSetVideoStabilization(checked)
+                    }
+                    anchors.verticalCenter: parent.verticalCenter
                 }
             }
 

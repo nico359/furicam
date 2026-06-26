@@ -61,6 +61,10 @@ class Camera2Bridge
     Q_PROPERTY(int     videoWidth          READ videoWidth  WRITE setVideoWidth  NOTIFY videoSizeChanged)
     Q_PROPERTY(int     videoHeight         READ videoHeight WRITE setVideoHeight NOTIFY videoSizeChanged)
 
+    // Effective video bitrate in kbps (floor-by-resolution applied).  The QML
+    // slider binds here so it auto-updates when resolution changes.
+    Q_PROPERTY(int     videoBitrateKbps    READ videoBitrateKbps                NOTIFY videoBitrateChanged)
+
     // Current exposure for the on-screen badge ("ISO 200, 1/60").  ISO here is
     // international standards organization sensor sensitivity; shutterNs is
     // exposure time in nanoseconds.
@@ -254,6 +258,8 @@ public:
     // new size.  Bind to the app's video-resolution setting.
     Q_INVOKABLE void setVideoResolution(int width, int height);
     Q_INVOKABLE void setVideoBitrate(int kbps);   // H.264 bitrate in kbps
+    Q_INVOKABLE void setVideoStabilization(bool on);
+    int  videoBitrateKbps() const;
     int  videoWidth()  const { return videoW_; }
     int  videoHeight() const { return videoH_; }
     void setVideoWidth(int width);
@@ -270,6 +276,7 @@ signals:
     void lastPhotoPathChanged();
     void videoModeChanged();
     void videoSizeChanged();
+    void videoBitrateChanged();
     void hdrEnabledChanged();
     void hdrBusyChanged();
     void hdrCapturingChanged();

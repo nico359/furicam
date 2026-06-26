@@ -304,6 +304,11 @@ void VideoEncoder::writeAudioSample(const uint8_t* data, AMediaCodecBufferInfo i
     std::lock_guard<std::mutex> lk(muxerMutex_);
     if (!muxer_ || !muxerStarted_ || audioTrackIdx_ < 0)
         return;   // drop pre-roll / between-clip audio until both tracks are live
+    if (firstVideoPtsUs_ < 0)
+        return;   // hold audio until the first (key)frame is muxed, so the
+                  // soundtrack's zero aligns with the picture.  The muxer starts
+                  // when the video TRACK is added (before its first frame), and the
+                  // hot mic would otherwise write ~0.7s of audio ahead of the video.
     if (firstAudioPtsUs_ < 0)
         firstAudioPtsUs_ = info.presentationTimeUs;
     info.presentationTimeUs -= firstAudioPtsUs_;
