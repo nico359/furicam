@@ -1,3 +1,16 @@
+furicam (1.3.1-1) unstable; urgency=medium
+
+  * Fix A/V sync: hold audio samples until first video frame is muxed
+  * Fix gallery: videos appear immediately after recording (recordingSaved signal)
+  * Fix gallery: ffmpeg video thumbnails (QImage registration, ffmpeg in deps)
+  * Fix gallery: delete jumps to previous entry instead of empty slot
+  * Fix macro camera: clamp JPEG output to sensor max resolution on camera switch
+  * Fix macro camera: wait for async session close before re-opening (race fix)
+  * Fix AE FPS range: allow HAL to trade framerate for exposure in low light
+  * Add video bitrate floors per resolution (10/20/40 Mbps for ≤720p/≤1080p/4K)
+
+ -- nico359 <124350776+nico359@users.noreply.github.com>  Fri, 26 Jun 2026 14:32:56 +0200
+
 furicam (1.3.0-1) unstable; urgency=medium
 
   * Port to Camera2 NDK API for full manual sensor control
