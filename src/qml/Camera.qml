@@ -62,6 +62,8 @@ Item {
 
     // Emitted whenever a final photo has been saved and is ready for the gallery.
     signal photoSaved()
+    // Emitted after a video recording is finalized and ready for the gallery.
+    signal recordingSaved()
 
     // Kept instantiated for compatibility; HDR/metering are simplified for the
     // Camera2 path (single capture).  TODO: HDR via Camera2 exposure bracketing.
@@ -421,6 +423,7 @@ Item {
             errorBannerTimer.restart()
         }
         onPhotoSaved: cameraItem.onCam2PhotoSaved(path)
+        onRecordingSaved: cameraItem.recordingSaved()
 
         // Live color correction, same shader the legacy path used.
         layer.enabled: settings.colorCorrectionEnabled

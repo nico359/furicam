@@ -324,6 +324,7 @@ ApplicationWindow {
                 window.setDeviceID.connect(cameraLoader.item.handleSetDeviceID);
 
                 cameraLoader.item.photoSaved.connect(galleryRefreshTimer.restart);
+                cameraLoader.item.recordingSaved.connect(galleryRefreshTimer.restart);
                 cameraLoader.item.initializeCameraList(); // Initialize CameraList model
                 cameraLoader.item.setWhiteBalanceMode(settings.whiteBalanceMode);
                 // Restore manual exposure if pro mode or manual exposure was on
@@ -347,6 +348,7 @@ ApplicationWindow {
                 window.setDeviceID.disconnect(cameraLoader.item.handleSetDeviceID);
 
                 cameraLoader.item.photoSaved.disconnect(galleryRefreshTimer.restart);
+                cameraLoader.item.recordingSaved.disconnect(galleryRefreshTimer.restart);
                 signalsConnected = false;
             }
         }
@@ -357,9 +359,9 @@ ApplicationWindow {
         source: "sounds/camera-shutter.wav"
     }
 
-    // Refreshes the gallery after a photo is saved by calling mediaView.refresh(),
+    // Refreshes the gallery after a photo or video is saved by calling mediaView.refresh(),
     // which forces FolderListModel to rescan (needed because inotify is unavailable).
-    // Triggered via cameraLoader.item.photoSaved signal after each save.
+    // Triggered via cameraLoader.item.photoSaved / recordingSaved signals after each save.
     Timer {
         id: galleryRefreshTimer
         interval: 200
@@ -1149,7 +1151,7 @@ ApplicationWindow {
                         transformOrigin: Item.Center
                         fillMode: Image.Stretch
                         smooth: false
-                        source: (cslate.state == "PhotoCapture") ? mediaView.lastImg : ""
+                        source: mediaView.lastImg
                         scale: Math.min(parent.width / width, parent.height / height)
                     }
                 }

@@ -771,8 +771,9 @@ Rectangle {
                                 height: confirmationPopup.height * 0.6
                                 onClicked: {
                                     var tempCurrUrl = viewRect.currentFileUrl
+                                    viewRect.index = Math.max(0, viewRect.index - 1)
                                     fileManager.deleteImage(tempCurrUrl)
-                                    viewRect.index = imgModel.count
+                                    viewRect.refresh()
                                     deletePopUp = "closed"
                                     confirmationPopup.close()
                                 }

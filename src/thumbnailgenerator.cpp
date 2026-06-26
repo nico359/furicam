@@ -12,9 +12,11 @@
 #include <QUrl>
 #include <QDir>
 #include <QFile>
+#include <QDebug>
 
-ThumbnailGenerator::ThumbnailGenerator(QObject *parent) : QObject(parent) {}
-
+ThumbnailGenerator::ThumbnailGenerator(QObject *parent) : QObject(parent) {
+    qRegisterMetaType<QImage>("QImage");
+} 
 void ThumbnailGenerator::setVideoSource(const QString &videoSource) {
     // The QML side passes a file:// URL; ffmpeg needs a plain filesystem path.
     QString path = videoSource;
@@ -22,8 +24,10 @@ void ThumbnailGenerator::setVideoSource(const QString &videoSource) {
     if (u.isLocalFile())
         path = u.toLocalFile();
 
-    if (path.isEmpty() || !QFile::exists(path))
+    if (path.isEmpty() || !QFile::exists(path)) {
+        qDebug() << "ThumbnailGenerator: video not found:" << path;
         return;
+    }
 
     // Only one extraction at a time; drop any in-flight job (e.g. when the user
     // swipes quickly between videos).
@@ -38,10 +42,15 @@ void ThumbnailGenerator::setVideoSource(const QString &videoSource) {
 
     m_proc = new QProcess(this);
     connect(m_proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, [this](int, QProcess::ExitStatus) {
+            this, [this](int exitCode, QProcess::ExitStatus) {
+        qDebug() << "ThumbnailGenerator: ffmpeg finished, exit:" << exitCode << "path:" << m_outPath;
         QImage img(m_outPath);
-        if (!img.isNull())
+        if (!img.isNull()) {
+            qDebug() << "ThumbnailGenerator: image loaded" << img.width() << "x" << img.height();
             emit thumbnailGenerated(img);
+        } else {
+            qDebug() << "ThumbnailGenerator: failed to load thumbnail from" << m_outPath;
+        }
         if (m_proc) {
             m_proc->deleteLater();
             m_proc = nullptr;
@@ -57,7 +66,8 @@ void ThumbnailGenerator::setVideoSource(const QString &videoSource) {
          << QStringLiteral("-frames:v") << QStringLiteral("1")
          << QStringLiteral("-vf") << QStringLiteral("scale=320:-2")
          << m_outPath;
-    m_proc->start(QStringLiteral("ffmpeg"), args);
+    qDebug() << "ThumbnailGenerator: starting" << "/usr/bin/ffmpeg" << args;
+    m_proc->start(QStringLiteral("/usr/bin/ffmpeg"), args);
 }
 
 QString ThumbnailGenerator::toQmlImage(const QImage &image) {
