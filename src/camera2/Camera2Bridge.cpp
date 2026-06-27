@@ -169,6 +169,8 @@ void Camera2Bridge::startCamera()
         }
     }
     sensorOrientation_.store(chosenOrientation);
+    currentCameraId_ = chosen;
+    emit cameraIdChanged();
 
     // pony: pull sensor range for manual exposure sliders from the chosen camera
     for (const auto& c : cams) {
@@ -207,6 +209,12 @@ void Camera2Bridge::startCamera()
         }, Qt::QueuedConnection);
     });
 
+    // Propagate the user-chosen still resolution for this camera, clamped
+    // inside startPreview() to the sensor's actual max.  No saved choice
+    // means 0 → maxJpegSize() picks the per-sensor max.
+    auto it = cameraResolutions_.find(chosen);
+    if (it != cameraResolutions_.end() && it->second.first > 0)
+        session_->setJpegSize(it->second.first, it->second.second);
     pickPreviewStreamSize();   // match the preview aspect to the chosen still aspect
     if (!session_->startPreview(previewStreamW_, previewStreamH_, AIMAGE_FORMAT_PRIVATE,
                                 AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE, 30)) {
@@ -253,6 +261,9 @@ void Camera2Bridge::stopCameraSession()
         session_->close();
     }
     previewReader_ = nullptr;
+    // ponytail: fully destroy the session + its ACameraManager before opening
+    // another camera — some HALs need the manager delete/open cycle to complete.
+    session_.reset();
 }
 
 void Camera2Bridge::switchCamera()
@@ -262,6 +273,7 @@ void Camera2Bridge::switchCamera()
     lensFacingPref_.store(lensFacingPref_.load() == ACAMERA_LENS_FACING_BACK
                               ? ACAMERA_LENS_FACING_FRONT
                               : ACAMERA_LENS_FACING_BACK);
+    // ponytail: per-camera resolution memory — no need to reset.
     stopCameraSession();
     startCamera();
 }
@@ -359,7 +371,11 @@ void Camera2Bridge::updateDisplayRotation()
 // The effective still size: the user-chosen one, else the sensor's largest size.
 void Camera2Bridge::effectiveCaptureSize(int& cw, int& ch)
 {
-    cw = captureW_; ch = captureH_;
+    auto it = cameraResolutions_.find(currentCameraId_);
+    if (it != cameraResolutions_.end()) {
+        cw = it->second.first;
+        ch = it->second.second;
+    }
     if ((cw <= 0 || ch <= 0) && session_) {
         long best = 0;
         for (const auto& s : session_->jpegSizes()) {
@@ -997,8 +1013,7 @@ void Camera2Bridge::setResolution(int width, int height)
 {
     if (!session_)
         return;
-    captureW_ = width;
-    captureH_ = height;
+    cameraResolutions_[currentCameraId_] = {width, height};
     recomputePreviewAspect();   // letterbox + crop follow the new still aspect at once
     session_->setJpegSize(width, height);
     // Recreate the still output (JPEG reader) at the new size by restarting the

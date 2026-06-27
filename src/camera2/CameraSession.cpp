@@ -516,8 +516,11 @@ bool CameraSession::startPreview(int width, int height, int format, uint64_t usa
         // (e.g. switching from a 20 MP main cam to a 1.6 MP macro cam).
         int mw = 0, mh = 0;
         if (maxJpegSize(&mw, &mh) && mw > 0 && mh > 0) {
+            int origW = jw, origH = jh;
             if (jw > mw) { jh = (int)((long)jh * mw / jw); jw = mw; }
             if (jh > mh) { jw = (int)((long)jw * mh / jh); jh = mh; }
+            if (jw != origW || jh != origH)
+                log(fmt("JPEG size clamped: %dx%d → %dx%d (sensor max %dx%d)", origW, origH, jw, jh, mw, mh));
         }
         if (jw > 0 && jh > 0
             && AImageReader_new(jw, jh, AIMAGE_FORMAT_JPEG, /*maxImages*/ 2, &jpegReader_) == AMEDIA_OK
@@ -641,7 +644,7 @@ void CameraSession::closeSessionLocked()
         ACameraCaptureSession_close(captureSession_);
         {
             std::unique_lock<std::mutex> lk(sessionCloseMutex_);
-            sessionCloseCv_.wait_for(lk, std::chrono::milliseconds(500),
+            sessionCloseCv_.wait_for(lk, std::chrono::milliseconds(2000),
                                      [this] { return sessionCloseDone_; });
         }
         captureSession_ = nullptr;

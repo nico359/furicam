@@ -47,6 +47,7 @@ class Camera2Bridge
     Q_PROPERTY(bool    recording           READ isRecording           NOTIFY recordingChanged)
     Q_PROPERTY(bool    hasFrontCamera      READ hasFrontCamera        NOTIFY hasFrontCameraChanged)
     Q_PROPERTY(int     frameCount          READ frameCount            NOTIFY frameCountChanged)
+    Q_PROPERTY(QString currentCameraId     READ currentCameraId       NOTIFY cameraIdChanged)
 
     // Video mode: bind this to the GUI's photo/video toggle.  When true, the
     // bridge pre-configures the camera for simultaneous preview+record (the
@@ -165,6 +166,9 @@ public:
     // Facing of the currently-OPENED camera (0=front, 1=back) — ground truth for
     // syncing the GUI's camera-position state.
     Q_INVOKABLE int  currentFacing() const { return lensFacingPref_.load(); }
+    // Camera ID (e.g. "0") of the currently-open camera — ground truth so QML
+    // per-camera settings (resolutions etc.) always use the right key.
+    QString currentCameraId() const { return QString::fromStdString(currentCameraId_); }
 
     // Begin recording to outputPath (a writable filesystem path with .mp4
     // extension).  If outputPath is empty, uses defaultOutputPath().  Emits
@@ -268,6 +272,7 @@ public:
 signals:
     void readyChanged();
     void recordingChanged();
+    void cameraIdChanged();
     void hasFrontCameraChanged();
     void frameCountChanged();
     void exposureChanged();
@@ -333,8 +338,11 @@ private:
     int                  videoW_             = 1920;     // recording size
     int                  videoH_             = 1080;
     int                  videoBitrate_       = 0;        // kbps; 0 = resolution-scaled default
-    int                  captureW_           = 0;        // chosen still size (0 = sensor max)
-    int                  captureH_           = 0;
+    // ponytail: per-camera still resolution — cameras have wildly different
+    // sensor sizes (20 MP main, 13 MP selfie, 1.6 MP macro), so remembering
+    // the user's choice by camera id avoids cross-camera over-size failures.
+    std::unordered_map<std::string, std::pair<int,int>> cameraResolutions_;
+    std::string           currentCameraId_;             // camera id open right now
     int                  previewStreamW_     = 1280;     // preview stream size; its aspect
     int                  previewStreamH_     = 720;      // follows the still aspect (WYSIWYG)
     std::atomic<int>     frameCount_         {0};

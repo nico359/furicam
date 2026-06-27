@@ -93,47 +93,58 @@ Item {
                 "mp": mp, "label": mp + " MP (" + w + "×" + h + ")  " + (w / g) + ":" + (h / g)
             })
         }
-        // Restore user's previous resolution, else default to largest.
-        if (res.length > 0 && currentResWidth === 0) {
+        // Restore the current camera's saved resolution, else default to largest.
+        // Always run (not only on first open) so the dropdown shows the right
+        // value after switching cameras — per-camera resolution memory means
+        // each camera may have a different saved size.
+        if (res.length > 0) {
             var savedW = 0, savedH = 0
-            if (settings.cameras && settings.cameras[settings.cameraId]) {
-                savedW = settings.cameras[settings.cameraId].resWidth
-                savedH = settings.cameras[settings.cameraId].resHeight
+            var camId = cam2.currentCameraId
+            if (settings.cameras && settings.cameras[camId]) {
+                savedW = settings.cameras[camId].resWidth
+                savedH = settings.cameras[camId].resHeight
             }
             // Check saved resolution is still in the available list
             var found = false
             for (var j = 0; j < res.length; j++) {
                 if (savedW === res[j].width && savedH === res[j].height) {
-                    currentResWidth = savedW
-                    currentResHeight = savedH
                     found = true
                     break
                 }
             }
-            if (!found) {
-                currentResWidth = res[0].width
-                currentResHeight = res[0].height
-                if (settings.cameras && settings.cameras[settings.cameraId]) {
-                    var cams = settings.cameras
-                    cams[settings.cameraId].resWidth = res[0].width
-                    cams[settings.cameraId].resHeight = res[0].height
-                    settings.cameras = cams // pony: force serialization, var arrays don't auto-detect nested change
+            var targetW = found ? savedW : res[0].width
+            var targetH = found ? savedH : res[0].height
+            // Only restart the camera if the target differs from what we
+            // already have — avoids an infinite restart loop since
+            // setResolution() restarts the camera, which re-triggers
+            // onReadyChanged → fnAspectRatio().
+            if (targetW !== currentResWidth || targetH !== currentResHeight) {
+                currentResWidth = targetW
+                currentResHeight = targetH
+                if (!found) {
+                    if (settings.cameras && settings.cameras[camId]) {
+                        var cams = settings.cameras
+                        cams[camId].resWidth = targetW
+                        cams[camId].resHeight = targetH
+                        settings.cameras = cams // pony: force serialization, var arrays don't auto-detect nested change
+                    }
                 }
+                // Apply the restored resolution to the camera engine.
+                // Without this, JPEGs always use max sensor size because the
+                // session starts with reqJpegW_/H_ = 0 (default).
+                cam2.setResolution(targetW, targetH)
             }
-            // Apply the restored resolution to the camera engine.
-            // Without this, JPEGs always use max sensor size because the
-            // session starts with reqJpegW_/H_ = 0 (default).
-            cam2.setResolution(currentResWidth, currentResHeight)
         }
     }
 
     function setResolution(width, height) {
         currentResWidth = width
         currentResHeight = height
-        if (settings.cameras && settings.cameras[settings.cameraId]) {
+        var camId = cam2.currentCameraId
+        if (settings.cameras && settings.cameras[camId]) {
             var cams = settings.cameras
-            cams[settings.cameraId].resWidth = width
-            cams[settings.cameraId].resHeight = height
+            cams[camId].resWidth = width
+            cams[camId].resHeight = height
             settings.cameras = cams // pony: force serialization
         }
         cam2.setResolution(width, height)   // restarts the camera at the new still size
