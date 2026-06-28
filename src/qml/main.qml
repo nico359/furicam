@@ -120,6 +120,22 @@ ApplicationWindow {
         }
     }
 
+    // ponytail: HAL quality quantizes to ~4 real tiers.
+    // Small(2.4MB), Medium(3MB), Balanced(3.6MB), Original(4.6MB).
+    function toHalJpegQuality(sliderVal) {
+        if (sliderVal >= 100) return 100
+        if (sliderVal >= 90)  return 70
+        if (sliderVal >= 80)  return 40
+        return 20
+    }
+
+    function jpegQualityLabel(v) {
+        if (v >= 100) return "Original"
+        if (v >= 90)  return "Balanced"
+        if (v >= 80)  return "Medium"
+        return "Small"
+    }
+
     OrientationSensor {
         id: orientationSensor
         active: true
@@ -2202,7 +2218,7 @@ ApplicationWindow {
             }
 
             Text {
-                text: settings.jpegQuality >= 100 ? "JPEG Quality: Original" : "JPEG Quality: " + settings.jpegQuality + "%"
+                text: "JPEG Quality: " + jpegQualityLabel(settings.jpegQuality)
                 color: "white"
                 font.pixelSize: 18 * window.scalingRatio
                 font.bold: true
@@ -2213,9 +2229,9 @@ ApplicationWindow {
                 id: qualitySlider
                 width: parent.width - 32 * window.scalingRatio
                 anchors.horizontalCenter: parent.horizontalCenter
-                from: 50
+                from: 70
                 to: 100
-                stepSize: 5
+                stepSize: 10
                 value: settings.jpegQuality
 
                 onMoved: {

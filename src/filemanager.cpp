@@ -770,47 +770,6 @@ void FileManager::onClientDeleted() {
     m_geoClueInstance = nullptr;
 }
 
-void FileManager::reencodeJpeg(const QString &filePath, int quality) {
-    if (quality >= 100 || quality < 1) return;
-
-    QString path = filePath;
-    if (path.startsWith("file://")) {
-        path = path.mid(7);
-    }
-
-    // Read EXIF metadata before re-encoding
-    Exiv2::ExifData savedExif;
-    try {
-        auto exivImage = Exiv2::ImageFactory::open(path.toStdString());
-        exivImage->readMetadata();
-        savedExif = exivImage->exifData();
-    } catch (const Exiv2::Error &e) {
-        qDebug() << "Warning: Could not read EXIF before re-encode:" << e.what();
-    }
-
-    // Load and re-save with desired quality
-    QImage image(path);
-    if (image.isNull()) {
-        qDebug() << "Error: Could not load image for re-encoding:" << path;
-        return;
-    }
-
-    if (!image.save(path, "JPEG", quality)) {
-        qDebug() << "Error: Could not save re-encoded image:" << path;
-        return;
-    }
-
-    // Restore EXIF metadata
-    try {
-        auto exivImage = Exiv2::ImageFactory::open(path.toStdString());
-        exivImage->readMetadata();
-        exivImage->setExifData(savedExif);
-        exivImage->writeMetadata();
-    } catch (const Exiv2::Error &e) {
-        qDebug() << "Warning: Could not restore EXIF after re-encode:" << e.what();
-    }
-}
-
 void FileManager::applyColorCorrection(const QString &filePath, double redScale, double greenScale, double blueScale, double saturation, int quality)
 {
     if (qFuzzyCompare(redScale, 1.0) && qFuzzyCompare(greenScale, 1.0) && qFuzzyCompare(blueScale, 1.0) && qFuzzyCompare(saturation, 1.0))

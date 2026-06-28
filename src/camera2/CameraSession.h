@@ -174,6 +174,7 @@ public:
     // Still JPEG quality [1,100] (default 95).  Set from the app's quality setting
     // so the HAL encodes at the chosen quality directly (no on-disk re-encode).
     void setJpegQuality(int q) { jpegQuality_ = q < 1 ? 1 : (q > 100 ? 100 : q); }
+    int  jpegQuality() const  { return jpegQuality_; }
 
     // ── RAW/DNG capture ─────────────────────────────────────────────────
     // When enabled, each shot also saves a color-accurate .dng (the RAW16

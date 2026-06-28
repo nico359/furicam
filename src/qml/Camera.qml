@@ -165,7 +165,7 @@ Item {
         freezeCurrentPreview()         // hold ~what you shot while the still capture stalls preview
         window.triggerCaptureFlash()   // immediate shutter cue
         // Capture directly at the chosen quality (no on-disk re-encode afterward).
-        cam2.setJpegQuality(settings.jpegQuality)
+        cam2.setJpegQuality(toHalJpegQuality(settings.jpegQuality))
         // Single full-resolution capture; the engine writes the JPEG and emits
         // photoSaved(path), handled in onPhotoSaved below.
         cam2.capturePhoto("")
@@ -296,7 +296,7 @@ Item {
                   : (s.manualExposureMs / 1000).toFixed(2) + "s")
               : "AE"
         return "furicam"
-             + " | JPEG:" + s.jpegQuality
+             + " | JPEG:" + jpegQualityLabel(s.jpegQuality)
              + " | RAW:" + (s.rawEnabled ? "on" : "off")
              + " | WB:" + (wb[s.whiteBalanceMode] || "Auto")
              + " | Exp:" + expo
@@ -313,8 +313,7 @@ Item {
                 settings.colorCorrectionRed, settings.colorCorrectionGreen,
                 settings.colorCorrectionBlue, settings.colorCorrectionSaturation)
         }
-        if (settings.jpegQuality < 100)
-            fileManager.reencodeJpeg(path, settings.jpegQuality)
+        // JPEG quality is set on the HAL before capture — no re-encode needed.
         if (window.locationAvailable === 1)
             fileManager.appendGPSMetadata(path)
         // Write app settings into EXIF UserComment — after re-encode so it survives.

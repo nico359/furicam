@@ -855,6 +855,9 @@ void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
     }
     if (ok) {
         fixExifDateTime(path);
+        // DEBUG: log file size vs requested quality for calibration
+        qDebug() << "[camera] JPEG quality:" << session_->jpegQuality()
+                 << "size:" << (QFileInfo(path).size() / 1024) << "KB path:" << path;
         setLastPhotoPath(path);
         emit photoSaved(path);
     } else {
