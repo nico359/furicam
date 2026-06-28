@@ -1,3 +1,17 @@
+furicam (1.3.2-1) unstable; urgency=medium
+
+  * HDR memory optimizations: remove synthetic bracket fallback, downscale
+    to 50% before MergeMertens, upscale with Lanczos4, aggressive mat release
+    — peak memory cut from ~2GB to ~300MB
+  * Widen HDR EV brackets from ±2 to ±3 stops for more aggressive dynamic range
+  * Use EV 0 frame's ISO (from EXIF) for bracket exposures instead of hardcoded 400,
+    preventing highlight clipping in bright scenes
+  * Fix HDR EXIF copy: use EV 0 frame metadata instead of EV -3 (dark frame)
+  * Fix resolution dropdown sync when switching cameras (per-camera memory)
+  * Match HDR output filename to regular photo naming: IMG_..._HDR.jpg
+
+ -- nico359 <124350776+nico359@users.noreply.github.com>  Sun, 28 Jun 2026 14:27:00 +0200
+
 furicam (1.3.1-1) unstable; urgency=medium
 
   * Fix A/V sync: hold audio samples until first video frame is muxed
