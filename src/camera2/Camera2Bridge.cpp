@@ -671,8 +671,8 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
         const int mn = session_->evCompMin();
         const int mx = session_->evCompMax();
         // ponytail: middle frame first in auto-exposure, then read its EXIF
-        // for real exposure time, bracket ±2 stops from that.
-        hdrEvBrackets_  = {0, std::max(-2, mn), std::min(2, mx)};
+        // for real exposure time, bracket ±3 stops from that.
+        hdrEvBrackets_  = {0, std::max(-3, mn), std::min(3, mx)};
         hdrNextFrameIdx_ = 0;
         hdrBaseExpNs_ = 0;  // will be filled from middle frame EXIF
         qDebug() << "[camera] HDR EV order:" << hdrEvBrackets_[0] << hdrEvBrackets_[1] << hdrEvBrackets_[2];
@@ -790,6 +790,34 @@ int64_t Camera2Bridge::readExposureNs(const QString& path)
     return 0;
 }
 
+int Camera2Bridge::readIso(const QString& path)
+{
+    try {
+        auto img = Exiv2::ImageFactory::open(path.toStdString());
+        if (!img) return 0;
+        img->readMetadata();
+        auto& exif = img->exifData();
+        // Try standard ISOSpeedRatings first
+        auto it = exif.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeedRatings"));
+        if (it != exif.end() && it->count() > 0) {
+            int iso = static_cast<int>(it->toFloat());
+            qDebug() << "[camera] readIso ISOSpeedRatings:" << iso;
+            if (iso > 0) return iso;
+        }
+        // ponytail: some cameras use ISOSpeed
+        it = exif.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeed"));
+        if (it != exif.end() && it->count() > 0) {
+            int iso = static_cast<int>(it->toFloat());
+            qDebug() << "[camera] readIso ISOSpeed:" << iso;
+            if (iso > 0) return iso;
+        }
+    } catch (const Exiv2::Error& e) {
+        qDebug() << "[camera] readIso exception:" << e.what();
+    }
+    qDebug() << "[camera] readIso failed, returning 0";
+    return 0;
+}
+
 // Photo completion on the GUI thread; routes HDR-burst frames vs single shots.
 void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
 {
@@ -806,10 +834,11 @@ void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
             return;
         }
         hdrPaths_ << path;
-        // Read real exposure time from middle frame EXIF for bracket scaling.
+        // Read real exposure time and ISO from middle frame EXIF for bracket scaling.
         if (hdrNextFrameIdx_ == 0) {
             hdrBaseExpNs_ = readExposureNs(path);
-            qDebug() << "[camera] HDR base exposure from EXIF:" << hdrBaseExpNs_ << "ns";
+            hdrBaseIso_   = readIso(path);
+            qDebug() << "[camera] HDR base exposure from EXIF:" << hdrBaseExpNs_ << "ns ISO:" << hdrBaseIso_;
         }
         hdrNextFrameIdx_++;
         if (hdrNextFrameIdx_ < hdrEvBrackets_.size()) {
@@ -846,12 +875,12 @@ void Camera2Bridge::captureSequentialHdrFrame()
         qDebug() << "[camera] HDR frame" << hdrNextFrameIdx_ << "EV 0 (auto)";
     } else {
         const int64_t baseNs = hdrBaseExpNs_ > 0 ? hdrBaseExpNs_ : 33'333'333LL;
-        int iso = 400;
+        const int iso = hdrBaseIso_ > 0 ? hdrBaseIso_ : 400;
         int64_t expNs = std::clamp<int64_t>(baseNs * std::pow(2.0, ev),
                                             (int64_t)100'000LL, (int64_t)400'000'000LL);
         session_->setManualExposure(iso, expNs);
         qDebug() << "[camera] HDR frame" << hdrNextFrameIdx_ << "EV:" << ev
-                 << "baseNs:" << baseNs << "expNs:" << expNs;
+                 << "ISO:" << iso << "expNs:" << expNs;
     }
     
     // ponytail: no msleep — submit immediately so QML stays alive.

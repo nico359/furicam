@@ -8,10 +8,10 @@
 //   1. Load JPEG frames from Qt (QImage → cv::Mat) — avoids libopencv-imgcodecs
 //      and its heavy libgdal/libgdcm transitive dependencies.
 //   2. Align frames with cv::AlignMTB (Median Threshold Bitmap, Ward 2003).
-//   3. Feed aligned frames directly to cv::MergeMertens — the burst frames
-//      have real EV differences (underexposed / neutral / overexposed), so
-//      no synthetic brackets are needed.  Mertens well-exposedness weighting
-//      automatically picks the best pixels from each exposure.
+//   3. Fuse aligned frames directly with cv::MergeMertens — Camera2 captures
+//      real EV brackets (±2 stops via shutter speed), so frames have genuine
+//      exposure differences.  Mertens well-exposedness weighting picks the
+//      best pixels from each exposure.
 //   4. Convert float result → 8-bit, wrap in QImage, save as JPEG.
 //   5. Copy EXIF from the base (middle) frame via exiv2.
 //   6. Delete the raw burst frames.
@@ -121,6 +121,7 @@ QString HdrProcessor::processHdrBurst(const QStringList &framePaths, const QStri
             hdrLog("  AlignMTB: aligning...");
             cv::Ptr<cv::AlignMTB> aligner = cv::createAlignMTB();
             aligner->process(frames, aligned);
+            frames.clear();  // free ~180MB early — aligned holds ref-counted copies
             for (size_t i = 0; i < aligned.size(); ++i) {
                 cv::Scalar aMean, aStd;
                 cv::meanStdDev(aligned[i], aMean, aStd);
@@ -130,71 +131,40 @@ QString HdrProcessor::processHdrBurst(const QStringList &framePaths, const QStri
             hdrLog(QString("  AlignMTB exception: %1, using unaligned").arg(e.what()));
             qDebug() << "HdrProcessor: alignment failed:" << e.what();
             aligned = frames;
+            frames.clear();  // drop extra ref, aligned holds the data now
         }
     } else {
         aligned = frames;
     }
 
-    // --- 3. Use aligned frames directly as exposure brackets ---
-    // When real EV bracketing works, the frames have genuine exposure
-    // differences and Mertens fusion produces an HDR result.  When the
-    // HAL ignores per-frame EV comp (all frames near-identical), fall
-    // back to averaging + synthetic ±1 stop brackets.
-    // ponytail: synthetic brackets are a known-good code path; real EV
-    // bracketing can be debugged separately.
-    std::vector<cv::Mat> brackets;
+    // --- 3. Downscale to 50% for Mertens fusion ---
+    // MergeMertens converts every input to float [0,1] and holds all
+    // three simultaneously — at 20MP that's ~720MB of float temporaries.
+    // Mertens weights (contrast / saturation / well-exposedness) are
+    // inherently low-frequency, so computing them at half resolution and
+    // upscaling the fused result back loses no perceptible quality while
+    // cutting peak memory from ~960MB to ~300MB.
+    int origW = aligned[0].cols, origH = aligned[0].rows;
+    int halfW = (origW + 1) / 2, halfH = (origH + 1) / 2;
+    hdrLog(QString("  downscaling %1x%2 → %3x%4 for Mertens fusion")
+           .arg(origW).arg(origH).arg(halfW).arg(halfH));
 
-    // Check if frames have any real exposure difference.
-    double mean0 = cv::mean(aligned[0])[0];
-    double mean2 = cv::mean(aligned[2])[0];
-    double ratio = mean0 > 1.0 ? mean2 / mean0 : 1.0;
-    hdrLog(QString("  frame mean ratio (dark/bright): %1").arg(ratio));
-
-    if (ratio > 0.8 && ratio < 1.25) {
-        // Frames too similar — EV bracketing not working.  Average + synthetic.
-        hdrLog("  frames near-identical, using average + synthetic ±1 stop brackets");
-        // ponytail: keep float in [0,255] so convertTo→CV_8UC3 works without scale.
-        cv::Mat avgFloat = cv::Mat::zeros(aligned[0].rows, aligned[0].cols, CV_32FC3);
-        for (auto &f : aligned) {
-            cv::Mat f32;
-            f.convertTo(f32, CV_32FC3);  // [0,255] — NO division by 255
-            avgFloat += f32;
-        }
-        avgFloat /= (float)aligned.size();
-
-        cv::Mat avg8u;
-        avgFloat.convertTo(avg8u, CV_8UC3);
-
-        // −1 stop for highlights
-        cv::Mat darkFloat = avgFloat * 0.5f;
-        cv::Mat dark;
-        darkFloat.convertTo(dark, CV_8UC3);
-
-        // +1 stop for shadows
-        cv::Mat brightFloat = avgFloat * 2.0f;
-        cv::threshold(brightFloat, brightFloat, 255.0, 255.0, cv::THRESH_TRUNC);
-        cv::Mat bright;
-        brightFloat.convertTo(bright, CV_8UC3);
-
-        brackets.push_back(dark);
-        brackets.push_back(avg8u);
-        brackets.push_back(bright);
-    } else {
-        hdrLog("  using real EV brackets directly");
-        // ponytail: pass 8-bit to MergeMertens (float input is buggy on this
-        // OpenCV build — produces near-zero output).
-        for (auto &f : aligned)
-            brackets.push_back(f);
+    std::vector<cv::Mat> small;
+    small.reserve(aligned.size());
+    for (auto &f : aligned) {
+        cv::Mat s;
+        cv::resize(f, s, cv::Size(halfW, halfH), 0, 0, cv::INTER_AREA);
+        small.push_back(s);
     }
-    frames.clear();
-    aligned.clear();
+    aligned.clear();  // free ~180MB before MergeMertens
 
-    // --- 4. Fuse brackets with MergeMertens ---
+    // --- 4. Fuse downscaled frames with MergeMertens ---
+    hdrLog(QString("  MergeMertens: %1 frames, contrast=1.2").arg(small.size()));
+
     cv::Mat fused32f;
     try {
-        hdrLog(QString("  MergeMertens: %1 brackets, contrast=1.2").arg(brackets.size()));
         cv::Ptr<cv::MergeMertens> merger = cv::createMergeMertens(1.2f, 1.0f, 0.8f);
-        merger->process(brackets, fused32f);
+        merger->process(small, fused32f);
         cv::Scalar fmean, fstd;
         cv::meanStdDev(fused32f, fmean, fstd);
         hdrLog(QString("  fused32f Mertens: mean=(%1,%2,%3)")
@@ -204,11 +174,16 @@ QString HdrProcessor::processHdrBurst(const QStringList &framePaths, const QStri
         qDebug() << "HdrProcessor: merge failed:" << e.what();
         return QString();
     }
-    brackets.clear();
+    small.clear();  // free half-res inputs
 
-    // --- 5. Convert float [0,1] → uint8 ---
+    // --- 5. Upscale fused float result to original resolution ---
+    cv::Mat fusedFull;
+    cv::resize(fused32f, fusedFull, cv::Size(origW, origH), 0, 0, cv::INTER_LANCZOS4);
+    fused32f.release();  // free half-res float before 8-bit conversion
+
+    // --- 6. Convert float [0,1] → uint8 at full resolution ---
     cv::Mat fused8u;
-    fused32f.convertTo(fused8u, CV_8U, 255.0);
+    fusedFull.convertTo(fused8u, CV_8U, 255.0);
     {
         cv::Scalar m8u, s8u;
         cv::meanStdDev(fused8u, m8u, s8u);
@@ -227,8 +202,8 @@ QString HdrProcessor::processHdrBurst(const QStringList &framePaths, const QStri
         outDir.mkpath(".");
 
     QString outPath = outDir.filePath(
-        QString("image%1_hdr.jpg").arg(
-            QDateTime::currentDateTime().toString("yyyyMMdd_HHmmsszzz")));
+        QString("IMG_%1_HDR.jpg").arg(
+            QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")));
 
     if (!result.save(outPath, "JPEG", 95)) {
         hdrLog(QString("  ERROR: save failed to %1").arg(outPath));
@@ -237,12 +212,13 @@ QString HdrProcessor::processHdrBurst(const QStringList &framePaths, const QStri
     }
     hdrLog(QString("  saved: %1 (%2 bytes)").arg(outPath).arg(QFileInfo(outPath).size()));
 
-    // --- 8. Copy EXIF from the base (middle) frame ---
+    // --- 8. Copy EXIF from the EV 0 (first) frame ---
+    // EV 0 is always captured first, so it's framePaths[0].
     // basePath still uses framePaths; the middle frame's JPEG embedded EXIF
     // is the most authoritative metadata for the fused result.
     // NOTE: the real pixel values come from aligned mid-frame (not saved),
     // but EXIF metadata (timestamp, GPS, orientation) is frame-agnostic.
-    QString basePath = framePaths.value(framePaths.size() / 2);
+    QString basePath = framePaths.value(0);  // EV 0 is always first
     if (basePath.startsWith("file://"))
         basePath = basePath.mid(7);
     try {

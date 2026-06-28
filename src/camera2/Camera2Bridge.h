@@ -311,6 +311,7 @@ private:
     void finishHdrBurst();            // fuse the burst on a worker thread
     void captureSequentialHdrFrame(); // ponytail: one frame at a time with per-frame EV
     int64_t readExposureNs(const QString& path);  // EXIF exposure time for HDR base
+    int     readIso(const QString& path);          // ponytail: EXIF ISO for HDR brackets
     void claimAccelerometer();        // claim iio-sensor-proxy so orientation is live
     int  queryDeviceRotation();       // on-demand device tilt (0/90/180/270) for capture tagging
     void applyVideoMode();            // reconcile videoModeDesired_ with the session
@@ -373,6 +374,7 @@ private:
     std::vector<int>  hdrEvBrackets_;     // EV steps for sequential HDR
     size_t            hdrNextFrameIdx_ = 0;
     int64_t           hdrBaseExpNs_ = 0;   // read from middle frame EXIF
+    int               hdrBaseIso_   = 0;   // ponytail: read from middle frame EXIF
     int               flashMode_      = 0;   // 0=off 1=on 2=auto (mirrors the engine)
 
     // Photo / video bookkeeping.
