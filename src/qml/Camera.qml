@@ -520,6 +520,7 @@ Item {
                                 window.focusPointVisible = true
                                 focusPointRect.x = mouse.x - (focusPointRect.width / 2)
                                 focusPointRect.y = mouse.y - (focusPointRect.height / 2)
+                                afRestoreTimer.restart()
                             }
 
                             window.blurView = 0
@@ -548,6 +549,41 @@ Item {
                     id: visTm
                     interval: 500; running: false; repeat: false
                     onTriggered: window.aeflock === "AEFLockOff" ? window.focusPointVisible = false : null
+                }
+            }
+
+            // Restore continuous AF 5 s after the last tap-to-focus (no further taps).
+            // Skipped if the user has engaged AE/AF lock in the meantime.
+            Timer {
+                id: afRestoreTimer
+                interval: 5000
+                repeat: false
+                onTriggered: {
+                    if (window.aeflock !== "AEFLockOn") {
+                        cam2.setAutoFocus()
+                        window.focusPointVisible = false
+                        afRestoredAnim.restart()
+                    }
+                }
+            }
+
+            // Brief focus ring centred on the viewfinder: signals that AF
+            // has reverted from tap-locked to continuous.
+            Rectangle {
+                id: afRestoredIndicator
+                anchors.centerIn: parent
+                width: 120 * window.scalingRatio
+                height: 120 * window.scalingRatio
+                border { width: 2; color: "#FDD017" }
+                color: "transparent"
+                radius: 5 * window.scalingRatio
+                opacity: 0
+
+                SequentialAnimation {
+                    id: afRestoredAnim
+                    NumberAnimation { target: afRestoredIndicator; property: "opacity"; to: 1.0; duration: 150 }
+                    PauseAnimation  { duration: 800 }
+                    NumberAnimation { target: afRestoredIndicator; property: "opacity"; to: 0.0; duration: 400 }
                 }
             }
 
