@@ -803,6 +803,8 @@ void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
 }
 
 // Fuse the burst on a worker thread (OpenCV is heavy), then emit photoSaved.
+// The EV 0 frame is also saved as a standard photo so the user always has a
+// clean baseline image even if the HDR fusion result is misaligned.
 void Camera2Bridge::finishHdrBurst()
 {
     const QStringList paths = hdrPaths_;
@@ -815,12 +817,27 @@ void Camera2Bridge::finishHdrBurst()
     hdrPaths_.clear();
     QDir().mkpath(outDir);
     std::thread([this, paths, outDir] {
+        // Copy EV 0 frame to a permanent file before processHdrBurst() deletes the temps.
+        QString ev0Path;
+        if (!paths.isEmpty()) {
+            ev0Path = QDir(outDir).filePath(
+                QStringLiteral("IMG_%1.jpg").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")));
+            if (!QFile::copy(paths[0], ev0Path)) {
+                qDebug() << "[camera] HDR: could not copy EV 0 frame to" << ev0Path;
+                ev0Path.clear();
+            }
+        }
+
         HdrProcessor proc;
         const QString out = proc.processHdrBurst(paths, outDir);
         for (const QString& p : paths) QFile::remove(p);
-        QMetaObject::invokeMethod(this, [this, out] {
+        QMetaObject::invokeMethod(this, [this, ev0Path, out] {
             hdrProcessing_ = false;
             emit hdrBusyChanged();
+            if (!ev0Path.isEmpty()) {
+                fixExifDateTime(ev0Path);
+                emit photoSaved(ev0Path);
+            }
             if (!out.isEmpty()) {
                 fixExifDateTime(out);
                 setLastPhotoPath(out);
