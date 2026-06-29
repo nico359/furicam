@@ -742,10 +742,10 @@ ApplicationWindow {
             id: zoomSliderH
             width: parent.width - 100 * window.scalingRatio
             anchors.verticalCenter: parent.verticalCenter
-            from: 1.0
+            from: cameraLoader.item ? cameraLoader.item.minZoom : 1.0
             // ponytail: to (int max) → to (float nearest ×1) to keep step ratio sensible
             to: cameraLoader.item ? cameraLoader.item.maxZoom : 1.0
-            value: cameraLoader.item ? Math.max(1.0, cameraLoader.item.currentZoom) : 1.0
+            value: cameraLoader.item ? Math.max(cameraLoader.item.minZoom, cameraLoader.item.currentZoom) : 1.0
             stepSize: 0.1
             live: true
 

@@ -50,9 +50,10 @@ Item {
     function handleSetVideoResolution(w, h) { cam2.setVideoResolution(w, h) }
     function handleSetVideoStabilization(on) { cam2.setVideoStabilization(on) }
 
-    // Zoom: currentZoom is the actual zoom ratio (1.0..maxZoom). The slider
+    // Zoom: currentZoom is the actual zoom ratio (minZoom..maxZoom). The slider
     // in main.qml directly sets currentZoom and calls cam2.setZoom().
     property real currentZoom: 1.0
+    property real minZoom: cam2.ready ? cam2.minZoom() : 1.0
     property real maxZoom: cam2.ready ? cam2.maxZoom() : 1.0
 
     property int  colorTemperature: 0
@@ -227,7 +228,7 @@ Item {
     }
 
     function handleSetZoom(zoomLevel) {
-        var z = Math.max(1.0, Math.min(zoomLevel, maxZoom))
+        var z = Math.max(minZoom, Math.min(zoomLevel, maxZoom))
         currentZoom = z
         cam2.setZoom(z)
     }
@@ -450,7 +451,7 @@ Item {
             anchors.fill: parent
             pinch.target: camZoom
             pinch.maximumScale: (cameraItem.maxZoom > 0 ? cameraItem.maxZoom : 1) / camZoom.zoomFactor
-            pinch.minimumScale: 0
+            pinch.minimumScale: cameraItem.minZoom / camZoom.zoomFactor
             enabled: !mediaView.visible && !window.videoCaptured
 
             MouseArea {
