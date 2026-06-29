@@ -730,7 +730,16 @@ void CameraSession::freeSessionKeepReaders()
     // (reader_/readerWindow_, jpegReader_/jpegWindow_) so streaming can resume.
     if (captureSession_) {
         ACameraCaptureSession_stopRepeating(captureSession_);
+        {
+            std::lock_guard<std::mutex> lk(sessionCloseMutex_);
+            sessionCloseDone_ = false;
+        }
         ACameraCaptureSession_close(captureSession_);
+        {
+            std::unique_lock<std::mutex> lk(sessionCloseMutex_);
+            sessionCloseCv_.wait_for(lk, std::chrono::milliseconds(2000),
+                                     [this] { return sessionCloseDone_; });
+        }
         captureSession_ = nullptr;
     }
     if (previewRequest_)      { ACaptureRequest_free(previewRequest_);            previewRequest_ = nullptr; }
