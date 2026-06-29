@@ -656,27 +656,34 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
         emit cameraError(QStringLiteral("capturePhoto: camera not streaming"));
         return;
     }
-    // HDR: submit a burst of N frames as a single HAL call — the ISP pipelines
-    // them without tearing down/recreating the still pipeline each time.  Each
-    // frame gets a different AE exposure compensation step so Mertens fusion has
-    // real exposure differences to blend (underexposed / neutral / overexposed).
-    // ponytail: ACameraCaptureSession_capture(numRequests=3) = NDK burst.
+    // HDR: submit all 3 bracketed frames as a single NDK burst call.  The HAL
+    // queues them back-to-back at sensor frame rate (~100ms total).
     if (hdrEnabled_.load() && !hdrBurstActive_) {
-        qDebug() << "[camera] HDR: starting sequential capture with EV brackets";
-        hdrBurstActive_ = true;
+        // EV stops for the 3-frame bracket (EV 0, -3, +3).  captureBurst()
+        // converts these to manual sensor exposure times scaled from the live
+        // preview AE result.
+        const std::vector<int> evSteps = {0, -3, 3};
+
+        std::vector<std::string> paths;
+        hdrPaths_.clear();
+        for (int i = 0; i < kHdrFrames; ++i)
+            paths.push_back((QDir::tempPath() + QStringLiteral("/furicam_hdr_%1.jpg").arg(i)).toStdString());
+
+        hdrBurstActive_  = true;
+        hdrBurstPending_ = kHdrFrames;
+        hdrFinalPath_    = outputPath;
         emit hdrBusyChanged();
         emit hdrCapturingChanged();
-        hdrFinalPath_   = outputPath;
-        hdrPaths_.clear();
-        const int mn = session_->evCompMin();
-        const int mx = session_->evCompMax();
-        // ponytail: middle frame first in auto-exposure, then read its EXIF
-        // for real exposure time, bracket ±3 stops from that.
-        hdrEvBrackets_  = {0, std::max(-3, mn), std::min(3, mx)};
-        hdrNextFrameIdx_ = 0;
-        hdrBaseExpNs_ = 0;  // will be filled from middle frame EXIF
-        qDebug() << "[camera] HDR EV order:" << hdrEvBrackets_[0] << hdrEvBrackets_[1] << hdrEvBrackets_[2];
-        captureSequentialHdrFrame();
+
+        session_->setDeviceRotation(queryDeviceRotation());
+        qDebug() << "[camera] HDR burst: EV steps" << evSteps[0] << evSteps[1] << evSteps[2];
+        if (!session_->captureBurst(paths, deviceRotation_.load(), evSteps)) {
+            hdrBurstActive_  = false;
+            hdrBurstPending_ = 0;
+            emit hdrBusyChanged();
+            emit hdrCapturingChanged();
+            emit cameraError(QString::fromStdString(session_->lastError()));
+        }
         return;
     }
     // Auto flash: kick an AE precapture, then shoot the moment the HAL settles the
@@ -764,93 +771,23 @@ void Camera2Bridge::fixExifDateTime(const QString& path)
     }
 }
 
-// Read the exposure time (nanoseconds) from a JPEG's EXIF.  Used by HDR
-// bracketing to scale manual-exposure frames from the auto-exposed middle frame.
-int64_t Camera2Bridge::readExposureNs(const QString& path)
-{
-    try {
-        auto img = Exiv2::ImageFactory::open(path.toStdString());
-        if (!img) return 0;
-        img->readMetadata();
-        auto& exif = img->exifData();
-        // EXIF exposure time as rational (e.g. "1/30" → 33ms)
-        auto it = exif.findKey(Exiv2::ExifKey("Exif.Photo.ExposureTime"));
-        if (it != exif.end()) {
-            auto rat = it->toRational();
-            if (rat.second > 0)
-                return (int64_t)(1.0e9 * rat.first / rat.second);
-        }
-        // Fallback: ShutterSpeedValue (APEX)
-        it = exif.findKey(Exiv2::ExifKey("Exif.Photo.ShutterSpeedValue"));
-        if (it != exif.end()) {
-            double apex = it->toFloat();
-            return (int64_t)(1.0e9 * std::pow(2.0, -apex));
-        }
-    } catch (const Exiv2::Error&) {}
-    return 0;
-}
-
-int Camera2Bridge::readIso(const QString& path)
-{
-    try {
-        auto img = Exiv2::ImageFactory::open(path.toStdString());
-        if (!img) return 0;
-        img->readMetadata();
-        auto& exif = img->exifData();
-        // Try standard ISOSpeedRatings first
-        auto it = exif.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeedRatings"));
-        if (it != exif.end() && it->count() > 0) {
-            int iso = static_cast<int>(it->toFloat());
-            qDebug() << "[camera] readIso ISOSpeedRatings:" << iso;
-            if (iso > 0) return iso;
-        }
-        // ponytail: some cameras use ISOSpeed
-        it = exif.findKey(Exiv2::ExifKey("Exif.Photo.ISOSpeed"));
-        if (it != exif.end() && it->count() > 0) {
-            int iso = static_cast<int>(it->toFloat());
-            qDebug() << "[camera] readIso ISOSpeed:" << iso;
-            if (iso > 0) return iso;
-        }
-    } catch (const Exiv2::Error& e) {
-        qDebug() << "[camera] readIso exception:" << e.what();
-    }
-    qDebug() << "[camera] readIso failed, returning 0";
-    return 0;
-}
-
 // Photo completion on the GUI thread; routes HDR-burst frames vs single shots.
 void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
 {
     if (hdrBurstActive_) {
         if (!ok) {
-            hdrBurstActive_ = false;
-            session_->setAutoExposure();  // restore AE
+            hdrBurstActive_  = false;
+            hdrBurstPending_ = 0;
             emit hdrBusyChanged();
             emit hdrCapturingChanged();
-            hdrEvBrackets_.clear();
             for (const QString& p : hdrPaths_) QFile::remove(p);
             hdrPaths_.clear();
             emit cameraError(QStringLiteral("HDR capture failed"));
             return;
         }
         hdrPaths_ << path;
-        // Read real exposure time and ISO from middle frame EXIF for bracket scaling.
-        if (hdrNextFrameIdx_ == 0) {
-            hdrBaseExpNs_ = readExposureNs(path);
-            hdrBaseIso_   = readIso(path);
-            qDebug() << "[camera] HDR base exposure from EXIF:" << hdrBaseExpNs_ << "ns ISO:" << hdrBaseIso_;
-        }
-        hdrNextFrameIdx_++;
-        if (hdrNextFrameIdx_ < hdrEvBrackets_.size()) {
-            // 150ms breather with a non-blocking timer — QML stays alive,
-            // camera hardware settles, "Hold still" badge is visible.
-            QTimer::singleShot(150, this, [this] {
-                captureSequentialHdrFrame();
-            });
-        } else {
-            hdrEvBrackets_.clear();
+        if (--hdrBurstPending_ == 0)
             finishHdrBurst();
-        }
         return;
     }
     if (ok) {
@@ -865,32 +802,6 @@ void Camera2Bridge::onPhotoCaptured(const QString& path, bool ok)
     }
 }
 
-// ponytail: sequential single-frame capture with per-frame manual exposure.
-// This HAL ignores AE_EXPOSURE_COMPENSATION, so we switch to AE_MODE_OFF
-// and set explicit sensor exposure times for real bracketed captures.
-void Camera2Bridge::captureSequentialHdrFrame()
-{
-    if (!session_ || hdrNextFrameIdx_ >= hdrEvBrackets_.size()) return;
-    int ev = hdrEvBrackets_[hdrNextFrameIdx_];
-    
-    if (ev == 0) {
-        session_->setAutoExposure();
-        qDebug() << "[camera] HDR frame" << hdrNextFrameIdx_ << "EV 0 (auto)";
-    } else {
-        const int64_t baseNs = hdrBaseExpNs_ > 0 ? hdrBaseExpNs_ : 33'333'333LL;
-        const int iso = hdrBaseIso_ > 0 ? hdrBaseIso_ : 400;
-        int64_t expNs = std::clamp<int64_t>(baseNs * std::pow(2.0, ev),
-                                            (int64_t)100'000LL, (int64_t)400'000'000LL);
-        session_->setManualExposure(iso, expNs);
-        qDebug() << "[camera] HDR frame" << hdrNextFrameIdx_ << "EV:" << ev
-                 << "ISO:" << iso << "expNs:" << expNs;
-    }
-    
-    // ponytail: no msleep — submit immediately so QML stays alive.
-    const QString path = QDir::tempPath() + QStringLiteral("/furicam_hdr_%1.jpg").arg(hdrNextFrameIdx_);
-    doSingleCapture(path);
-}
-
 // Fuse the burst on a worker thread (OpenCV is heavy), then emit photoSaved.
 void Camera2Bridge::finishHdrBurst()
 {
@@ -900,7 +811,6 @@ void Camera2Bridge::finishHdrBurst()
     hdrBurstActive_ = false;
     hdrProcessing_  = true;
     emit hdrCapturingChanged();  // "Hold still" → "Processing…"
-    session_->setAutoExposure();  // restore AE after manual-exposure brackets
     qDebug() << "[camera] HDR merge: starting OpenCV fusion on worker thread";
     hdrPaths_.clear();
     QDir().mkpath(outDir);

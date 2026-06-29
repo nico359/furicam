@@ -8,12 +8,11 @@
 //   1. Load JPEG frames from Qt (QImage → cv::Mat) — avoids libopencv-imgcodecs
 //      and its heavy libgdal/libgdcm transitive dependencies.
 //   2. Align frames with cv::AlignMTB (Median Threshold Bitmap, Ward 2003).
-//   3. Fuse aligned frames directly with cv::MergeMertens — Camera2 captures
-//      real EV brackets (±2 stops via shutter speed), so frames have genuine
-//      exposure differences.  Mertens well-exposedness weighting picks the
-//      best pixels from each exposure.
+//   3. Fuse aligned frames with cv::MergeMertens — frames were captured at
+//      EV 0, -3, +3 stops so Mertens well-exposedness weighting picks the
+//      best-exposed pixels from each bracket.
 //   4. Convert float result → 8-bit, wrap in QImage, save as JPEG.
-//   5. Copy EXIF from the base (middle) frame via exiv2.
+//   5. Copy EXIF from the EV-0 frame via exiv2.
 //   6. Delete the raw burst frames.
 
 #include "hdrprocessor.h"
@@ -212,13 +211,10 @@ QString HdrProcessor::processHdrBurst(const QStringList &framePaths, const QStri
     }
     hdrLog(QString("  saved: %1 (%2 bytes)").arg(outPath).arg(QFileInfo(outPath).size()));
 
-    // --- 8. Copy EXIF from the EV 0 (first) frame ---
-    // EV 0 is always captured first, so it's framePaths[0].
-    // basePath still uses framePaths; the middle frame's JPEG embedded EXIF
-    // is the most authoritative metadata for the fused result.
-    // NOTE: the real pixel values come from aligned mid-frame (not saved),
-    // but EXIF metadata (timestamp, GPS, orientation) is frame-agnostic.
-    QString basePath = framePaths.value(0);  // EV 0 is always first
+    // --- 8. Copy EXIF from the EV 0 frame ---
+    // framePaths[0] is the EV 0 exposure; its timestamp, GPS and orientation
+    // tags are the most representative metadata for the fused result.
+    QString basePath = framePaths.value(0);
     if (basePath.startsWith("file://"))
         basePath = basePath.mid(7);
     try {
@@ -233,7 +229,7 @@ QString HdrProcessor::processHdrBurst(const QStringList &framePaths, const QStri
         // non-fatal — the image is still valid
     }
 
-    // --- 8. Clean temp frames ---
+    // --- 8. Delete the raw burst frames ---
     for (const QString &rawPath : framePaths) {
         QString path = rawPath;
         if (path.startsWith("file://"))

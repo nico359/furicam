@@ -441,11 +441,13 @@ private:
     int     ctlTorch_      = 0;
     int     flashMode_     = 0;   // per-shot flash: 0=off, 1=on, 2=auto
     int     openActiveArray_[4] = {0, 0, 0, 0};
-    float   openZoomMax_  = 4.0f; // CONTROL_ZOOM_RATIO_RANGE max (fallback 4x)
-    int     openEvMin_    = -4;   // AE comp range (fallback ±4 @ 0.5 EV/step)
-    int     openEvMax_    = 4;
-    float   openEvStep_   = 0.5f;
-    bool    openVideoStab_ = false;   // EIS supported by the open camera
+    float   openZoomMax_       = 4.0f;          // CONTROL_ZOOM_RATIO_RANGE max (fallback 4x)
+    int     openEvMin_         = -4;             // AE comp range (fallback ±4 @ 0.5 EV/step)
+    int     openEvMax_         = 4;
+    float   openEvStep_        = 0.5f;
+    int64_t openExpMinNs_      = 100'000LL;      // SENSOR_INFO_EXPOSURE_TIME_RANGE min (100µs)
+    int64_t openExpMaxNs_      = 400'000'000LL;  // SENSOR_INFO_EXPOSURE_TIME_RANGE max (400ms)
+    bool    openVideoStab_     = false;          // EIS supported by the open camera
     bool    videoStabEnabled_ = true; // user toggle (default on)
 
     std::atomic<int>     frameCount_        {0};
