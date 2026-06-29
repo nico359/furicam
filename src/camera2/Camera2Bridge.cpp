@@ -40,6 +40,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QUuid>
 #include <QVariant>
 #include <QOpenGLFramebufferObject>
 #include <QStandardPaths>
@@ -666,8 +667,10 @@ void Camera2Bridge::capturePhoto(const QString& outputPath, const QString& /*set
 
         std::vector<std::string> paths;
         hdrPaths_.clear();
+        const QString burstId = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
         for (int i = 0; i < kHdrFrames; ++i)
-            paths.push_back((QDir::tempPath() + QStringLiteral("/furicam_hdr_%1.jpg").arg(i)).toStdString());
+            paths.push_back((QDir::tempPath() + QStringLiteral("/furicam_hdr_%1_%2.jpg")
+                             .arg(burstId).arg(i)).toStdString());
 
         hdrBurstActive_  = true;
         hdrBurstPending_ = kHdrFrames;
