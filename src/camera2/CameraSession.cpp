@@ -406,6 +406,7 @@ bool CameraSession::open(const std::string& id)
                 openActiveArray_[k] = c.activeArray[k];
             // Cache the open camera's capability ranges (fall back to the prior
             // hardcodes when a tag is absent, e.g. on a LIMITED secondary camera).
+            openZoomMin_   = (c.zoomRatioMin > 0.0f) ? c.zoomRatioMin : 1.0f;
             openZoomMax_   = (c.zoomRatioMax > 1.0f) ? c.zoomRatioMax : 4.0f;
             openEvMin_     = (c.evCompMax > c.evCompMin) ? c.evCompMin : -4;
             openEvMax_     = (c.evCompMax > c.evCompMin) ? c.evCompMax :  4;
@@ -1747,8 +1748,8 @@ void CameraSession::triggerPrecapture()
 
 void CameraSession::setZoomRatio(float ratio)
 {
-    if (ratio < 1.0f)
-        ratio = 1.0f;
+    if (ratio < minZoomRatio())
+        ratio = minZoomRatio();
     if (ratio > maxZoomRatio())
         ratio = maxZoomRatio();
     ctlZoom_ = ratio;

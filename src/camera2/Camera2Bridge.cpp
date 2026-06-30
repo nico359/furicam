@@ -947,6 +947,11 @@ void Camera2Bridge::setZoom(float ratio)
         session_->setZoomRatio(ratio);
 }
 
+float Camera2Bridge::minZoom() const
+{
+    return session_ ? session_->minZoomRatio() : 1.0f;
+}
+
 float Camera2Bridge::maxZoom() const
 {
     return session_ ? session_->maxZoomRatio() : 4.0f;

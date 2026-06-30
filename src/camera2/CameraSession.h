@@ -241,6 +241,7 @@ public:
     void  triggerPrecapture();                             // kick AE precapture (auto-flash metering)
     int   aeState() const { return lastAeState_.load(); }  // ACAMERA_CONTROL_AE_STATE_* (result)
     void  setFocusPoint(float x, float y);                 // normalized [0,1]; triggers AF
+    float minZoomRatio() const { return openZoomMin_; }    // from open camera characteristics
     float maxZoomRatio() const { return openZoomMax_; }    // from open camera characteristics
     // AE-compensation index range of the open camera.
     int   evCompMin()    const { return openEvMin_; }
@@ -441,6 +442,7 @@ private:
     int     ctlTorch_      = 0;
     int     flashMode_     = 0;   // per-shot flash: 0=off, 1=on, 2=auto
     int     openActiveArray_[4] = {0, 0, 0, 0};
+    float   openZoomMin_       = 1.0f;          // CONTROL_ZOOM_RATIO_RANGE min (fallback 1x)
     float   openZoomMax_       = 4.0f;          // CONTROL_ZOOM_RATIO_RANGE max (fallback 4x)
     int     openEvMin_         = -4;             // AE comp range (fallback ±4 @ 0.5 EV/step)
     int     openEvMax_         = 4;

@@ -239,9 +239,10 @@ public:
 
     // App-UI-matching controls so the existing QML can drive Camera2 unchanged.
     //   white balance mode: 0=Auto,1=Daylight,2=Cloudy,3=Fluorescent,4=Incandescent
-    //   zoom: ratio in [1, maxZoom()]
+    //   zoom: ratio in [minZoom(), maxZoom()]
     Q_INVOKABLE void  setWhiteBalanceMode(int appMode);
     Q_INVOKABLE void  setZoom(float ratio);
+    Q_INVOKABLE float minZoom() const;
     Q_INVOKABLE float maxZoom() const;
 
     // Available JPEG (photo) capture sizes for the open camera, largest first,
