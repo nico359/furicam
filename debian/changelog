@@ -1,8 +1,20 @@
+furicam (1.3.3-1) unstable; urgency=medium
+
+  * Jpeg reencoding has been stripped and quality labels are more vague because HAL does not make percentages available to my knowsledge
+  * HDR images are captured in burst mode making it much quicker
+  * Additionally the EV 0 frame gets saved separately in case the HDR image ends up being worse
+  * HDR images each get a UUID in case two HDR shots are fired really close together
+  * Continous AF is restored 5 seconds after tapping to focus
+  * Zoom can go below 1.0x but cannot be tested because no FuriLabs phone has an ultrawide as of now
+  * Also a fix regarding CameraSession handling
+
+ -- nico359 <124350776+nico359@users.noreply.github.com>  Tue, 30 Jun 2026 13:39:00 +0200
+
 furicam (1.3.2-1) unstable; urgency=medium
 
   * HDR memory optimizations: remove synthetic bracket fallback, downscale
     to 50% before MergeMertens, upscale with Lanczos4, aggressive mat release
-    — peak memory cut from ~2GB to ~300MB
+    - peak memory cut from ~2GB to ~300MB
   * Widen HDR EV brackets from ±2 to ±3 stops for more aggressive dynamic range
   * Use EV 0 frame's ISO (from EXIF) for bracket exposures instead of hardcoded 400,
     preventing highlight clipping in bright scenes
