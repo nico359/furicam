@@ -9,6 +9,8 @@
 #include "AudioEncoder.h"   // gst-free header; a stub backs it when audio is off
 #include "DngWriter.h"      // dependency-free DNG (TIFF/EP) writer for RAW16 capture
 
+#include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -408,6 +410,8 @@ bool CameraSession::open(const std::string& id)
             openEvMin_     = (c.evCompMax > c.evCompMin) ? c.evCompMin : -4;
             openEvMax_     = (c.evCompMax > c.evCompMin) ? c.evCompMax :  4;
             openEvStep_    = (c.evCompStep > 0.0f) ? c.evCompStep : 0.5f;
+            openExpMinNs_  = (c.exposureMinNs > 0) ? c.exposureMinNs : 100'000LL;
+            openExpMaxNs_  = (c.exposureMaxNs > 0) ? c.exposureMaxNs : 400'000'000LL;
             openVideoStab_ = c.videoStabSupported;
             break;
         }
@@ -1268,16 +1272,33 @@ bool CameraSession::captureBurst(const std::vector<std::string>& paths,
 
         applyControls(req);
 
-        // Per-frame AE exposure compensation for EV bracketing (HDR).
+        // Per-frame manual exposure for EV bracketing (HDR).
+        // Each frame uses AE_MODE_OFF with sensor exposure time scaled by
+        // 2^ev from the last preview AE result, keeping ISO constant.
         if (!evBrackets.empty()) {
-            int32_t evStep = evBrackets[i];
-            ACaptureRequest_setEntry_i32(req, ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION,
-                                         1, &evStep);
-            log(fmt("captureBurst: frame %zu EV step %d", i, evStep));
+            int64_t baseNs;
+            int32_t baseIso;
+            {
+                std::lock_guard<std::mutex> lk(resultMutex_);
+                baseNs  = resultExposureNs_ > 0 ? resultExposureNs_ : 33'333'333LL;
+                baseIso = resultIso_         > 0 ? resultIso_        : 400;
+            }
+            int ev = evBrackets[i];  // stops: -3, 0, +3
+            int64_t expNs = static_cast<int64_t>(
+                std::round(static_cast<double>(baseNs) * std::pow(2.0, ev)));
+            expNs = std::clamp(expNs, openExpMinNs_, openExpMaxNs_);
+
+            uint8_t aeOff = ACAMERA_CONTROL_AE_MODE_OFF;
+            ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AE_MODE, 1, &aeOff);
+            ACaptureRequest_setEntry_i64(req, ACAMERA_SENSOR_EXPOSURE_TIME, 1, &expNs);
+            ACaptureRequest_setEntry_i32(req, ACAMERA_SENSOR_SENSITIVITY, 1, &baseIso);
+            log(fmt("captureBurst: frame %zu EV %+d baseNs=%lld expNs=%lld iso=%d",
+                    i, ev, (long long)baseNs, (long long)expNs, (int)baseIso));
         }
 
-        // Flash — same logic as capturePhoto.
-        if (ctlAeMode_ != ACAMERA_CONTROL_AE_MODE_OFF) {
+        // Flash — skipped when EV bracketing is active since AE_MODE_OFF
+        // is already set above and must not be overwritten.
+        if (evBrackets.empty() && ctlAeMode_ != ACAMERA_CONTROL_AE_MODE_OFF) {
             uint8_t aeFlash = ACAMERA_CONTROL_AE_MODE_ON;
             if (flashMode_ == 1)      aeFlash = ACAMERA_CONTROL_AE_MODE_ON_ALWAYS_FLASH;
             else if (flashMode_ == 2) aeFlash = ACAMERA_CONTROL_AE_MODE_ON_AUTO_FLASH;
