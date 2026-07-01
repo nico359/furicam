@@ -9,7 +9,7 @@
 // Joaquin Philco <joaquinphilco@gmail.com>
 
 import QtQuick 2.15
-import QtMultimedia 5.15
+import QtMultimedia
 import QtQuick.Layouts 1.15
 import QtQuick.Controls 2.15
 import Qt.labs.folderlistmodel 2.15
@@ -312,7 +312,7 @@ Rectangle {
             }
 
             function scanImageURL() {
-                var result = QRCodeHandler.scanImageURL(currentFileUrl, image.width, image.height)
+                var result = QRCodeHandler.scanImageURL(currentFileUrl)
 
                 if (result.isValid) {
                     imageContainer.positionData = getScaledCorners(result.position, result.readWidth, result.readHeight, image.width, image.height)
@@ -330,6 +330,7 @@ Rectangle {
             }
 
             function scanImage() {
+                if (!image || typeof image.grabToImage !== "function") return;
                 image.grabToImage(function(result) {
                     if (result.image) {
                         var qrCodeResult = QRCodeHandler.scanImage(result.image);
@@ -383,7 +384,7 @@ Rectangle {
                     property bool panning: false
                     property int swipeThreshold: 30
 
-                    onPressed: {
+                    onPressed: function(mouse) {
                         startX = mouse.x
                         startY = mouse.y
                         panStartX = image.panX
@@ -393,7 +394,7 @@ Rectangle {
 
                     // While zoomed in, dragging pans the photo instead of swiping to
                     // the next/previous one, so the two gestures don't collide.
-                    onPositionChanged: {
+                    onPositionChanged: function(mouse) {
                         if (!pinchArea.pinch.active && image.scale > 1.01) {
                             panning = true
                             image.panX = image.clampPanX(panStartX + (mouse.x - startX))
@@ -406,7 +407,7 @@ Rectangle {
                             scanImageURL()
                     }
 
-                    onReleased: {
+                    onReleased: function(mouse) {
                         if (panning) {
                             panning = false
                             return
@@ -496,7 +497,10 @@ Rectangle {
             MediaPlayer {
                 id: mediaPlayer
                 autoPlay: true
-                muted: viewRect.videoAudio
+                videoOutput: videoOutput
+                audioOutput: AudioOutput {
+                    muted: viewRect.videoAudio
+                }
                 source: viewRect.visible ? viewRect.currentFileUrl : ""
 
                 onSourceChanged: {
@@ -511,21 +515,20 @@ Rectangle {
                     }
                 }
 
-                onStopped: {
-                    viewRect.mediaState = MediaPlayer.StoppedState
-                    playVideoButtonFrame.visible = true
-                }
-
-                onPaused: {
-                    viewRect.mediaState = MediaPlayer.PausedState
-                    playVideoButtonFrame.visible = true
+                onPlaybackStateChanged: {
+                    if (mediaPlayer.playbackState === MediaPlayer.StoppedState) {
+                        viewRect.mediaState = MediaPlayer.StoppedState
+                        playVideoButtonFrame.visible = true
+                    } else if (mediaPlayer.playbackState === MediaPlayer.PausedState) {
+                        viewRect.mediaState = MediaPlayer.PausedState
+                        playVideoButtonFrame.visible = true
+                    }
                 }
             }
 
             VideoOutput {
+                id: videoOutput
                 anchors.fill: parent
-                source: mediaPlayer
-                // Apply the clip's stored rotation hint (the backend won't).
                 orientation: viewRect.videoRotation
                 visible: viewRect.currentFileUrl && viewRect.isVideoFile(viewRect.currentFileUrl)
             }

@@ -758,7 +758,7 @@ void Camera2Bridge::fixExifDateTime(const QString& path)
             if (val.size() < 19) return;
             QDateTime dt = QDateTime::fromString(QString::fromStdString(val.substr(0, 19)), "yyyy:MM:dd HH:mm:ss");
             if (!dt.isValid()) return;
-            dt.setTimeSpec(Qt::UTC);
+            dt.setTimeZone(QTimeZone::UTC);
             dt = dt.addSecs(offsetSec);
             // Write back local time in EXIF format
             it->setValue(dt.toString("yyyy:MM:dd HH:mm:ss").toStdString());

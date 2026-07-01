@@ -1,3 +1,4 @@
+#version 100
 uniform sampler2D source;
 uniform lowp float qt_Opacity;
 uniform lowp float redScale;

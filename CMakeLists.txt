@@ -1,11 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project (furicam LANGUAGES C CXX)
 
-# distrobox: we link host libhybris from /run/host. Container/host ABI mismatches
-# in transitive deps (libpulse, etc.) would fail the link — tolerate them.
-if(EXISTS /run/host)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--allow-shlib-undefined")
-endif()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -13,16 +9,15 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt5 REQUIRED COMPONENTS Core DBus Widgets Quick Qml Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core DBus Widgets Quick Qml Multimedia)
 find_package(exiv2 REQUIRED)
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc photo)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB REQUIRED glib-2.0 gio-2.0)
 
-# Path C — Android Camera2 native development kit (NDK) helper via libhybris.
-# ON by default: the camera path now drives the Camera2 engine (Camera2Bridge).
-# On a non-Halium host (desktop) it links a stub and Camera2 is inert, so the
+# Camera2 NDK — ON by default: drives the Camera2 engine (Camera2Bridge).
+# On a non-Halium host, links a stub so the app still compiles.
 # build still works there.  Turn OFF only for the legacy GStreamer-only build.
 option(FURICAM_CAMERA2 "Build the Camera2 NDK camera engine (Camera2Bridge)" ON)
 
@@ -89,7 +84,7 @@ if(FURICAM_CAMERA2
     list(APPEND APP_HEADERS ${CMAKE_SOURCE_DIR}/src/camera2/Camera2Bridge.h)
 endif()
 
-qt5_add_resources(APP_RESOURCES
+qt6_add_resources(APP_RESOURCES
 	${CMAKE_SOURCE_DIR}/sounds/sounds.qrc
 	${CMAKE_SOURCE_DIR}/icons/icons.qrc
 	${CMAKE_SOURCE_DIR}/src/qml/qml.qrc)
@@ -97,6 +92,7 @@ qt5_add_resources(APP_RESOURCES
 add_executable(${PROJECT_NAME} ${APP_SOURCES} ${APP_HEADERS} ${APP_RESOURCES})
 
 target_include_directories(${PROJECT_NAME} PUBLIC
+    /usr/include/opencv4
     /usr/include/gstreamer-1.0
     /usr/include/glib-2.0
     ${GLIB_LIBDIR}/glib-2.0/include
@@ -104,7 +100,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 
 target_compile_options(${PROJECT_NAME} PUBLIC ${GST_CFLAGS})
-target_link_libraries(${PROJECT_NAME} PUBLIC Qt5::Core Qt5::Widgets Qt5::Quick Qt5::Qml Qt5::Multimedia Qt5::DBus ZXing exiv2 dl ${GST_LIBS} ${GLIB_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME} PUBLIC Qt6::Core Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::Multimedia Qt6::DBus ZXing exiv2 dl ${GST_LIBS} ${GLIB_LIBRARIES} ${OpenCV_LIBS})
 
 if(FURICAM_CAMERA2)
     target_compile_definitions(${PROJECT_NAME} PUBLIC FURICAM_CAMERA2=1)

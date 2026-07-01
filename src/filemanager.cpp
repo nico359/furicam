@@ -313,10 +313,8 @@ QString FileManager::getCameraHardware(const QString &fileUrl) {
 
     easyexif::EXIFInfo metadata = getPictureMetaData(fileUrl);
 
-    std::string make = metadata.Make;
-    std::string model = metadata.Model;
-
-    return QString("%1 %2").arg(QString::fromStdString(make)).arg(QString::fromStdString(model));
+    // ponytail: easyexif stores null-padded EXIF strings, c_str() stops at first \0
+    return QString("%1 %2").arg(metadata.Make.c_str()).arg(metadata.Model.c_str());
 }
 
 QString FileManager::getDimensions(const QString &fileUrl) {

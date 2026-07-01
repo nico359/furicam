@@ -8,15 +8,13 @@
 // functions, the resolutionModel/currentRes*/maxZoom/currentZoom properties,
 // and the photoSaved() signal).  main.qml is unchanged.
 //
-// QtMultimedia is still imported, but ONLY for its enum *values* (Camera.FlashOff,
-// Camera.FrontFace, Camera.FocusContinuous, …) that main.qml passes in — no
-// QtMultimedia Camera/VideoOutput is instantiated here anymore.
+// QtMultimedia enums are now window-level readonly properties in main.qml
+// (window.flashOff, window.frontFace, window.focusContinuous, …).
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Window 2.12
-import QtGraphicalEffects 1.0
-import QtMultimedia 5.15
+import Qt5Compat.GraphicalEffects
 import QtQuick.Layouts 1.15
 import Qt.labs.settings 1.0
 import Qt.labs.platform 1.1
@@ -200,9 +198,9 @@ Item {
     function handleStartCamera() { cam2.startCamera() }
 
     function handleSetFocusMode(focusMode) {
-        // FocusContinuous -> continuous AF; FocusAuto (the app's
+        // window.focusContinuous -> continuous AF; window.focusAuto (the app's
         // "locked" state) -> hold focus but leave AE unlocked.
-        if (focusMode === Camera.FocusContinuous) {
+        if (focusMode === window.focusContinuous) {
             cam2.setAutoFocus()
         } else {
             cam2.setFocusLock(true)
@@ -223,7 +221,7 @@ Item {
         // Keep the gesture/mirror state in sync first so the cameraPosition change
         // below doesn't trigger applyCameraPosition() into a redundant switch.
         frontActive = (facing === 0)
-        settings.cameraPosition = (facing === 0) ? Camera.FrontFace : Camera.BackFace
+        settings.cameraPosition = (facing === 0) ? window.frontFace : window.backFace
         cam2.selectCamera(deviceIdToSet)
     }
 
@@ -244,7 +242,7 @@ Item {
             var c = cams[i]   // {index, facing(0=front,1=back), megapixels}
             allCamerasModel.append({
                 "cameraId": c.index, "index": c.index,
-                "position": (c.facing === 1) ? Camera.BackFace : Camera.FrontFace
+                "position": (c.facing === 1) ? window.backFace : window.frontFace
             })
             if (settings.cameras[c.index])
                 settings.cameras[c.index].resolution = c.megapixels
@@ -254,7 +252,7 @@ Item {
     }
 
     function applyCameraPosition() {
-        var wantFront = (settings.cameraPosition === Camera.FrontFace)
+        var wantFront = (settings.cameraPosition === window.frontFace)
         if (wantFront !== frontActive) {
             cam2.switchCamera()
             frontActive = wantFront
@@ -400,8 +398,8 @@ Item {
         hdrEnabled: settings.hdrEnabled   // HDR burst+fuse handled in the bridge
         // Flash mode tracks the GUI setting reactively (applied on startup + every
         // change), mapping the QtMultimedia enum to the engine's 0=off/1=on/2=auto.
-        flashMode: (settings.flashMode === Camera.FlashOn) ? 1
-                 : (settings.flashMode === Camera.FlashAuto) ? 2 : 0
+        flashMode: (settings.flashMode === window.flashOn) ? 1
+                 : (settings.flashMode === window.flashAuto) ? 2 : 0
 
         // Video mode + recording size are applied atomically at discrete moments
         // (entering video mode, starting a recording) via applyVideoMode() /
@@ -423,7 +421,7 @@ Item {
                 // settings.cameraPosition, and reading frontActive here would race
                 // with the switch that triggered this signal.
                 frontActive = (cam2.currentFacing() === 0)   // 0=front
-                settings.cameraPosition = frontActive ? Camera.FrontFace : Camera.BackFace
+                settings.cameraPosition = frontActive ? window.frontFace : window.backFace
             }
         }
         // Keep the bitrate slider in sync when resolution changes bump the floor.
@@ -433,18 +431,23 @@ Item {
             cameraItem.errorBannerVisible = true
             errorBannerTimer.restart()
         }
-        onPhotoSaved: cameraItem.onCam2PhotoSaved(path)
+        onPhotoSaved: function(path) { cameraItem.onCam2PhotoSaved(path) }
         onRecordingSaved: cameraItem.recordingSaved()
 
-        // Live color correction, same shader the legacy path used.
-        layer.enabled: settings.colorCorrectionEnabled
-        layer.effect: ShaderEffect {
-            property real redScale:   settings.colorCorrectionRed
-            property real greenScale: settings.colorCorrectionGreen
-            property real blueScale:  settings.colorCorrectionBlue
-            property real saturation: settings.colorCorrectionSaturation
-            fragmentShader: "qrc:/colorCorrection.frag"
-        }
+        // Live color correction shader — disabled for Qt6.
+        // Qt6 requires .qsb precompiled shaders; the vertex + fragment pair
+        // need matching GLSL versions and a shared uniform block layout with
+        // qt_Matrix baked in.  Re-enable when we ship a vertex+fragment .qsb pair.
+        // Old Qt5 path (works with QSG_RHI_BACKEND=opengl on Qt5):
+        // layer.enabled: settings.colorCorrectionEnabled
+        // layer.effect: ShaderEffect {
+        //     property real redScale:   settings.colorCorrectionRed
+        //     property real greenScale: settings.colorCorrectionGreen
+        //     property real blueScale:  settings.colorCorrectionBlue
+        //     property real saturation: settings.colorCorrectionSaturation
+        //     fragmentShader: "qrc:/colorCorrection.frag.qsb"
+        //     vertexShader:   "qrc:/colorCorrection.vert.qsb"
+        // }
 
         PinchArea {
             id: pinchArea
@@ -465,20 +468,20 @@ Item {
                 property var lastTapTime: 0
                 property int doubleTapInterval: 300
 
-                onPressed: {
+                onPressed: function(mouse) {
                     startX = mouse.x
                     startY = mouse.y
                 }
 
-                onReleased: {
+                onReleased: function(mouse) {
                     var deltaX = mouse.x - startX
                     var deltaY = mouse.y - startY
 
                     var currentTime = new Date().getTime();
                     if (currentTime - lastTapTime < doubleTapInterval) {
                         window.blurView = 1;
-                        settings.cameraPosition = settings.cameraPosition === Camera.BackFace ? Camera.FrontFace : Camera.BackFace;
-                        settings.flashMode = settings.cameraPosition === Camera.FrontFace ? Camera.FlashOff : settings.flashMode;
+                        settings.cameraPosition = settings.cameraPosition === window.backFace ? window.frontFace : window.backFace;
+                        settings.flashMode = settings.cameraPosition === window.frontFace ? window.flashOff : settings.flashMode;
                         cameraSwitchDelay.start();
                         lastTapTime = 0;
                     } else {
@@ -488,9 +491,9 @@ Item {
                                 configBarDrawer.open()
                             } else { // Swipe up — flip camera
                                 window.blurView = 1;
-                                settings.flashMode = Camera.FlashOff
-                                settings.cameraPosition = settings.cameraPosition === Camera.BackFace ? Camera.FrontFace : Camera.BackFace;
-                                settings.flashMode = settings.cameraPosition === Camera.FrontFace ? Camera.FlashOff : settings.flashMode;
+                                settings.flashMode = window.flashOff
+                                settings.cameraPosition = settings.cameraPosition === window.backFace ? window.frontFace : window.backFace;
+                                settings.flashMode = settings.cameraPosition === window.frontFace ? window.flashOff : settings.flashMode;
                                 cameraSwitchDelay.start();
                             }
                         } else if (Math.abs(deltaX) > swipeThreshold) {

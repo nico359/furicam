@@ -11,23 +11,33 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Window 2.12
-import QtGraphicalEffects 1.0
-import QtMultimedia 5.15
+import Qt5Compat.GraphicalEffects
+import QtMultimedia
 import QtQuick.Layouts 1.15
 import Qt.labs.settings 1.0
 import Qt.labs.platform 1.1
-import QtSensors 5.15
+import QtSensors
 import ZXing 1.0
 import FuriCam 1.0
 
 ApplicationWindow {
     id: window
+
+    // QtMultimedia enum shim — these were Camera.flashOff, etc. from QtMultimedia 5.15.
+    // ponytail: hardcoded ints, add a proper singleton if more enums are needed.
+    readonly property int flashOff: 0
+    readonly property int flashOn: 1
+    readonly property int flashAuto: 2
+    readonly property int focusContinuous: 0x10
+    readonly property int focusAuto: 0x08
+    readonly property int focusPointCenter: 1
+    readonly property int focusPointCustom: 3
+    readonly property int backFace: 1
+    readonly property int frontFace: 2
     width: 400
     height: 800
     visible: true
     title: "CameraWindow"
-
-    Screen.orientationUpdateMask: Qt.PortraitOrientation
 
     property real refHeight: 1080
     property real refWidth: 2412
@@ -85,7 +95,7 @@ ApplicationWindow {
         }
     }
 
-    onClosing: {
+    onClosing: function(close) {
         close.accepted = false
         console.log("Stopping camera...")
         cameraLoader.disconnectSignals();
@@ -170,9 +180,9 @@ ApplicationWindow {
         objectName: "settingsObject"
         property int cameraId: 0
         property int aspWide: 0
-        property int flashMode: Camera.FlashOff
-        property int focusMode: Camera.FocusContinuous
-        property int focusPointMode: Camera.FocusPointCenter
+        property int flashMode: flashOff
+        property int focusMode: focusContinuous
+        property int focusPointMode: focusPointCenter
         property var cameras: [{"cameraId": 0, "resolution": 0, "resWidth": 0, "resHeight": 0},
                                 {"cameraId": 1, "resolution": 0, "resWidth": 0, "resHeight": 0},
                                 {"cameraId": 2, "resolution": 0, "resWidth": 0, "resHeight": 0},
@@ -185,7 +195,7 @@ ApplicationWindow {
                                 {"cameraId": 9, "resolution": 0, "resWidth": 0, "resHeight": 0}]
         property int soundOn: 1
         property int gpsOn: 0
-        property int cameraPosition: Camera.FrontFace
+        property int cameraPosition: frontFace
         property int jpegQuality: 90
         property int gridEnabled: 0
         property int levelEnabled: 0
@@ -240,8 +250,8 @@ ApplicationWindow {
                 name: "Default"
                 PropertyChanges {
                     target: settings
-                    focusMode: Camera.FocusContinuous
-                    focusPointMode: Camera.FocusPointCenter
+                    focusMode: focusContinuous
+                    focusPointMode: focusPointCenter
                 }
             },
             State {
@@ -249,8 +259,8 @@ ApplicationWindow {
 
                 PropertyChanges {
                     target: settings
-                    focusMode: Camera.FocusContinuous
-                    focusPointMode: Camera.FocusPointCustom
+                    focusMode: focusContinuous
+                    focusPointMode: focusPointCustom
                 }
             },
             State {
@@ -258,8 +268,8 @@ ApplicationWindow {
 
                 PropertyChanges {
                     target: settings
-                    focusMode: Camera.FocusContinuous
-                    focusPointMode: Camera.FocusPointCustom
+                    focusMode: focusContinuous
+                    focusPointMode: focusPointCustom
                 }
             },
             State {
@@ -267,8 +277,8 @@ ApplicationWindow {
 
                 PropertyChanges {
                     target: settings
-                    focusMode: Camera.FocusAuto
-                    focusPointMode: Camera.FocusPointCustom
+                    focusMode: focusAuto
+                    focusPointMode: focusPointCustom
                 }
             }
         ]
@@ -824,14 +834,14 @@ ApplicationWindow {
         width: parent.width
         visible: !mediaView.visible
         // Expose total height so Camera.qml can offset the viewfinder
-        Component.onCompleted: updateControlBarHeight()
+        Component.onCompleted: { if (typeof mainBar.updateControlBarHeight === "function") mainBar.updateControlBarHeight() }
         Connections {
             target: settings
-            function onProModeEnabledChanged() { updateControlBarHeight() }
+            function onProModeEnabledChanged() { mainBar.updateControlBarHeight() }
         }
         Connections {
             target: cameraLoader.item ? cameraLoader.item : null
-            function onMaxZoomChanged() { updateControlBarHeight() }
+            function onMaxZoomChanged() { mainBar.updateControlBarHeight() }
         }
         function updateControlBarHeight() {
             // proBar ~96px + zoomBar ~40px when pro mode is on and zoom available
@@ -890,9 +900,9 @@ ApplicationWindow {
                     icon.color: "white"
                     icon.source: {
                         switch(settings.flashMode) {
-                            case Camera.FlashOff: return "icons/flashOff.svg";
-                            case Camera.FlashOn: return "icons/flashOn.svg";
-                            case Camera.FlashAuto: return "icons/flashAuto.svg";
+                            case flashOff: return "icons/flashOff.svg";
+                            case flashOn: return "icons/flashOn.svg";
+                            case flashAuto: return "icons/flashAuto.svg";
                             default: return "icons/flashOff.svg";
                         }
                     }
@@ -903,16 +913,16 @@ ApplicationWindow {
                     }
 
                     onClicked: {
-                        if (settings.cameraPosition !== Camera.FrontFace) {
+                        if (settings.cameraPosition !== frontFace) {
                             switch(settings.flashMode) {
-                                case Camera.FlashOff:
-                                    settings.flashMode = Camera.FlashOn;
+                                case flashOff:
+                                    settings.flashMode = flashOn;
                                     break;
-                                case Camera.FlashOn:
-                                    settings.flashMode = Camera.FlashAuto;
+                                case flashOn:
+                                    settings.flashMode = flashAuto;
                                     break;
-                                case Camera.FlashAuto:
-                                    settings.flashMode = Camera.FlashOff;
+                                case flashAuto:
+                                    settings.flashMode = flashOff;
                                     break;
                             }
                             window.setFlashState(settings.flashMode);
@@ -1039,7 +1049,7 @@ ApplicationWindow {
                     }
 
                     onClicked: {
-                        if (settings.cameraPosition !== Camera.FrontFace) {
+                        if (settings.cameraPosition !== frontFace) {
                             if (window.aeflock === "AEFLockOff") {
                                 focusState.state = "WaitingForTarget";
                                 window.aeflock = "AEFLockOn";
@@ -1120,11 +1130,11 @@ ApplicationWindow {
                     }
 
                     onClicked: {
-                        if (settings.cameraPosition === Camera.BackFace) {
+                        if (settings.cameraPosition === backFace) {
                             flashButton.state = "flashOff"
-                            settings.cameraPosition = Camera.FrontFace;
-                        } else if (settings.cameraPosition === Camera.FrontFace) {
-                            settings.cameraPosition = Camera.BackFace;
+                            settings.cameraPosition = frontFace;
+                        } else if (settings.cameraPosition === frontFace) {
+                            settings.cameraPosition = backFace;
                         }
                     }
                 }
@@ -2346,6 +2356,21 @@ ApplicationWindow {
                             cameraLoader.item.handleSetVideoStabilization(checked)
                     }
                     anchors.verticalCenter: parent.verticalCenter
+                    indicator: Rectangle {
+                        implicitWidth: 48 * window.scalingRatio
+                        implicitHeight: 26 * window.scalingRatio
+                        radius: 13 * window.scalingRatio
+                        color: eisSwitch.checked ? "#62a0ea" : "#666"
+                        border.color: eisSwitch.checked ? "#62a0ea" : "#555"
+                        Rectangle {
+                            x: eisSwitch.checked ? parent.width - width - 2 * window.scalingRatio : 2 * window.scalingRatio
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 22 * window.scalingRatio
+                            height: 22 * window.scalingRatio
+                            radius: 11 * window.scalingRatio
+                            color: "white"
+                        }
+                    }
                 }
             }
 
@@ -2374,6 +2399,21 @@ ApplicationWindow {
                     checked: settings.colorCorrectionEnabled
                     onToggled: settings.colorCorrectionEnabled = checked
                     anchors.verticalCenter: parent.verticalCenter
+                    indicator: Rectangle {
+                        implicitWidth: 48 * window.scalingRatio
+                        implicitHeight: 26 * window.scalingRatio
+                        radius: 13 * window.scalingRatio
+                        color: colorCorrectionSwitch.checked ? "#62a0ea" : "#666"
+                        border.color: colorCorrectionSwitch.checked ? "#62a0ea" : "#555"
+                        Rectangle {
+                            x: colorCorrectionSwitch.checked ? parent.width - width - 2 * window.scalingRatio : 2 * window.scalingRatio
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 22 * window.scalingRatio
+                            height: 22 * window.scalingRatio
+                            radius: 11 * window.scalingRatio
+                            color: "white"
+                        }
+                    }
                 }
             }
 

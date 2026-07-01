@@ -365,8 +365,10 @@ public slots:
 		busy = true;
 
 		// Disable ourselves for a bit -- we don't need to sample at full throttle
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 		setActive(false);
 		QTimer::singleShot(sleepTime, this, [this] { setActive(true); });
+#endif
 
 		// Sadly have to grab the image data here because we need the GL context to be current
 
@@ -380,7 +382,7 @@ public slots:
 			img = img.copy(cropRect);
 		}
 
-		QtConcurrent::run(this, &BarcodeReader::process_internal, img);
+		QtConcurrent::run([this, img]() mutable { process_internal(img); });
 	}
 
 	void process_internal(QImage &image)
@@ -424,7 +426,9 @@ public slots:
 
 			if (sleepTime != 20) {
 				sleepTime = 20;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 				setActive(true);
+#endif
 			}
 		} else {
 			sleepTime = 200;
