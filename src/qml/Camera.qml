@@ -434,20 +434,18 @@ Item {
         onPhotoSaved: function(path) { cameraItem.onCam2PhotoSaved(path) }
         onRecordingSaved: cameraItem.recordingSaved()
 
-        // Live color correction shader — disabled for Qt6.
-        // Qt6 requires .qsb precompiled shaders; the vertex + fragment pair
-        // need matching GLSL versions and a shared uniform block layout with
-        // qt_Matrix baked in.  Re-enable when we ship a vertex+fragment .qsb pair.
-        // Old Qt5 path (works with QSG_RHI_BACKEND=opengl on Qt5):
-        // layer.enabled: settings.colorCorrectionEnabled
-        // layer.effect: ShaderEffect {
-        //     property real redScale:   settings.colorCorrectionRed
-        //     property real greenScale: settings.colorCorrectionGreen
-        //     property real blueScale:  settings.colorCorrectionBlue
-        //     property real saturation: settings.colorCorrectionSaturation
-        //     fragmentShader: "qrc:/colorCorrection.frag.qsb"
-        //     vertexShader:   "qrc:/colorCorrection.vert.qsb"
-        // }
+        // Live color correction shader — runs on GPU per frame (photo mode only).
+        // Video encoding doesn't use the shader path, so disable it in video mode
+        // to keep the preview WYSIWYG.
+        layer.enabled: settings.colorCorrectionEnabled && !cam2.videoMode
+        layer.effect: ShaderEffect {
+            property real redScale:   settings.colorCorrectionRed
+            property real greenScale: settings.colorCorrectionGreen
+            property real blueScale:  settings.colorCorrectionBlue
+            property real saturation: settings.colorCorrectionSaturation
+            fragmentShader: "qrc:/colorCorrection.frag.qsb"
+            vertexShader:   "qrc:/colorCorrection.vert.qsb"
+        }
 
         PinchArea {
             id: pinchArea

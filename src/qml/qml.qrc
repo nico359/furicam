@@ -8,5 +8,6 @@
         <file>Camera.qml</file>
         <file>colorCorrection.frag</file>
         <file>colorCorrection.frag.qsb</file>
+        <file>colorCorrection.vert.qsb</file>
     </qresource>
 </RCC>

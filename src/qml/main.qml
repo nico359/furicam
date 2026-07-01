@@ -204,7 +204,7 @@ ApplicationWindow {
         property int videoResHeight: 1080
         property int eisEnabled: 1
         property int whiteBalanceMode: 0
-        property bool colorCorrectionEnabled: true
+        property bool colorCorrectionEnabled: false
         property real colorCorrectionRed:   1.00
         property real colorCorrectionGreen: 1.00
         property real colorCorrectionBlue:  1.00
