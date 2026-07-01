@@ -1,7 +1,7 @@
 # FuriCam
 <img src="furicam.svg" width="100px">
 
-An enhanced camera app for FuriPhone, built with Qt5/QML/C++.
+An enhanced camera app for FuriPhone, built with Qt6/QML/C++.
 
 Based on [furios-camera](https://github.com/FuriLabs/furios-camera) by FuriLabs.
 
@@ -35,74 +35,76 @@ Licensed under GPL-2.0.
 
 ## Building
 
-Important note about building:
-Some of the listed dependencies here do not seem to be available anymore on Debian Forky. To build furios-camera/furicam directly on the Furiphone I had to to so in a Debian Trixie Distrobox container. If you want to take the same approach, you might have to install distrobox, podman and optionally a GUI to manage containers like Distroshelf from Flathub for example.
+Builds natively on the FuriPhone (Debian Forky arm64) — no distrobox needed.
 
+### Build dependencies
 
-* Install Distrobox
-```
-sudo apt install podman distrobox
-```
-
-* (Optional) Install GUI to manage and install a Debian Trixie Distrobox
-```
-sudo flatpak install com.ranfdev.DistroShelf
-```
-
-* Install build dependencies (inside distrobox)
 ```
 sudo apt install cmake \
-                 qtbase5-dev \
-                 qtdeclarative5-dev \
-                 libqt5multimedia5-plugins \
-                 qttools5-dev-tools \
+                 qt6-base-dev \
+                 qt6-declarative-dev \
+                 qt6-multimedia-dev \
+                 qt6-tools-dev-tools \
+                 qt6-shader-baker \
+                 qml6-module-qt5compat-graphicaleffects \
+                 qml6-module-qtsensors \
+                 qt6-svg-plugins \
+                 libegl-dev \
                  libz-dev \
-                 qtmultimedia5-dev \
                  libgstreamer1.0-dev \
+                 libgstreamer-plugins-base1.0-dev \
                  pkgconf \
                  libzxing-dev \
-                 libexiv2-dev
+                 libexiv2-dev \
+                 libglib2.0-dev \
+                 libopencv-core-dev \
+                 libopencv-imgproc-dev \
+                 libopencv-photo-dev
 ```
 
+### Build
 
-> [!IMPORTANT]  
-> Camera2 build notes:
-> Building in distrobox requires a symlink to host libhybris:
->  ```
->  sudo ln -s /run/host/usr/lib/aarch64-linux-gnu/libhybris-common.so.1 \
->              /usr/lib/aarch64-linux-gnu/libhybris-common.so.1
->  ```
->  
-> The deb is built with `dpkg-buildpackage -d -us -uc -b` (skip build-dep checks — hybris is host-only).
-
-
-
-* Build (inside distrobox)
 ```
 mkdir build
 cd build
 cmake ..
-make
+make -j$(nproc)
 ```
-* Install runtime dependencies
+
+### Runtime dependencies
+
 ```
-sudo apt install qml-module-qtmultimedia \
-                 libqt5multimedia5-plugins \
-                 qml-module-qtquick2 \
-                 qml-module-qtquick-controls2 \
-                 qml-module-qtquick-window2 \
-                 qt5-cameraplugin-aal \
-                 qml-module-qt-labs-platform \
-                 qml-module-qt-labs-folderlistmodel \
-                 qml-module-qt-labs-settings \
-                 qml-module-qtquick-layouts \
-                 qml-module-qtgraphicaleffects \
-                 qml-module-qtquick-shapes \
+sudo apt install qml6-module-qtmultimedia \
+                 libqt6multimedia6 \
+                 qml6-module-qtquick \
+                 qml6-module-qtquick-controls \
+                 qml6-module-qtquick-window \
+                 qml6-module-qt-labs-platform \
+                 qml6-module-qt-labs-folderlistmodel \
+                 qml6-module-qt-labs-settings \
+                 qml6-module-qtquick-layouts \
+                 qml6-module-qt5compat-graphicaleffects \
+                 qml6-module-qtquick-shapes \
+                 qml6-module-qtsensors \
+                 qt6-svg-plugins \
                  mkvtoolnix \
-                 libqt5svg5 \
+                 ffmpeg \
+                 libqt6svg6 \
                  libgstreamer1.0-0 \
                  gstreamer1.0-droid \
                  gstreamer1.0-plugins-good \
                  gstreamer1.0-plugins-base \
                  libzxing3
 ```
+
+### Building the .deb
+
+```
+dpkg-buildpackage -d -us -uc -b
+```
+
+The `-d` flag skips build-dependency checks (still needed for `libhybris-common.so.1` which is present at runtime but lacks a proper dev package).
+
+# AI Disclosure 
+
+This application was built with the assistance of AI (Mostly Claude and DeepSeek inside Copilot CLI).
